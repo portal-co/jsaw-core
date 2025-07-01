@@ -7,7 +7,6 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::KeyValueProp;
 use swc_ecma_ast::MemberExpr;
 use swc_ecma_ast::ObjectLit;
 use swc_ecma_ast::Pat;
@@ -16,6 +15,7 @@ use swc_ecma_ast::PropOrSpread;
 use swc_ecma_ast::Stmt;
 use swc_ecma_ast::UnaryExpr;
 use swc_ecma_ast::{ArrayLit, Param};
+use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
 use swc_ecma_ast::{AssignOp, ExprOrSpread};
 use swc_ecma_ast::{AssignTarget, Function};
@@ -29,10 +29,10 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 
 use crate::{Item, TBlock, TCallee, TCfg, TFunc};
 
-impl <'a>TryFrom<&'a TFunc> for Func {
+impl<'a> TryFrom<&'a TFunc> for Func {
     type Error = anyhow::Error;
 
-    fn try_from(value:&'a TFunc) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let mut cfg = Cfg::default();
         let entry = Rew {
             all: BTreeMap::new(),
@@ -94,7 +94,7 @@ impl <'a>TryFrom<&'a TFunc> for Func {
         })
     }
 }
-impl TryFrom<TFunc> for Func{
+impl TryFrom<TFunc> for Func {
     type Error = anyhow::Error;
 
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
@@ -104,12 +104,12 @@ impl TryFrom<TFunc> for Func{
 impl<'a> TryFrom<&'a TFunc> for Function {
     type Error = anyhow::Error;
 
-    fn try_from(value:&'a TFunc) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
         return Ok(a.into());
     }
 }
-impl TryFrom<TFunc> for Function{
+impl TryFrom<TFunc> for Function {
     type Error = anyhow::Error;
 
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
@@ -248,10 +248,29 @@ impl Rew {
                             ),
                         })
                     }
-                    crate::Item::Func { func } => Expr::Fn(FnExpr {
-                        ident: None,
-                        function: Box::new(func.try_into()?),
-                    }),
+                    crate::Item::Func { func, arrow } => match func.try_into()? {
+                        func => {
+                            if !*arrow {
+                                Expr::Fn(FnExpr {
+                                    ident: None,
+                                    function: Box::new(func),
+                                })
+                            } else {
+                                Expr::Arrow(ArrowExpr {
+                                    span: func.span,
+                                    ctxt: func.ctxt,
+                                    params: func.params.into_iter().map(|a| a.pat).collect(),
+                                    body: Box::new(swc_ecma_ast::BlockStmtOrExpr::BlockStmt(
+                                        func.body.context("in getting the body")?,
+                                    )),
+                                    is_async: func.is_async,
+                                    is_generator: func.is_generator,
+                                    type_params: None,
+                                    return_type: None,
+                                })
+                            }
+                        }
+                    },
                     crate::Item::Lit { lit } => Expr::Lit(lit.clone()),
                     crate::Item::Call { callee, args } => {
                         mark = true;

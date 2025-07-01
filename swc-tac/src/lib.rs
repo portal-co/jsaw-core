@@ -388,6 +388,7 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Func {
         func: F,
+        arrow: bool,
     },
     Lit {
         lit: Lit,
@@ -434,7 +435,10 @@ impl<I, F> Item<I, F> {
             },
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
-            Item::Func { func } => Item::Func { func },
+            Item::Func { func, arrow } => Item::Func {
+                func,
+                arrow: *arrow,
+            },
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_ref(),
@@ -474,7 +478,10 @@ impl<I, F> Item<I, F> {
             },
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
-            Item::Func { func } => Item::Func { func },
+            Item::Func { func, arrow } => Item::Func {
+                func,
+                arrow: *arrow,
+            },
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_mut(),
@@ -525,7 +532,10 @@ impl<I, F> Item<I, F> {
                 obj: f(cx, obj)?,
                 mem: f(cx, mem)?,
             },
-            Item::Func { func } => Item::Func { func: g(cx, func)? },
+            Item::Func { func, arrow } => Item::Func {
+                func: g(cx, func)?,
+                arrow,
+            },
             Item::Lit { lit } => Item::Lit { lit },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.map(&mut |a| f(cx, a))?,
@@ -568,7 +578,7 @@ impl<I, F> Item<I, F> {
     }
     pub fn funcs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a F> + 'a> {
         match self {
-            Item::Func { func } => Box::new(once(func)),
+            Item::Func { func, arrow } => Box::new(once(func)),
             Item::Obj { members } => Box::new(members.iter().filter_map(|m| match &m.1 {
                 PropVal::Getter(f) | PropVal::Setter(f) => Some(f),
                 _ => None,
@@ -583,7 +593,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            swc_tac::Item::Func { func } => Box::new(empty()),
+            swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
@@ -627,7 +637,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            swc_tac::Item::Func { func } => Box::new(empty()),
+            swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
@@ -796,6 +806,7 @@ impl Trans<'_> {
                         flags: Default::default(),
                         right: Item::Func {
                             func: f.function.as_ref().clone().try_into()?,
+                            arrow: false,
                         },
                         span: f.span(),
                     });
@@ -1103,7 +1114,7 @@ impl Trans<'_> {
                                 .def(portal_jsc_common::LId::Id { id: r#fn.clone() })
                                 .cloned()
                             {
-                                Some(Item::Func { func })
+                                Some(Item::Func { func, arrow })
                                     if func.params.len() == call.args.len() =>
                                 {
                                     for (p, a) in func.params.iter().zip(call.args.iter()) {
@@ -1249,8 +1260,49 @@ impl Trans<'_> {
                     flags: Default::default(),
                     right: Item::Func {
                         func: f.function.as_ref().clone().try_into()?,
+                        arrow: false,
                     },
                     span: f.span(),
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
+            }
+            Expr::Arrow(a) => {
+                let mut c = swc_cfg::Func::default();
+                c.is_generator = a.is_generator;
+                c.is_async = a.is_async;
+                c.params = a
+                    .params
+                    .iter()
+                    .cloned()
+                    .map(|a| Param {
+                        span: a.span(),
+                        decorators: vec![],
+                        pat: a,
+                    })
+                    .collect();
+                let mut k = swc_cfg::ToCfgConversionCtx::default();
+                match a.body.as_ref() {
+                    swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
+                        k.transform_all(&mut c.cfg, block_stmt.stmts.clone(), c.entry)?;
+                    }
+                    swc_ecma_ast::BlockStmtOrExpr::Expr(expr) => {
+                        c.cfg.blocks[c.entry].end = swc_cfg::End {
+                            catch: swc_cfg::Catch::Throw,
+                            orig_span: Some(a.span),
+                            term: swc_cfg::Term::Return(Some(expr.as_ref().clone())),
+                        }
+                    }
+                }
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: Default::default(),
+                    right: Item::Func {
+                        func: c.try_into()?,
+                        arrow: true,
+                    },
+                    span: a.span(),
                 });
                 o.decls.insert(tmp.clone());
                 return Ok((tmp, t));
