@@ -3,7 +3,7 @@ members=[  "portal-jsc-common","swc-cfg",  "swc-opt-ssa", "swc-ssa", "swc-tac", 
 
 # "js-runtime-lib","swc-emit-rust","swc-waffle"
 
-resolver="2"
+resolver="3"
 
 [workspace.dependencies]
 anyhow = "^1.0.87"
