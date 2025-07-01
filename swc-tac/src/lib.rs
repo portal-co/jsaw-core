@@ -134,6 +134,9 @@ pub struct TCfg {
     pub generics: Option<TsTypeParamDecl>,
     pub ts_retty: Option<TsTypeAnn>,
 }
+pub trait Externs<I> {
+    fn externs(&self) -> impl Iterator<Item = I>;
+}
 impl TCfg {
     pub fn remark(&mut self) {
         let mut a: BTreeMap<LId, usize> = BTreeMap::new();
@@ -199,15 +202,18 @@ impl TCfg {
                      span: _,
                  }| {
                     let a = a.as_ref().refs().cloned();
-                    let b = b.refs().cloned();
+                    let b = b
+                        .refs()
+                        .cloned()
+                        .chain(b.funcs().flat_map(|a| a.cfg.externs()));
                     a.chain(b)
                 },
             ))
         });
         return a;
     }
-    pub fn externs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
-        self.refs().filter(|a| !self.decls.contains(a))
+    pub fn externs<'a>(&'a self) -> Box<dyn Iterator<Item = Ident> + 'a> {
+        Box::new(self.refs().filter(|a| !self.decls.contains(a)))
     }
     pub fn update(&mut self) {
         for x in self.blocks.iter() {
@@ -221,6 +227,11 @@ impl TCfg {
                     .unwrap();
             }
         }
+    }
+}
+impl Externs<Ident> for TCfg {
+    fn externs(&self) -> impl Iterator<Item = Ident> {
+        TCfg::externs(self)
     }
 }
 #[derive(Clone, Debug)]
@@ -554,6 +565,16 @@ impl<I, F> Item<I, F> {
                 value: value.map(&mut |a| f(cx, a))?,
             },
         })
+    }
+    pub fn funcs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a F> + 'a> {
+        match self {
+            Item::Func { func } => Box::new(once(func)),
+            Item::Obj { members } => Box::new(members.iter().filter_map(|m| match &m.1 {
+                PropVal::Getter(f) | PropVal::Setter(f) => Some(f),
+                _ => None,
+            })),
+            _ => Box::new(empty()),
+        }
     }
     pub fn refs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
         use crate as swc_tac;
