@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
-use std::mem::take;
 
 use id_arena::Id;
 use swc_atoms::Atom;

@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
-    default,
     iter::{empty, once},
     mem::take,
 };
@@ -10,11 +9,8 @@ use anyhow::Context;
 use cfg_traits::Term;
 use id_arena::{Arena, Id};
 use portal_jsc_common::LId;
-use ssa_traits::Value;
-use swc_atoms::Atom;
-use swc_cfg::Catch;
 use swc_common::Span;
-use swc_ecma_ast::{Id as Ident, Lit, Null, TsType, TsTypeAnn, TsTypeParamDecl};
+use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};
 pub mod ch;
 pub mod idw;
@@ -473,10 +469,10 @@ impl Trans {
                         stmts: vec![],
                         postcedent: SPostcedent::default(),
                     });
-                    let mut state2 = once(pat.clone())
+                    let state2 = once(pat.clone())
                         .chain(self.all.iter().filter(|a| *a != pat).cloned())
                         .collect::<Vec<_>>();
-                    let mut v = state2
+                    let v = state2
                         .iter()
                         .cloned()
                         .map(|a2| (a2, o.add_blockparam(a)))

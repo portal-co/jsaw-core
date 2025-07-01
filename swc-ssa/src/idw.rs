@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use id_arena::Id;
 
-use crate::{SBlock, SCatch, SFunc, SCfg};
+use crate::{SBlock, SCatch, SCfg};
 
 pub struct Idw {
     pub map: BTreeMap<Id<SBlock>, Id<SBlock>>,
@@ -20,7 +20,7 @@ impl Idw {
             }
             let new_block_id = new.blocks.alloc(Default::default());
             self.map.insert(block_id, new_block_id);
-            let mut param_map = orig.blocks[block_id]
+            let param_map = orig.blocks[block_id]
                 .params
                 .iter()
                 .cloned()

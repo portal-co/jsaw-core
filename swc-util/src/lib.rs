@@ -1,7 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Display,
-    mem::{take, transmute},
+    collections::BTreeMap,
+    mem::take,
 };
 
 pub use portal_jsc_common as common;
@@ -10,17 +9,13 @@ use portal_jsc_common::Native;
 use portal_solutions_swibb::ConstCollector;
 use swc_atoms::Atom;
 use swc_common::{
-    FileName, Mark, SourceFile, SourceMap, Span, Spanned, SyntaxContext,
-    errors::{ColorConfig, Handler},
-    input::StringInput,
-    sync::Lrc,
+    Span, Spanned,
 };
 use swc_ecma_ast::{
-    BinaryOp, CallExpr, Expr, ExprStmt, Id, Ident, Lit, MemberExpr, MemberProp, Module, ModuleDecl,
-    ModuleItem, OptChainBase, Stmt, UnaryExpr,
+    BinaryOp, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp,
+    ModuleItem,
 };
-use swc_ecma_parser::{Parser, Syntax, lexer::Lexer};
-use swc_ecma_visit::{Visit, VisitMut, VisitMutWith, VisitWith};
+use swc_ecma_visit::{VisitMut, VisitMutWith};
 pub trait ResolveNatives {
     fn resolve_natives(&self, import_map: &(dyn ImportMapper + '_)) -> Option<Native<&Expr>>;
 }

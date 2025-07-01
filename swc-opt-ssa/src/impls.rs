@@ -1,11 +1,7 @@
-use std::{
-    collections::BTreeSet,
-    convert::Infallible,
-    iter::{empty, once},
-};
+use std::iter::{empty, once};
 
 use id_arena::{Arena, Id};
-use ssa_traits::{Func, HasChainableValues, HasValues, Val};
+use ssa_traits::{Func, HasChainableValues, HasValues};
 
 use crate::*;
 

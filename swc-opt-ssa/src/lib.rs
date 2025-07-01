@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use id_arena::{Arena, Id};
 use swc_ecma_ast::Lit;
-use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, ch::ConstVal, simplify::SValGetter};
+use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, simplify::SValGetter};
 use swc_tac::Item;
 pub mod impls;
 pub mod into;

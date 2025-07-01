@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use id_arena::Id;
-use swc_ecma_ast::{BinaryOp, Lit, UnaryOp};
+use swc_ecma_ast::{BinaryOp, UnaryOp};
 use swc_ssa::{simplify::SValGetter, SBlock, SCatch, SFunc, STarget, STerm, SValue, SCfg};
 use swc_tac::Item;
 
@@ -408,15 +408,15 @@ impl Convert {
                                 .cloned()
                                 .context("in getting the var")?;
                             let mut elem_tys = vec![];
-                            let mut members = members[1..]
+                            let members = members[1..]
                                 .iter()
                                 .map(|a| {
-                                    let (mut a, mut at) =
+                                    let (a, at) =
                                         state.get(a).cloned().context("in getting the val")?;
                                     // (a, x, at) = bi_id_deopt(out, k, a, at, x, ty.clone())?;
                                     // ty = at.clone();
                                     elem_tys.push(at.clone());
-                                    Ok((a))
+                                    Ok(a)
                                 })
                                 .collect::<anyhow::Result<Vec<_>>>()?;
                             let ty = Some(OptType::Object {

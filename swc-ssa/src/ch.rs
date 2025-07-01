@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    num::{NonZero, NonZeroUsize},
-};
+use std::collections::HashMap;
 
 use swc_common::Spanned;
 use swc_ecma_ast::Expr;
@@ -15,7 +12,7 @@ pub enum ConstVal {
 }
 
 pub struct CH {
-    pub all: BTreeMap<Id<SBlock>, HashMap<(Vec<Option<ConstVal>>), Id<SBlock>>>,
+    pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
 }
 pub fn ch(a: &SFunc) -> anyhow::Result<SFunc> {
     let mut n = SCfg::default();

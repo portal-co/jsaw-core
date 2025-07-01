@@ -24,7 +24,7 @@ impl Recfg {
                 },
             };
             output_cfg.blocks[new_block_id].end.catch = catch.clone();
-            let mut ctx = ToCfgConversionCtx {
+            let ctx = ToCfgConversionCtx {
                 catch,
                 ..Default::default()
             };

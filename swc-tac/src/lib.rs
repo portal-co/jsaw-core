@@ -1,22 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
-use std::default;
 use std::iter::{empty, once};
 
 use anyhow::Context;
-use arena_traits::{Arena as TArena, IndexAlloc};
+use arena_traits::IndexAlloc;
 use bitflags::bitflags;
 use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
-use portal_jsc_swc_util::{ImportMapper, NoImportMapper, ResolveNatives};
+use portal_jsc_swc_util::{ImportMapper, ResolveNatives};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
-use swc_common::pass::Either;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{
-    AssignOp, BinaryOp, Callee, Expr, ExprOrSpread, Function, Lit, MemberExpr, MemberProp, Number,
+    BinaryOp, Callee, Expr, Function, Lit, MemberExpr, MemberProp, Number,
     Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 

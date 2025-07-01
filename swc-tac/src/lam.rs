@@ -5,10 +5,10 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use arena_traits::{Arena, IndexAlloc, IndexIter};
+use arena_traits::{IndexAlloc, IndexIter};
 use swc_atoms::Atom;
-use swc_common::{Mark, Span, SyntaxContext};
-use swc_ecma_ast::{Id, Ident};
+use swc_common::{Mark, SyntaxContext};
+use swc_ecma_ast::Id;
 pub trait AtomResolver: Debug {
     fn resolve(&self, len: usize) -> Atom;
 }

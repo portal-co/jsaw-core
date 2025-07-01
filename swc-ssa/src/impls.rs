@@ -1,13 +1,9 @@
-use std::{
-    collections::BTreeSet,
-    convert::Infallible,
-    iter::{empty, once},
-};
+use std::iter::{empty, once};
 
 use id_arena::{Arena, Id};
 use ssa_traits::{HasChainableValues, HasValues};
 
-use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValue, SValueW};
+use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
 
 impl cfg_traits::Func for SFunc {
     type Block = Id<SBlock>;
