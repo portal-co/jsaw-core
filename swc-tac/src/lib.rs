@@ -67,7 +67,7 @@ pub struct TFunc {
 }
 impl TFunc {
     pub fn try_from_with_mapper<'a>(
-        value: Func,
+        value: &Func,
         import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
     ) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
@@ -79,8 +79,8 @@ impl TFunc {
             import_mapper,
         }
         .trans(&value.cfg, &mut cfg, value.entry)?;
-        cfg.ts_retty = value.cfg.ts_retty;
-        cfg.generics = value.cfg.generics;
+        cfg.ts_retty = value.cfg.ts_retty.clone();
+        cfg.generics = value.cfg.generics.clone();
         let mut ts_params = vec![];
         let params = value
             .params
@@ -103,11 +103,18 @@ impl TFunc {
         })
     }
 }
+impl<'a> TryFrom<&'a Func> for TFunc {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &'a Func) -> Result<Self, Self::Error> {
+        TFunc::try_from_with_mapper(value, linearize::static_map! {_ => None})
+    }
+}
 impl TryFrom<Func> for TFunc {
     type Error = anyhow::Error;
 
     fn try_from(value: Func) -> Result<Self, Self::Error> {
-        TFunc::try_from_with_mapper(value, linearize::static_map! {_ => None})
+        TryFrom::try_from(&value)
     }
 }
 impl TryFrom<Function> for TFunc {
@@ -1318,7 +1325,7 @@ impl Trans<'_> {
                                             c.entry,
                                         )?;
                                         TFunc::try_from_with_mapper(
-                                            c,
+                                            &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
                                         )?
                                     });
@@ -1344,7 +1351,7 @@ impl Trans<'_> {
                                             c.entry,
                                         )?;
                                         TFunc::try_from_with_mapper(
-                                            c,
+                                            &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
                                         )?
                                     });
