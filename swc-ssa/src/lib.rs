@@ -121,9 +121,9 @@ impl SCfg {
                     [target.clone()].into_iter().collect::<BTreeSet<Ident>>()
                 }
                 SValue::Item {
-                    item: Item::Func { func },
+                    item,
                     span,
-                } => func.cfg.externals(),
+                } => item.funcs().flat_map(|func|func.cfg.externals()).collect(),
                 _ => Default::default(),
             })
             .collect();

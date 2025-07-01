@@ -287,7 +287,7 @@ impl<I: Copy, B,F> SValue<I, B,F> {
                     }
                 }
                 Item::Mem { obj, mem } => None,
-                Item::Func { func } => None,
+                Item::Func { func,arrow } => None,
                 Item::Lit { lit } => Some(lit.clone()),
                 Item::Call { callee, args } => None,
                 Item::Obj { members } => None,
