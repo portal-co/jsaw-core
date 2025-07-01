@@ -24,6 +24,13 @@ pub struct Func {
     pub is_generator: bool,
     pub is_async: bool,
 }
+impl Default for Func{
+    fn default() -> Self {
+        let mut cfg = Cfg::default();
+        let entry = cfg.blocks.alloc( Default::default());
+        Self { cfg, entry, params: Default::default(), is_generator: Default::default(), is_async: Default::default() }
+    }
+}
 impl TryFrom<Function> for Func {
     type Error = anyhow::Error;
 

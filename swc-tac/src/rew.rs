@@ -1,13 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 
+use anyhow::Context;
 use id_arena::Id;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::FnExpr;
-use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::KeyValueProp;
 use swc_ecma_ast::MemberExpr;
 use swc_ecma_ast::ObjectLit;
@@ -22,16 +21,18 @@ use swc_ecma_ast::{AssignOp, ExprOrSpread};
 use swc_ecma_ast::{AssignTarget, Function};
 use swc_ecma_ast::{BinExpr, BindingIdent, TsTypeAnn};
 use swc_ecma_ast::{BinaryOp, CallExpr, Lit, Number};
+use swc_ecma_ast::{BlockStmt, FnExpr, GetterProp, ReturnStmt};
 use swc_ecma_ast::{ComputedPropName, ThisExpr};
 use swc_ecma_ast::{Expr, SimpleAssignTarget};
 use swc_ecma_ast::{ExprStmt, Str};
+use swc_ecma_ast::{Id as Ident, SetterProp};
 
 use crate::{Item, TBlock, TCallee, TCfg, TFunc};
 
-impl TryFrom<TFunc> for Func {
+impl <'a>TryFrom<&'a TFunc> for Func {
     type Error = anyhow::Error;
 
-    fn try_from(value: TFunc) -> Result<Self, Self::Error> {
+    fn try_from(value:&'a TFunc) -> Result<Self, Self::Error> {
         let mut cfg = Cfg::default();
         let entry = Rew {
             all: BTreeMap::new(),
@@ -82,8 +83,8 @@ impl TryFrom<TFunc> for Func {
                 }))));
         }
         cfg.blocks[entry2].end.term = Term::Jmp(entry);
-        cfg.ts_retty = value.cfg.ts_retty;
-        cfg.generics = value.cfg.generics;
+        cfg.ts_retty = value.cfg.ts_retty.clone();
+        cfg.generics = value.cfg.generics.clone();
         Ok(Func {
             cfg,
             entry: entry2,
@@ -93,12 +94,26 @@ impl TryFrom<TFunc> for Func {
         })
     }
 }
-impl TryFrom<TFunc> for Function {
+impl TryFrom<TFunc> for Func{
     type Error = anyhow::Error;
 
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
+    }
+}
+impl<'a> TryFrom<&'a TFunc> for Function {
+    type Error = anyhow::Error;
+
+    fn try_from(value:&'a TFunc) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
         return Ok(a.into());
+    }
+}
+impl TryFrom<TFunc> for Function{
+    type Error = anyhow::Error;
+
+    fn try_from(value: TFunc) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
     }
 }
 #[derive(Default)]
@@ -235,7 +250,7 @@ impl Rew {
                     }
                     crate::Item::Func { func } => Expr::Fn(FnExpr {
                         ident: None,
-                        function: Box::new(func.clone().try_into()?),
+                        function: Box::new(func.try_into()?),
                     }),
                     crate::Item::Lit { lit } => Expr::Lit(lit.clone()),
                     crate::Item::Call { callee, args } => {
@@ -277,33 +292,55 @@ impl Rew {
                         props: members
                             .iter()
                             .map(|a| {
-                                PropOrSpread::Prop({
-                                    let b = sr(&a.1);
-                                    Box::new(match &a.0 {
-                                        crate::PropKey::Lit(l) => Prop::KeyValue(KeyValueProp {
-                                            key: swc_ecma_ast::PropName::Ident(
-                                                swc_ecma_ast::IdentName {
-                                                    span: span,
-                                                    sym: l.0.clone(),
-                                                },
-                                            ),
-                                            value: b,
-                                        }),
-                                        crate::PropKey::Computed(c) => {
-                                            Prop::KeyValue(KeyValueProp {
-                                                key: swc_ecma_ast::PropName::Computed(
-                                                    ComputedPropName {
-                                                        span: span,
-                                                        expr: sr(c),
-                                                    },
-                                                ),
-                                                value: b,
+                                Ok(PropOrSpread::Prop({
+                                    let name = match &a.0 {
+                                        crate::PropKey::Lit(l) => {
+                                            swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
+                                                span: span,
+                                                sym: l.0.clone(),
                                             })
                                         }
+                                        crate::PropKey::Computed(c) => {
+                                            swc_ecma_ast::PropName::Computed(ComputedPropName {
+                                                span: span,
+                                                expr: sr(c),
+                                            })
+                                        }
+                                    };
+                                    Box::new(match &a.1 {
+                                        crate::PropVal::Item(i) => Prop::KeyValue(KeyValueProp {
+                                            key: name,
+                                            value: sr(i),
+                                        }),
+                                        crate::PropVal::Getter(g) => Prop::Getter(GetterProp {
+                                            span,
+                                            key: name,
+                                            type_ann: None,
+                                            body: {
+                                                let f: Function = g.try_into()?;
+                                                f.body
+                                            },
+                                        }),
+                                        crate::PropVal::Setter(s) => Prop::Setter({
+                                            let f: Function = s.try_into()?;
+                                            SetterProp {
+                                                span,
+                                                key: name,
+                                                this_param: None,
+                                                param: Box::new(
+                                                    f.params
+                                                        .get(0)
+                                                        .map(|g| &g.pat)
+                                                        .cloned()
+                                                        .context("in getting the param")?,
+                                                ),
+                                                body: f.body,
+                                            }
+                                        }),
                                     })
-                                })
+                                }))
                             })
-                            .collect(),
+                            .collect::<Result<_, anyhow::Error>>()?,
                     }),
                     crate::Item::Arr { members } => Expr::Array(ArrayLit {
                         span: span,

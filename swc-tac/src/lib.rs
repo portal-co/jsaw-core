@@ -14,8 +14,8 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{
-    BinaryOp, Callee, Expr, Function, Lit, MemberExpr, MemberProp, Number,
-    Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    BinaryOp, Callee, Expr, Function, Lit, MemberExpr, MemberProp, Number, Param, Pat,
+    SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 
 use swc_ecma_ast::Id as Ident;
@@ -282,6 +282,41 @@ impl<I> PropKey<I> {
         })
     }
 }
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+#[non_exhaustive]
+pub enum PropVal<I, F> {
+    Item(I),
+    Getter(F),
+    Setter(F),
+}
+impl<I, F> PropVal<I, F> {
+    pub fn as_ref(&self) -> PropVal<&I, &F> {
+        match self {
+            PropVal::Item(a) => PropVal::Item(a),
+            PropVal::Getter(f) => PropVal::Getter(f),
+            PropVal::Setter(f) => PropVal::Setter(f),
+        }
+    }
+    pub fn as_mut(&mut self) -> PropVal<&mut I, &mut F> {
+        match self {
+            PropVal::Item(a) => PropVal::Item(a),
+            PropVal::Getter(f) => PropVal::Getter(f),
+            PropVal::Setter(f) => PropVal::Setter(f),
+        }
+    }
+    pub fn map<I2, F2, Cx: ?Sized, E>(
+        self,
+        cx: &mut Cx,
+        i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
+        f: &mut (dyn FnMut(&mut Cx, F) -> Result<F2, E> + '_),
+    ) -> Result<PropVal<I2, F2>, E> {
+        Ok(match self {
+            PropVal::Item(a) => PropVal::Item(i(cx, a)?),
+            PropVal::Getter(a) => PropVal::Getter(f(cx, a)?),
+            PropVal::Setter(a) => PropVal::Setter(f(cx, a)?),
+        })
+    }
+}
 #[derive(Clone, Debug)]
 pub enum TCallee<I = Ident> {
     Val(I),
@@ -317,21 +352,53 @@ impl<I> TCallee<I> {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum Item<I = Ident, F = TFunc> {
-    Just { id: I },
-    Bin { left: I, right: I, op: BinaryOp },
-    Un { arg: I, op: UnaryOp },
-    Mem { obj: I, mem: I },
-    Func { func: F },
-    Lit { lit: Lit },
-    Call { callee: TCallee<I>, args: Vec<I> },
-    Obj { members: Vec<(PropKey<I>, I)> },
-    Arr { members: Vec<I> },
-    Yield { value: Option<I>, delegate: bool },
-    Await { value: I },
-    Asm { value: Asm<I> },
+    Just {
+        id: I,
+    },
+    Bin {
+        left: I,
+        right: I,
+        op: BinaryOp,
+    },
+    Un {
+        arg: I,
+        op: UnaryOp,
+    },
+    Mem {
+        obj: I,
+        mem: I,
+    },
+    Func {
+        func: F,
+    },
+    Lit {
+        lit: Lit,
+    },
+    Call {
+        callee: TCallee<I>,
+        args: Vec<I>,
+    },
+    Obj {
+        members: Vec<(PropKey<I>, PropVal<I, F>)>,
+    },
+    Arr {
+        members: Vec<I>,
+    },
+    Yield {
+        value: Option<I>,
+        delegate: bool,
+    },
+    Await {
+        value: I,
+    },
+    Asm {
+        value: Asm<I>,
+    },
     Undef,
     This,
-    Intrinsic { value: Native<I> },
+    Intrinsic {
+        value: Native<I>,
+    },
 }
 impl<I> Item<I> {
     pub fn map<J: Ord, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J>, E> {
@@ -356,7 +423,10 @@ impl<I, F> Item<I, F> {
                 args: args.iter().collect(),
             },
             Item::Obj { members } => Item::Obj {
-                members: members.iter().map(|(a, b)| (a.as_ref(), b)).collect(),
+                members: members
+                    .iter()
+                    .map(|(a, b)| (a.as_ref(), b.as_ref()))
+                    .collect(),
             },
             Item::Arr { members } => Item::Arr {
                 members: members.iter().collect(),
@@ -393,7 +463,10 @@ impl<I, F> Item<I, F> {
                 args: args.iter_mut().collect(),
             },
             Item::Obj { members } => Item::Obj {
-                members: members.iter_mut().map(|(a, b)| (a.as_mut(), b)).collect(),
+                members: members
+                    .iter_mut()
+                    .map(|(a, b)| (a.as_mut(), b.as_mut()))
+                    .collect(),
             },
             Item::Arr { members } => Item::Arr {
                 members: members.iter_mut().collect(),
@@ -446,7 +519,7 @@ impl<I, F> Item<I, F> {
             Item::Obj { members } => Item::Obj {
                 members: members
                     .into_iter()
-                    .map(|(a, b)| Ok((a.map(&mut |a| f(cx, a))?, f(cx, b)?)))
+                    .map(|(a, b)| Ok((a.map(&mut |a| f(cx, a))?, b.map(cx, f, g)?)))
                     .collect::<Result<_, E>>()?,
             },
             Item::Arr { members } => Item::Arr {
@@ -494,7 +567,10 @@ impl<I, F> Item<I, F> {
                 .chain(args.iter()),
             ),
             swc_tac::Item::Obj { members } => Box::new(members.iter().flat_map(|m| {
-                let v = once(&m.1);
+                let v: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
+                    PropVal::Getter(a) | PropVal::Setter(a) => Box::new(empty()),
+                    PropVal::Item(i) => Box::new(once(i)),
+                };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.0 {
                     swc_tac::PropKey::Lit(_) => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
@@ -535,7 +611,10 @@ impl<I, F> Item<I, F> {
                 .chain(args.iter_mut()),
             ),
             swc_tac::Item::Obj { members } => Box::new(members.iter_mut().flat_map(|m| {
-                let v = once(&mut m.1);
+                let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
+                    PropVal::Getter(a) | PropVal::Setter(a) => Box::new(empty()),
+                    PropVal::Item(i) => Box::new(once(i)),
+                };
                 let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.0 {
                     swc_tac::PropKey::Lit(_) => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
@@ -1176,18 +1255,10 @@ impl Trans<'_> {
                     .props
                     .iter()
                     .map(|a| {
-                        anyhow::Ok(match a {
-                            swc_ecma_ast::PropOrSpread::Spread(spread_element) => {
-                                anyhow::bail!("todo: {}:{}", file!(), line!())
-                            }
-                            swc_ecma_ast::PropOrSpread::Prop(prop) => match prop.as_ref() {
-                                swc_ecma_ast::Prop::Shorthand(ident) => {
-                                    Some((PropKey::Lit(ident.clone().into()), ident.clone().into()))
-                                }
-                                swc_ecma_ast::Prop::KeyValue(key_value_prop) => {
-                                    let v;
-                                    (v, t) = self.expr(i, o, b, t, &key_value_prop.value)?;
-                                    match &key_value_prop.key {
+                        macro_rules! prop_name {
+                            ($v:expr => $a:expr) => {
+                                match $v {
+                                    v => match $a {
                                         swc_ecma_ast::PropName::Ident(ident_name) => Some((
                                             PropKey::Lit((
                                                 ident_name.sym.clone(),
@@ -1210,16 +1281,74 @@ impl Trans<'_> {
                                         swc_ecma_ast::PropName::BigInt(big_int) => {
                                             anyhow::bail!("todo: {}:{}", file!(), line!())
                                         }
-                                    }
+                                    },
+                                }
+                            };
+                        }
+                        anyhow::Ok(match a {
+                            swc_ecma_ast::PropOrSpread::Spread(spread_element) => {
+                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                            }
+                            swc_ecma_ast::PropOrSpread::Prop(prop) => match prop.as_ref() {
+                                swc_ecma_ast::Prop::Shorthand(ident) => Some((
+                                    PropKey::Lit(ident.clone().into()),
+                                    PropVal::Item(ident.clone().into()),
+                                )),
+                                swc_ecma_ast::Prop::KeyValue(key_value_prop) => {
+                                    let v;
+                                    (v, t) = self.expr(i, o, b, t, &key_value_prop.value)?;
+                                    let v = PropVal::Item(v);
+                                    prop_name!(v => &key_value_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Assign(assign_prop) => {
                                     anyhow::bail!("todo: {}:{}", file!(), line!())
                                 }
                                 swc_ecma_ast::Prop::Getter(getter_prop) => {
-                                    anyhow::bail!("todo: {}:{}", file!(), line!())
+                                    let v = PropVal::Getter({
+                                        let mut c = swc_cfg::Func::default();
+                                        let k = swc_cfg::ToCfgConversionCtx::default();
+                                        let k = k.transform_all(
+                                            &mut c.cfg,
+                                            getter_prop
+                                                .body
+                                                .as_ref()
+                                                .context("in getting the body")?
+                                                .stmts
+                                                .clone(),
+                                            c.entry,
+                                        )?;
+                                        TFunc::try_from_with_mapper(
+                                            c,
+                                            static_map! {a => self.import_mapper[a].as_deref()},
+                                        )?
+                                    });
+                                    prop_name!(v => &getter_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Setter(setter_prop) => {
-                                    anyhow::bail!("todo: {}:{}", file!(), line!())
+                                    let v = PropVal::Setter({
+                                        let mut c = swc_cfg::Func::default();
+                                        c.params.push(Param {
+                                            span: setter_prop.span,
+                                            decorators: vec![],
+                                            pat: *setter_prop.param.clone(),
+                                        });
+                                        let k = swc_cfg::ToCfgConversionCtx::default();
+                                        let k = k.transform_all(
+                                            &mut c.cfg,
+                                            setter_prop
+                                                .body
+                                                .as_ref()
+                                                .context("in getting the body")?
+                                                .stmts
+                                                .clone(),
+                                            c.entry,
+                                        )?;
+                                        TFunc::try_from_with_mapper(
+                                            c,
+                                            static_map! {a => self.import_mapper[a].as_deref()},
+                                        )?
+                                    });
+                                    prop_name!(v => &setter_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Method(method_prop) => {
                                     anyhow::bail!("todo: {}:{}", file!(), line!())

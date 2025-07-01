@@ -237,45 +237,45 @@ pub enum BreakKind {
     BreakAfter,
     DoNotBreakAfter,
 }
-#[cfg(feature = "cli")]
-pub fn cli_load(cm: &Lrc<SourceMap>, fm: &Lrc<SourceFile>) -> Module {
-    // let cm: Lrc<SourceMap> = Default::default();
-    let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
+// #[cfg(feature = "cli")]
+// pub fn cli_load(cm: &Lrc<SourceMap>, fm: &Lrc<SourceFile>) -> Module {
+//     // let cm: Lrc<SourceMap> = Default::default();
+//     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
-    // Real usage
-    // let fm = cm
-    //     .load_file(Path::new("test.js"))
-    //     .expect("failed to load test.js");
-    // let fm = cm.new_source_file(
-    //     FileName::Custom("test.js".into()).into(),
-    //     "function foo() {}".into(),
-    // );
-    let lexer = Lexer::new(
-        // We want to parse ecmascript
-        Syntax::Es(Default::default()),
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::from(&**fm),
-        None,
-    );
+//     // Real usage
+//     // let fm = cm
+//     //     .load_file(Path::new("test.js"))
+//     //     .expect("failed to load test.js");
+//     // let fm = cm.new_source_file(
+//     //     FileName::Custom("test.js".into()).into(),
+//     //     "function foo() {}".into(),
+//     // );
+//     let lexer = Lexer::new(
+//         // We want to parse ecmascript
+//         Syntax::Es(Default::default()),
+//         // EsVersion defaults to es5
+//         Default::default(),
+//         StringInput::from(&**fm),
+//         None,
+//     );
 
-    let mut parser = Parser::new_from(lexer);
+//     let mut parser = Parser::new_from(lexer);
 
-    for e in parser.take_errors() {
-        e.into_diagnostic(&handler).emit();
-    }
+//     for e in parser.take_errors() {
+//         e.into_diagnostic(&handler).emit();
+//     }
 
-    let mut module = parser
-        .parse_module()
-        .map_err(|mut e| {
-            // Unrecoverable fatal error occurred
-            e.into_diagnostic(&handler).emit()
-        })
-        .expect("failed to parser module");
-     module.visit_mut_with(&mut swc_ecma_transforms_base::resolver(
-        Mark::root(),
-        Mark::new(),
-        false,
-    ));
-    return module;
-}
+//     let mut module = parser
+//         .parse_module()
+//         .map_err(|mut e| {
+//             // Unrecoverable fatal error occurred
+//             e.into_diagnostic(&handler).emit()
+//         })
+//         .expect("failed to parser module");
+//      module.visit_mut_with(&mut swc_ecma_transforms_base::resolver(
+//         Mark::root(),
+//         Mark::new(),
+//         false,
+//     ));
+//     return module;
+// }
