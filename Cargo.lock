@@ -28,9 +28,9 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "arena-traits"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89940692593628b7642837fcd6e496ed76866c22467c75eaecea0b94c134501e"
+checksum = "294252f426d5a6c175bcacfabf794c7e16790ccc7e0721eaddee0cc946323492"
 dependencies = [
  "id-arena",
 ]
@@ -146,9 +146,9 @@ checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 
 [[package]]
 name = "cfg-traits"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c561f6cffa35f03f4dc575407362fa291e3c97028470e6814df022bbd4d294ef"
+checksum = "a9f95265d334a1e11d81cd67d1c6b2f4ac4cea57374e319ed8eb9ba80c2d7172"
 dependencies = [
  "arena-traits",
  "either",
@@ -1043,9 +1043,9 @@ dependencies = [
 
 [[package]]
 name = "ssa-impls"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91f3132c6434c6ff9175d5193a45923cd9aea487623142f0b2a540100627ba10"
+checksum = "209fe6ed83c9e6cd0906f5838e53ae779cc6b0455a8b22d2443c67ed60d58a90"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1054,9 +1054,9 @@ dependencies = [
 
 [[package]]
 name = "ssa-reloop"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a128695f02e8388e6a5071bdfb1bec291892b1f8f795ac6038e311bba94db40f"
+checksum = "48d1fc4b32ca7142d52213e3206cc24f4b56ddeedd868480f4334ff1ef040e6f"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1067,9 +1067,9 @@ dependencies = [
 
 [[package]]
 name = "ssa-traits"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0b5d4195261ebb69852c6e5ea82688edbec5f8d4e177897a209014d273421fa"
+checksum = "55bc0c32091cf7d6e108a9a425aa55b1123be8a183e2413d9330cc7ff0db7389"
 dependencies = [
  "anyhow",
  "arena-traits",
