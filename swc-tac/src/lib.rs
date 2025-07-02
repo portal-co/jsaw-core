@@ -302,7 +302,7 @@ impl<I> PropKey<I> {
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
-    pub fn map<J: Ord, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<PropKey<J>, E> {
+    pub fn map<J: Ord, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
         Ok(match self {
             PropKey::Lit(l) => PropKey::Lit(l),
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
