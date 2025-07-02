@@ -231,7 +231,10 @@ impl TCfg {
     pub fn has_this(&self) -> bool {
         self.blocks
             .iter()
-            .any(|k| k.1.stmts.iter().any(|s| matches!(&s.right, Item::This)))
+            .any(|k| k.1.stmts.iter().any(|s| matches!(&s.right, Item::This)|| match &s.right{
+                Item::Func { func, arrow: true } => func.cfg.has_this(),
+                _ => false,
+            }))
     }
 }
 impl Externs<Ident> for TCfg {
