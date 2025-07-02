@@ -284,6 +284,7 @@ pub enum TTerm {
     Default,
 }
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+#[non_exhaustive]
 pub enum PropKey<I = Ident> {
     Lit(Ident),
     Computed(I),
