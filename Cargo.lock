@@ -686,7 +686,7 @@ checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
 
 [[package]]
 name = "portal-jsc-common"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "either",
  "portal-pc-asm-common",
@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-cfg"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -712,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-opt-ssa"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-ssa"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-tac"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -781,7 +781,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-util"
-version = "0.8.0-pre.1"
+version = "0.8.0-pre.2"
 dependencies = [
  "base64",
  "bitflags",
