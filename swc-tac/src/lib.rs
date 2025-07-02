@@ -228,6 +228,11 @@ impl TCfg {
             }
         }
     }
+    pub fn has_this(&self) -> bool {
+        self.blocks
+            .iter()
+            .any(|k| k.1.stmts.iter().any(|s| matches!(&s.right, Item::This)))
+    }
 }
 impl Externs<Ident> for TCfg {
     fn externs(&self) -> impl Iterator<Item = Ident> {
@@ -1074,39 +1079,39 @@ impl Trans<'_> {
                             (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
                             TCallee::Member { r#fn, member }
                         }
-                        Expr::Fn(f) if f.function.params.len() == call.args.len() => {
-                            for (p, a) in f.function.params.iter().zip(call.args.iter()) {
-                                let Pat::Ident(id) = &p.pat else {
-                                    anyhow::bail!("non-simple pattern")
-                                };
-                                let arg;
-                                (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                                o.blocks[t].stmts.push(TStmt {
-                                    left: LId::Id { id: id.to_id() },
-                                    flags: Default::default(),
-                                    right: Item::Just { id: arg },
-                                    span: a.span(),
-                                });
-                            }
-                            let tmp = o.regs.alloc(());
-                            let t2 = o.blocks.alloc(TBlock {
-                                stmts: vec![],
-                                catch: o.blocks[t].catch.clone(),
-                                term: Default::default(),
-                                orig_span: Some(f.span()),
-                            });
-                            let cfg: swc_cfg::Func = f.function.as_ref().clone().try_into()?;
-                            let mut t4 = Trans {
-                                map: Default::default(),
-                                ret_to: Some((tmp.clone(), t2)),
-                                recatch: o.blocks[t].catch.clone(),
-                                this: Some((Atom::new("globalThis"), Default::default())),
-                                import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
-                            };
-                            let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
-                            o.blocks[t].term = TTerm::Jmp(t3);
-                            return Ok((tmp, t2));
-                        }
+                        // Expr::Fn(f) if f.function.params.len() == call.args.len() => {
+                        //     for (p, a) in f.function.params.iter().zip(call.args.iter()) {
+                        //         let Pat::Ident(id) = &p.pat else {
+                        //             anyhow::bail!("non-simple pattern")
+                        //         };
+                        //         let arg;
+                        //         (arg, t) = self.expr(i, o, b, t, &a.expr)?;
+                        //         o.blocks[t].stmts.push(TStmt {
+                        //             left: LId::Id { id: id.to_id() },
+                        //             flags: Default::default(),
+                        //             right: Item::Just { id: arg },
+                        //             span: a.span(),
+                        //         });
+                        //     }
+                        //     let tmp = o.regs.alloc(());
+                        //     let t2 = o.blocks.alloc(TBlock {
+                        //         stmts: vec![],
+                        //         catch: o.blocks[t].catch.clone(),
+                        //         term: Default::default(),
+                        //         orig_span: Some(f.span()),
+                        //     });
+                        //     let cfg: swc_cfg::Func = f.function.as_ref().clone().try_into()?;
+                        //     let mut t4 = Trans {
+                        //         map: Default::default(),
+                        //         ret_to: Some((tmp.clone(), t2)),
+                        //         recatch: o.blocks[t].catch.clone(),
+                        //         this: Some((Atom::new("globalThis"), Default::default())),
+                        //         import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
+                        //     };
+                        //     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
+                        //     o.blocks[t].term = TTerm::Jmp(t3);
+                        //     return Ok((tmp, t2));
+                        // }
                         _ => {
                             let r#fn;
                             (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
@@ -1115,7 +1120,8 @@ impl Trans<'_> {
                                 .cloned()
                             {
                                 Some(Item::Func { func, arrow })
-                                    if func.params.len() == call.args.len() =>
+                                    if func.params.len() == call.args.len()
+                                        && (arrow || !func.cfg.has_this()) =>
                                 {
                                     for (p, a) in func.params.iter().zip(call.args.iter()) {
                                         // let Pat::Ident(id) = &p.pat else {
