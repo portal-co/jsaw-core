@@ -154,6 +154,9 @@ impl TFunc {
                 } {
                     continue;
                 }
+                if   *a.entry(s.left.clone()).or_default()  > 1{
+                    continue 'a;
+                }
                 if let LId::Id { id } = &s.left {
                     for (b2, t) in self.cfg.blocks.iter() {
                         for t in t.stmts.iter() {
