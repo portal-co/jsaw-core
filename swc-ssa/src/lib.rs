@@ -24,7 +24,9 @@ pub fn benj(swc_func: &mut SCfg) {
         for target in postcedent.targets_mut() {
             if target.block.index() <= block_index.index() {
                 for arg in target.args.iter_mut() {
-                    let value = swc_func.values.alloc(SValueW { value: SValue::Benc(*arg) });
+                    let value = swc_func.values.alloc(SValueW {
+                        value: SValue::Benc(*arg),
+                    });
                     swc_func.blocks[block_index].stmts.push(value);
                     *arg = value;
                 }
@@ -78,7 +80,7 @@ impl TryFrom<TFunc> for SFunc {
             all: decls.clone(),
             undef,
         };
-        let entry = trans.trans(&value.cfg, &mut cfg, value.entry)?;
+        let entry = trans.trans(&value.cfg, &mut cfg, value.entry, &mut empty())?;
         let target = STarget {
             block: entry,
             args: decls
@@ -120,10 +122,9 @@ impl SCfg {
                 SValue::LoadId(target) | SValue::StoreId { target, val: _ } => {
                     [target.clone()].into_iter().collect::<BTreeSet<Ident>>()
                 }
-                SValue::Item {
-                    item,
-                    span,
-                } => item.funcs().flat_map(|func|func.cfg.externals()).collect(),
+                SValue::Item { item, span } => {
+                    item.funcs().flat_map(|func| func.cfg.externals()).collect()
+                }
                 _ => Default::default(),
             })
             .collect();
@@ -324,7 +325,9 @@ impl<I, B, F> SValue<I, B, F> {
 }
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct SValueW { pub value: SValue }
+pub struct SValueW {
+    pub value: SValue,
+}
 impl From<SValue> for SValueW {
     fn from(value: SValue) -> Self {
         Self { value }
@@ -450,7 +453,13 @@ impl Trans {
         };
         x
     }
-    pub fn trans(&mut self, i: &TCfg, o: &mut SCfg, k: Id<TBlock>) -> anyhow::Result<Id<SBlock>> {
+    pub fn trans(
+        &mut self,
+        i: &TCfg,
+        o: &mut SCfg,
+        k: Id<TBlock>,
+        app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
+    ) -> anyhow::Result<Id<SBlock>> {
         loop {
             if let Some(a) = self.map.get(&k) {
                 return Ok(*a);
@@ -461,6 +470,7 @@ impl Trans {
                 postcedent: SPostcedent::default(),
             });
             self.map.insert(k, t);
+            let app: BTreeMap<_, _> = app.collect();
             let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].catch {
                 swc_tac::TCatch::Throw => None,
                 swc_tac::TCatch::Jump { pat, k } => {
@@ -470,7 +480,23 @@ impl Trans {
                         postcedent: SPostcedent::default(),
                     });
                     let state2 = once(pat.clone())
-                        .chain(self.all.iter().filter(|a| *a != pat).cloned())
+                        .chain(
+                            self.all
+                                .iter()
+                                .filter(|a| {
+                                    i.blocks.iter().all(|k| {
+                                        k.1.stmts.iter().all(|i| {
+                                            i.left
+                                                != LId::Id {
+                                                    id: a.clone().clone(),
+                                                }
+                                                || !i.flags.contains(ValFlags::SSA_LIKE)
+                                        })
+                                    })
+                                })
+                                .filter(|a| *a != pat)
+                                .cloned(),
+                        )
                         .collect::<Vec<_>>();
                     let v = state2
                         .iter()
@@ -484,7 +510,12 @@ impl Trans {
                         .cloned()
                         .collect::<Vec<_>>();
                     let t = STerm::Jmp(STarget {
-                        block: self.trans(i, o, *k)?,
+                        block: self.trans(
+                            i,
+                            o,
+                            *k,
+                            &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
+                        )?,
                         args: p,
                     });
                     o.blocks[a].postcedent.term = t;
@@ -494,7 +525,19 @@ impl Trans {
             let mut state = self
                 .all
                 .iter()
+                .filter(|a| {
+                    i.blocks.iter().all(|k| {
+                        k.1.stmts.iter().all(|i| {
+                            i.left
+                                != LId::Id {
+                                    id: a.clone().clone(),
+                                }
+                                || !i.flags.contains(ValFlags::SSA_LIKE)
+                        })
+                    })
+                })
                 .map(|a| (a.clone(), (o.add_blockparam(t), ValFlags::all())))
+                .chain(app.into_iter().map(|(a, b)| (a, (b, ValFlags::all()))))
                 .collect::<BTreeMap<_, _>>();
             self.apply_shim(o, &state, &shim, t);
             let mut cache = BTreeMap::new();
@@ -553,16 +596,21 @@ impl Trans {
                             Some(f)
                         }
                         None => {
-                            cache.insert(id.clone(), b);
-                            let c = o.values.alloc(
-                                SValue::StoreId {
-                                    target: id.clone(),
-                                    val: b,
-                                }
-                                .into(),
-                            );
-                            o.blocks[t].stmts.push(c);
-                            None
+                            if flags.contains(ValFlags::SSA_LIKE) {
+                                state.insert(id.clone(), (b, *flags));
+                                Some(*flags)
+                            } else {
+                                cache.insert(id.clone(), b);
+                                let c = o.values.alloc(
+                                    SValue::StoreId {
+                                        target: id.clone(),
+                                        val: b,
+                                    }
+                                    .into(),
+                                );
+                                o.blocks[t].stmts.push(c);
+                                None
+                            }
                         }
                     },
                     a => {
@@ -582,10 +630,38 @@ impl Trans {
             let params = self
                 .all
                 .iter()
+                .filter(|a| {
+                    i.blocks.iter().all(|k| {
+                        k.1.stmts.iter().all(|i| {
+                            i.left
+                                != LId::Id {
+                                    id: a.clone().clone(),
+                                }
+                                || !i.flags.contains(ValFlags::SSA_LIKE)
+                        })
+                    })
+                })
                 .filter_map(|a| state.get(a))
                 .map(|a| &a.0)
                 .cloned()
                 .collect::<Vec<_>>();
+            let mut dtc = self
+                .all
+                .iter()
+                .filter(|a| {
+                    !i.blocks.iter().all(|k| {
+                        k.1.stmts.iter().all(|i| {
+                            i.left
+                                != LId::Id {
+                                    id: a.clone().clone(),
+                                }
+                                || !i.flags.contains(ValFlags::SSA_LIKE)
+                        })
+                    })
+                })
+                .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0)))
+                .collect::<BTreeMap<_, _>>();
+            let mut dtc = dtc.iter().map(|(a, b)| (a.clone(), b.clone()));
             let term = match &i.blocks[k].term {
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {
                     None => STerm::Return(None),
@@ -595,7 +671,7 @@ impl Trans {
                     STerm::Throw(self.load(&state, i, o, t, ident.clone(), &cache))
                 }
                 swc_tac::TTerm::Jmp(id) => {
-                    let id = self.trans(i, o, *id)?;
+                    let id = self.trans(i, o, *id, &mut dtc.clone())?;
                     STerm::Jmp(STarget {
                         block: id,
                         args: params,
@@ -606,12 +682,12 @@ impl Trans {
                     if_true,
                     if_false,
                 } => {
-                    let if_true = self.trans(i, o, *if_true)?;
+                    let if_true = self.trans(i, o, *if_true, &mut dtc.clone())?;
                     let if_true = STarget {
                         block: if_true,
                         args: params.clone(),
                     };
-                    let if_false = self.trans(i, o, *if_false)?;
+                    let if_false = self.trans(i, o, *if_false, &mut dtc.clone())?;
                     let if_false = STarget {
                         block: if_false,
                         args: params,
@@ -628,7 +704,7 @@ impl Trans {
                     let blocks = blocks
                         .iter()
                         .map(|(a, b)| {
-                            let c = self.trans(i, o, *b)?;
+                            let c = self.trans(i, o, *b, &mut dtc.clone())?;
                             let d = self.load(&state, i, o, t, a.clone(), &cache);
                             Ok((
                                 d,
@@ -639,7 +715,7 @@ impl Trans {
                             ))
                         })
                         .collect::<anyhow::Result<Vec<_>>>()?;
-                    let default = self.trans(i, o, *default)?;
+                    let default = self.trans(i, o, *default, &mut dtc.clone())?;
                     let default = STarget {
                         block: default,
                         args: params,
