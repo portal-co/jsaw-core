@@ -348,21 +348,21 @@ impl<I, F> PropVal<I, F> {
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { r#fn: I, member: I },
-    Static(Ident),
+    // Static(Ident),
 }
 impl<I> TCallee<I> {
     pub fn as_ref(&self) -> TCallee<&I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
-            TCallee::Static(a) => TCallee::Static(a.clone()),
+            // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
     pub fn as_mut(&mut self) -> TCallee<&mut I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
-            TCallee::Static(a) => TCallee::Static(a.clone()),
+            // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
     pub fn map<J: Ord, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<TCallee<J>, E> {
@@ -372,7 +372,7 @@ impl<I> TCallee<I> {
                 r#fn: f(r#fn)?,
                 member: f(member)?,
             },
-            TCallee::Static(a) => TCallee::Static(a),
+            // TCallee::Static(a) => TCallee::Static(a),
         })
     }
 }
@@ -608,7 +608,7 @@ impl<I, F> Item<I, F> {
                 match callee {
                     swc_tac::TCallee::Val(a) => vec![a],
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
-                    swc_tac::TCallee::Static(_) => vec![],
+                    // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter()),
@@ -652,7 +652,7 @@ impl<I, F> Item<I, F> {
                 match callee {
                     swc_tac::TCallee::Val(a) => vec![a],
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
-                    swc_tac::TCallee::Static(_) => vec![],
+                    // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut()),

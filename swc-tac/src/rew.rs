@@ -291,7 +291,7 @@ impl Rew {
                                         ),
                                     }))
                                 }
-                                crate::TCallee::Static(r#fn) | TCallee::Val(r#fn) => {
+                                TCallee::Val(r#fn) => {
                                     let f = sr(r#fn);
                                     f
                                 }

@@ -43,10 +43,10 @@ pub struct SFunc {
     pub is_async: bool,
     pub ts_params: Vec<Option<TsType>>,
 }
-impl TryFrom<TFunc> for SFunc {
+impl<'a> TryFrom<&'a TFunc> for SFunc {
     type Error = anyhow::Error;
 
-    fn try_from(value: TFunc) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let mut decls = value.cfg.decls.clone();
         let mut d = BTreeSet::new();
         for e in value.cfg.externs().collect::<BTreeSet<_>>() {
@@ -93,15 +93,22 @@ impl TryFrom<TFunc> for SFunc {
                 .collect(),
         };
         cfg.blocks[entry2].postcedent.term = STerm::Jmp(target);
-        cfg.generics = value.cfg.generics;
-        cfg.ts_retty = value.cfg.ts_retty;
+        cfg.generics = value.cfg.generics.clone();
+        cfg.ts_retty = value.cfg.ts_retty.clone();
         Ok(Self {
             cfg,
             entry: entry2,
             is_generator: value.is_generator,
             is_async: value.is_async,
-            ts_params: value.ts_params,
+            ts_params: value.ts_params.clone(),
         })
+    }
+}
+impl TryFrom<TFunc> for SFunc {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TFunc) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
     }
 }
 #[derive(Default, Clone, Debug)]
@@ -548,22 +555,22 @@ impl Trans {
                 span: s,
             } in i.blocks[k].stmts.iter()
             {
-                let mut b = b.clone();
-                if let Item::Call { callee, args } = &mut b {
-                    if let TCallee::Val(v) = callee {
-                        if !i.blocks.iter().any(|k| {
-                            k.1.stmts.iter().any(|a| match &a.left {
-                                LId::Id { id } => id == v,
-                                _ => false,
-                            })
-                        }) {
-                            *callee = TCallee::Static(v.clone());
-                        }
-                    }
-                }
+                let mut b = b.as_ref();
+                // if let Item::Call { callee, args } = &mut b {
+                //     if let TCallee::Val(v) = callee {
+                //         if !i.blocks.iter().any(|k| {
+                //             k.1.stmts.iter().any(|a| match &a.left {
+                //                 LId::Id { id } => id == v,
+                //                 _ => false,
+                //             })
+                //         }) {
+                //             *callee = TCallee::Static(v.clone());
+                //         }
+                //     }
+                // }
                 let b = b.map2::<_, _, anyhow::Error, ()>(
                     &mut (),
-                    &mut |_, a| Ok(self.load(&state, i, o, t, a, &cache)),
+                    &mut |_, a| Ok(self.load(&state, i, o, t, a.clone(), &cache)),
                     &mut |_, b| b.try_into(),
                 )?;
                 let b = o.values.alloc(

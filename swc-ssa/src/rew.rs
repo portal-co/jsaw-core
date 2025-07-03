@@ -8,10 +8,10 @@ use swc_tac::{Item, LId, TBlock, TCatch, TCfg, TFunc, TStmt, TTerm, ValFlags};
 
 use crate::{SBlock, SFunc, STarget, SValue, SValueW};
 
-impl TryFrom<SFunc> for TFunc {
+impl<'a> TryFrom<&'a SFunc> for TFunc {
     type Error = anyhow::Error;
 
-    fn try_from(value: SFunc) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
         let mut cfg = TCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());
         let mut rew = Rew {
@@ -32,8 +32,8 @@ impl TryFrom<SFunc> for TFunc {
             cfg.type_annotations
                 .insert(mangle_value(ctxt, &value, value_id), ts_type);
         }
-        cfg.ts_retty = value.cfg.ts_retty;
-        cfg.generics = value.cfg.generics;
+        cfg.ts_retty = value.cfg.ts_retty.clone();
+        cfg.generics = value.cfg.generics.clone();
 
         Ok(Self {
             cfg,
@@ -41,8 +41,14 @@ impl TryFrom<SFunc> for TFunc {
             params,
             is_generator: value.is_generator,
             is_async: value.is_async,
-            ts_params: value.ts_params,
+            ts_params: value.ts_params.clone(),
         })
+    }
+}
+impl TryFrom<SFunc> for TFunc{
+    type Error = anyhow::Error;
+    fn try_from(value: SFunc) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
     }
 }
 #[derive(Default)]
@@ -96,9 +102,9 @@ impl Rew {
                         match &func.cfg.values[*statement].value {
                             SValue::Param { block, idx, ty } => todo!(),
                             SValue::Item { item, span } => {
-                                let item_id = item.clone().map2(
+                                let item_id = item.as_ref().map2(
                                     &mut (),
-                                    &mut |_, value| anyhow::Ok(mangle_value(ctxt, func, value)),
+                                    &mut |_, value| anyhow::Ok(mangle_value(ctxt, func, *value)),
                                     &mut |_, field| field.try_into(),
                                 )?;
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
