@@ -75,7 +75,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             }
             .into(),
         );
-        let mut trans = Trans {
+        let mut trans = ToSSAConverter {
             map: BTreeMap::new(),
             all: decls.clone(),
             undef,
@@ -398,12 +398,12 @@ impl SCfg {
 }
 
 #[non_exhaustive]
-pub struct Trans {
+pub struct ToSSAConverter {
     pub map: BTreeMap<Id<TBlock>, Id<SBlock>>,
     pub all: BTreeSet<Ident>,
     pub undef: Id<SValueW>,
 }
-impl Trans {
+impl ToSSAConverter {
     pub fn from_undef(undef: Id<SValueW>) -> Self {
         Self {
             map: Default::default(),

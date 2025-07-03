@@ -154,14 +154,14 @@ impl TFunc {
                 } {
                     continue;
                 }
-                if   *a.entry(s.left.clone()).or_default()  > 1{
+                if *a.entry(s.left.clone()).or_default() > 1 {
                     continue 'a;
                 }
                 if let LId::Id { id } = &s.left {
                     for (b2, t) in self.cfg.blocks.iter() {
                         for t in t.stmts.iter() {
                             if t.right.refs().any(|r| *r == *id) {
-                                if !dominates::<Self>(&d, Some(b),Some(b2)) {
+                                if !dominates::<Self>(&d, Some(b), Some(b2)) {
                                     *a.entry(s.left.clone()).or_default() += 2usize;
                                     continue 'a;
                                 }
