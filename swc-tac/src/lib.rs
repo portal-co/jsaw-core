@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::iter::{empty, once};
+use std::mem::take;
 
 use anyhow::Context;
 use arena_traits::IndexAlloc;
@@ -10,6 +11,7 @@ use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives};
+use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{Span, Spanned};
@@ -137,26 +139,44 @@ pub struct TCfg {
 pub trait Externs<I> {
     fn externs(&self) -> impl Iterator<Item = I>;
 }
-impl TCfg {
+impl TFunc {
     pub fn remark(&mut self) {
         let mut a: BTreeMap<LId, usize> = BTreeMap::new();
-        for s in self.blocks.iter().flat_map(|a| &a.1.stmts) {
-            if match &s.left {
-                LId::Id { id } => !self.decls.contains(&id),
-                LId::Member { obj, mem } => {
-                    !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
+        let d = domtree(&*self);
+        for (b, s) in self.cfg.blocks.iter() {
+            'a: for s in &s.stmts {
+                if match &s.left {
+                    LId::Id { id } => !self.cfg.decls.contains(&id),
+                    LId::Member { obj, mem } => {
+                        !self.cfg.decls.contains(&obj) || !self.cfg.decls.contains(&mem[0])
+                    }
+                    _ => todo!(),
+                } {
+                    continue;
                 }
-                _ => todo!(),
-            } {
-                continue;
+                if let LId::Id { id } = &s.left {
+                    for (b2, t) in self.cfg.blocks.iter() {
+                        for t in t.stmts.iter() {
+                            if t.right.refs().any(|r| *r == *id) {
+                                if !dominates::<Self>(&d, Some(b),Some(b2)) {
+                                    *a.entry(s.left.clone()).or_default() += 2usize;
+                                    continue 'a;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                *a.entry(s.left.clone()).or_default() += 1usize;
             }
-            *a.entry(s.left.clone()).or_default() += 1usize;
         }
-        for s in self.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
+        // let d =
+
+        for s in self.cfg.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
             if match &s.left {
-                LId::Id { id } => !self.decls.contains(&id),
+                LId::Id { id } => !self.cfg.decls.contains(&id),
                 LId::Member { obj, mem } => {
-                    !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
+                    !self.cfg.decls.contains(&obj) || !self.cfg.decls.contains(&mem[0])
                 }
                 _ => todo!(),
             } {
@@ -169,6 +189,8 @@ impl TCfg {
             }
         }
     }
+}
+impl TCfg {
     pub fn def(&self, i: portal_jsc_common::LId<Ident>) -> Option<&Item> {
         self.blocks.iter().flat_map(|a| &a.1.stmts).find_map(|a| {
             if a.left == i && a.flags.contains(ValFlags::SSA_LIKE) {
@@ -180,7 +202,7 @@ impl TCfg {
     }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
         let a = self.blocks.iter().flat_map(|k| {
-            let i: Box<dyn Iterator<Item = Ident> + '_> = match &k.1.term {
+            let i: Box<dyn Iterator<Item = Ident> + '_> = match &k.1.post.term {
                 TTerm::Return(a) => Box::new(a.iter().cloned()),
                 TTerm::Throw(b) => Box::new(Some(b.clone()).into_iter()),
                 TTerm::Jmp(id) => Box::new(std::iter::empty()),
@@ -229,12 +251,15 @@ impl TCfg {
         }
     }
     pub fn has_this(&self) -> bool {
-        self.blocks
-            .iter()
-            .any(|k| k.1.stmts.iter().any(|s| matches!(&s.right, Item::This)|| match &s.right{
-                Item::Func { func, arrow: true } => func.cfg.has_this(),
-                _ => false,
-            }))
+        self.blocks.iter().any(|k| {
+            k.1.stmts.iter().any(|s| {
+                matches!(&s.right, Item::This)
+                    || match &s.right {
+                        Item::Func { func, arrow: true } => func.cfg.has_this(),
+                        _ => false,
+                    }
+            })
+        })
     }
 }
 impl Externs<Ident> for TCfg {
@@ -252,10 +277,15 @@ pub struct TStmt {
 #[derive(Clone, Default, Debug)]
 pub struct TBlock {
     pub stmts: Vec<TStmt>,
+    pub post: TPostecedent,
+}
+#[derive(Clone, Default, Debug)]
+pub struct TPostecedent {
     pub catch: TCatch,
     pub term: TTerm,
     pub orig_span: Option<Span>,
 }
+pub mod impls;
 #[derive(Clone, Default, Debug)]
 pub enum TCatch {
     #[default]
@@ -302,7 +332,10 @@ impl<I> PropKey<I> {
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
-    pub fn map<J: Ord, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
+    pub fn map<J: Ord, E>(
+        self,
+        f: &mut (dyn FnMut(I) -> Result<J, E> + '_),
+    ) -> Result<PropKey<J>, E> {
         Ok(match self {
             PropKey::Lit(l) => PropKey::Lit(l),
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
@@ -702,16 +735,18 @@ impl Trans<'_> {
             }
             let t = o.blocks.alloc(TBlock {
                 stmts: vec![],
-                catch: self.recatch.clone(),
-                term: Default::default(),
-                orig_span: i.blocks[b].end.orig_span.clone(),
+                post: TPostecedent {
+                    catch: self.recatch.clone(),
+                    term: Default::default(),
+                    orig_span: i.blocks[b].end.orig_span.clone(),
+                },
             });
             self.map.insert(b, t);
             if let Catch::Jump { pat, k } = &i.blocks[b].end.catch {
                 match pat {
                     Pat::Ident(id) => {
                         let k = self.trans(i, o, *k)?;
-                        o.blocks[t].catch = TCatch::Jump {
+                        o.blocks[t].post.catch = TCatch::Jump {
                             pat: id.id.clone().into(),
                             k,
                         };
@@ -788,7 +823,7 @@ impl Trans<'_> {
                 }
                 swc_cfg::Term::Default => TTerm::Default,
             };
-            o.blocks[t].term = term;
+            o.blocks[t].post.term = term;
         }
     }
     pub fn stmt(
@@ -913,23 +948,29 @@ impl Trans<'_> {
                 (v, t) = self.expr(i, o, b, t, &c.test)?;
                 let then = o.blocks.alloc(TBlock {
                     stmts: vec![],
-                    catch: o.blocks[t].catch.clone(),
-                    term: Default::default(),
-                    orig_span: Some(c.span),
+                    post: TPostecedent {
+                        catch: o.blocks[t].post.catch.clone(),
+                        term: Default::default(),
+                        orig_span: Some(c.span),
+                    },
                 });
                 let els = o.blocks.alloc(TBlock {
                     stmts: vec![],
-                    catch: o.blocks[t].catch.clone(),
-                    term: Default::default(),
-                    orig_span: Some(c.span),
+                    post: TPostecedent {
+                        catch: o.blocks[t].post.catch.clone(),
+                        term: Default::default(),
+                        orig_span: Some(c.span),
+                    },
                 });
                 let done = o.blocks.alloc(TBlock {
                     stmts: vec![],
-                    catch: o.blocks[t].catch.clone(),
-                    term: Default::default(),
-                    orig_span: Some(c.span),
+                    post: TPostecedent {
+                        catch: o.blocks[t].post.catch.clone(),
+                        term: Default::default(),
+                        orig_span: Some(c.span),
+                    },
                 });
-                o.blocks[t].term = TTerm::CondJmp {
+                o.blocks[t].post.term = TTerm::CondJmp {
                     cond: v,
                     if_true: then,
                     if_false: els,
@@ -943,7 +984,7 @@ impl Trans<'_> {
                     right: Item::Just { id: a },
                     span: s.span(),
                 });
-                o.blocks[then].term = TTerm::Jmp(done);
+                o.blocks[then].post.term = TTerm::Jmp(done);
                 let (a, els) = self.expr(i, o, b, els, &c.alt)?;
                 o.blocks[els].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
@@ -951,7 +992,7 @@ impl Trans<'_> {
                     right: Item::Just { id: a },
                     span: s.span(),
                 });
-                o.blocks[els].term = TTerm::Jmp(done);
+                o.blocks[els].post.term = TTerm::Jmp(done);
                 return Ok((tmp, done));
             }
             Expr::This(this) => {
@@ -1143,20 +1184,22 @@ impl Trans<'_> {
                                     let tmp = o.regs.alloc(());
                                     let t2 = o.blocks.alloc(TBlock {
                                         stmts: vec![],
-                                        catch: o.blocks[t].catch.clone(),
-                                        term: Default::default(),
-                                        orig_span: Some(e.span()),
+                                        post: TPostecedent {
+                                            catch: o.blocks[t].post.catch.clone(),
+                                            term: Default::default(),
+                                            orig_span: Some(e.span()),
+                                        },
                                     });
                                     let cfg: swc_cfg::Func = func.clone().try_into()?;
                                     let mut t4 = Trans {
                                         map: Default::default(),
                                         ret_to: Some((tmp.clone(), t2)),
-                                        recatch: o.blocks[t].catch.clone(),
+                                        recatch: o.blocks[t].post.catch.clone(),
                                         this: Some((Atom::new("globalThis"), Default::default())),
                                         import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
                                     };
                                     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
-                                    o.blocks[t].term = TTerm::Jmp(t3);
+                                    o.blocks[t].post.term = TTerm::Jmp(t3);
                                     return Ok((tmp, t2));
                                 }
                                 _ => TCallee::Val(r#fn),

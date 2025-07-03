@@ -45,7 +45,7 @@ impl<'a> TryFrom<&'a SFunc> for TFunc {
         })
     }
 }
-impl TryFrom<SFunc> for TFunc{
+impl TryFrom<SFunc> for TFunc {
     type Error = anyhow::Error;
     fn try_from(value: SFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
@@ -97,7 +97,7 @@ impl Rew {
                             }
                         }
                     };
-                    cfg.blocks[new_block_id].catch = catch_clause;
+                    cfg.blocks[new_block_id].post.catch = catch_clause;
                     for statement in func.cfg.blocks[*block_id].stmts.iter() {
                         match &func.cfg.values[*statement].value {
                             SValue::Param { block, idx, ty } => todo!(),
@@ -218,7 +218,7 @@ impl Rew {
                         }
                         crate::STerm::Default => swc_tac::TTerm::Default,
                     };
-                    cfg.blocks[new_block_id].term = term;
+                    cfg.blocks[new_block_id].post.term = term;
                 }
                 BlockEntry::Target(starget, val) => {
                     let stmts = val
@@ -240,7 +240,7 @@ impl Rew {
                         cfg,
                         BlockEntry::Block(starget.block),
                     )?);
-                    cfg.blocks[new_block_id].term = term;
+                    cfg.blocks[new_block_id].post.term = term;
                 }
             }
         }

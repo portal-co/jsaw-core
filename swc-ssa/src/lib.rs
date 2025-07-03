@@ -478,7 +478,7 @@ impl Trans {
             });
             self.map.insert(k, t);
             let app: BTreeMap<_, _> = app.collect();
-            let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].catch {
+            let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
                 swc_tac::TCatch::Jump { pat, k } => {
                     let a = o.blocks.alloc(SBlock {
@@ -669,7 +669,7 @@ impl Trans {
                 .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0)))
                 .collect::<BTreeMap<_, _>>();
             let mut dtc = dtc.iter().map(|(a, b)| (a.clone(), b.clone()));
-            let term = match &i.blocks[k].term {
+            let term = match &i.blocks[k].post.term {
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {
                     None => STerm::Return(None),
                     Some(a) => STerm::Return(Some(self.load(&state, i, o, t, a.clone(), &cache))),

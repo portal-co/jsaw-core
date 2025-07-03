@@ -133,9 +133,9 @@ impl Rew {
                 return Ok(*existing_block_id);
             }
             let new_block_id = cfg.blocks.alloc(Default::default());
-            cfg.blocks[new_block_id].end.orig_span = tcfg.blocks[block_id].orig_span.clone();
+            cfg.blocks[new_block_id].end.orig_span = tcfg.blocks[block_id].post.orig_span.clone();
             self.all.insert(block_id, new_block_id);
-            let catch = match &tcfg.blocks[block_id].catch {
+            let catch = match &tcfg.blocks[block_id].post.catch {
                 crate::TCatch::Throw => swc_cfg::Catch::Throw,
                 crate::TCatch::Jump { pat, k } => swc_cfg::Catch::Jump {
                     pat: Pat::Ident(swc_ecma_ast::BindingIdent {
@@ -462,13 +462,13 @@ impl Rew {
                 }));
             }
             flush!();
-            let term = match &tcfg.blocks[block_id].term {
+            let term = match &tcfg.blocks[block_id].post.term {
                 crate::TTerm::Return(r) => Term::Return(
                     r.as_ref()
                         .map(|returned_value| {
                             ident(
                                 returned_value,
-                                tcfg.blocks[block_id]
+                                tcfg.blocks[block_id].post
                                     .orig_span
                                     .clone()
                                     .unwrap_or(Span::dummy_with_cmt()),
@@ -478,7 +478,7 @@ impl Rew {
                 ),
                 crate::TTerm::Throw(x) => Term::Throw(Expr::Ident(ident(
                     x,
-                    tcfg.blocks[block_id]
+                    tcfg.blocks[block_id].post
                         .orig_span
                         .clone()
                         .unwrap_or(Span::dummy_with_cmt()),
@@ -491,7 +491,7 @@ impl Rew {
                 } => Term::CondJmp {
                     cond: Expr::Ident(ident(
                         cond,
-                        tcfg.blocks[block_id]
+                        tcfg.blocks[block_id].post
                             .orig_span
                             .clone()
                             .unwrap_or(Span::dummy_with_cmt()),
@@ -502,7 +502,7 @@ impl Rew {
                 crate::TTerm::Switch { x, blocks, default } => Term::Switch {
                     x: Expr::Ident(ident(
                         x,
-                        tcfg.blocks[block_id]
+                        tcfg.blocks[block_id].post
                             .orig_span
                             .clone()
                             .unwrap_or(Span::dummy_with_cmt()),
@@ -513,7 +513,7 @@ impl Rew {
                             anyhow::Ok((
                                 Expr::Ident(ident(
                                     a.0,
-                                    tcfg.blocks[block_id]
+                                    tcfg.blocks[block_id].post
                                         .orig_span
                                         .clone()
                                         .unwrap_or(Span::dummy_with_cmt()),
