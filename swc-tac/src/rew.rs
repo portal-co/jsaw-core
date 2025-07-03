@@ -7,7 +7,6 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::MemberExpr;
 use swc_ecma_ast::ObjectLit;
 use swc_ecma_ast::Pat;
 use swc_ecma_ast::Prop;
@@ -22,6 +21,7 @@ use swc_ecma_ast::{AssignTarget, Function};
 use swc_ecma_ast::{BinExpr, BindingIdent, TsTypeAnn};
 use swc_ecma_ast::{BinaryOp, CallExpr, Lit, Number};
 use swc_ecma_ast::{BlockStmt, FnExpr, GetterProp, ReturnStmt};
+use swc_ecma_ast::{Callee, MemberExpr};
 use swc_ecma_ast::{ComputedPropName, ThisExpr};
 use swc_ecma_ast::{Expr, SimpleAssignTarget};
 use swc_ecma_ast::{ExprStmt, Str};
@@ -277,25 +277,33 @@ impl Rew {
                         Expr::Call(CallExpr {
                             span: span,
                             ctxt: SyntaxContext::empty(),
-                            callee: swc_ecma_ast::Callee::Expr(match callee {
-                                crate::TCallee::Member { r#fn, member } => {
-                                    let f = sr(r#fn);
-                                    Box::new(Expr::Member(MemberExpr {
-                                        span: span,
-                                        obj: f,
-                                        prop: swc_ecma_ast::MemberProp::Computed(
-                                            ComputedPropName {
-                                                span: span,
-                                                expr: sr(member),
-                                            },
-                                        ),
-                                    }))
-                                }
-                                TCallee::Val(r#fn) => {
-                                    let f = sr(r#fn);
-                                    f
-                                }
-                            }),
+                            callee: 'a: {
+                                swc_ecma_ast::Callee::Expr(match callee {
+                                    crate::TCallee::Member { r#fn, member } => {
+                                        let f = sr(r#fn);
+                                        Box::new(Expr::Member(MemberExpr {
+                                            span: span,
+                                            obj: f,
+                                            prop: swc_ecma_ast::MemberProp::Computed(
+                                                ComputedPropName {
+                                                    span: span,
+                                                    expr: sr(member),
+                                                },
+                                            ),
+                                        }))
+                                    }
+                                    TCallee::Val(r#fn) => {
+                                        let f = sr(r#fn);
+                                        f
+                                    }
+                                    TCallee::Import => {
+                                        break 'a Callee::Import(swc_ecma_ast::Import {
+                                            span,
+                                            phase: Default::default(),
+                                        });
+                                    }
+                                })
+                            },
                             args: args
                                 .iter()
                                 .map(|a| swc_ecma_ast::ExprOrSpread {
@@ -468,7 +476,8 @@ impl Rew {
                         .map(|returned_value| {
                             ident(
                                 returned_value,
-                                tcfg.blocks[block_id].post
+                                tcfg.blocks[block_id]
+                                    .post
                                     .orig_span
                                     .clone()
                                     .unwrap_or(Span::dummy_with_cmt()),
@@ -478,7 +487,8 @@ impl Rew {
                 ),
                 crate::TTerm::Throw(x) => Term::Throw(Expr::Ident(ident(
                     x,
-                    tcfg.blocks[block_id].post
+                    tcfg.blocks[block_id]
+                        .post
                         .orig_span
                         .clone()
                         .unwrap_or(Span::dummy_with_cmt()),
@@ -491,7 +501,8 @@ impl Rew {
                 } => Term::CondJmp {
                     cond: Expr::Ident(ident(
                         cond,
-                        tcfg.blocks[block_id].post
+                        tcfg.blocks[block_id]
+                            .post
                             .orig_span
                             .clone()
                             .unwrap_or(Span::dummy_with_cmt()),
@@ -502,7 +513,8 @@ impl Rew {
                 crate::TTerm::Switch { x, blocks, default } => Term::Switch {
                     x: Expr::Ident(ident(
                         x,
-                        tcfg.blocks[block_id].post
+                        tcfg.blocks[block_id]
+                            .post
                             .orig_span
                             .clone()
                             .unwrap_or(Span::dummy_with_cmt()),
@@ -513,7 +525,8 @@ impl Rew {
                             anyhow::Ok((
                                 Expr::Ident(ident(
                                     a.0,
-                                    tcfg.blocks[block_id].post
+                                    tcfg.blocks[block_id]
+                                        .post
                                         .orig_span
                                         .clone()
                                         .unwrap_or(Span::dummy_with_cmt()),

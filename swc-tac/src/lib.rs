@@ -384,6 +384,7 @@ impl<I, F> PropVal<I, F> {
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { r#fn: I, member: I },
+    Import,
     // Static(Ident),
 }
 impl<I> TCallee<I> {
@@ -391,6 +392,7 @@ impl<I> TCallee<I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
+            TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -398,6 +400,7 @@ impl<I> TCallee<I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
+            TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -408,6 +411,7 @@ impl<I> TCallee<I> {
                 r#fn: f(r#fn)?,
                 member: f(member)?,
             },
+            TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a),
         })
     }
@@ -644,7 +648,7 @@ impl<I, F> Item<I, F> {
                 match callee {
                     swc_tac::TCallee::Val(a) => vec![a],
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
-                    // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter()),
@@ -688,7 +692,7 @@ impl<I, F> Item<I, F> {
                 match callee {
                     swc_tac::TCallee::Val(a) => vec![a],
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
-                    // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut()),
@@ -1119,6 +1123,7 @@ impl Trans<'_> {
             }
             Expr::Call(call) => {
                 let c = match &call.callee {
+                    Callee::Import(i) => TCallee::Import,
                     Callee::Expr(e) => match e.as_ref() {
                         Expr::Member(m) => {
                             let r#fn;
