@@ -32,7 +32,7 @@ pub mod simpl;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, linearize::Linearize)]
 #[non_exhaustive]
 pub enum ImportMapperReq {
-    Native,
+    // Native,
 }
 
 pub fn imp(a: MemberProp) -> Expr {
@@ -464,9 +464,9 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Undef,
     This,
-    Intrinsic {
-        value: Native<I>,
-    },
+    // Intrinsic {
+    //     value: Native<I>,
+    // },
 }
 impl<I> Item<I> {
     pub fn map<J: Ord, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J>, E> {
@@ -512,9 +512,9 @@ impl<I, F> Item<I, F> {
             },
             Item::Undef => Item::Undef,
             Item::This => Item::This,
-            Item::Intrinsic { value } => Item::Intrinsic {
-                value: value.as_ref(),
-            },
+            // Item::Intrinsic { value } => Item::Intrinsic {
+            //     value: value.as_ref(),
+            // },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
@@ -555,9 +555,9 @@ impl<I, F> Item<I, F> {
             },
             Item::Undef => Item::Undef,
             Item::This => Item::This,
-            Item::Intrinsic { value } => Item::Intrinsic {
-                value: value.as_mut(),
-            },
+            // Item::Intrinsic { value } => Item::Intrinsic {
+            //     value: value.as_mut(),
+            // },
         }
     }
     pub fn map2<J: Ord, G, E, C: ?Sized>(
@@ -620,9 +620,9 @@ impl<I, F> Item<I, F> {
                 value: value.map(&mut |a| f(cx, a))?,
             },
             Item::This => Item::This,
-            Item::Intrinsic { value } => Item::Intrinsic {
-                value: value.map(&mut |a| f(cx, a))?,
-            },
+            // Item::Intrinsic { value } => Item::Intrinsic {
+            //     value: value.map(&mut |a| f(cx, a))?,
+            // },
         })
     }
     pub fn funcs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a F> + 'a> {
@@ -669,14 +669,14 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This => Box::new(empty()),
             Item::Asm { value } => Box::new(value.refs()),
-            Item::Intrinsic { value } => {
-                let mut v = Vec::default();
-                value
-                    .as_ref()
-                    .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
-                    .unwrap();
-                Box::new(v.into_iter())
-            }
+            // Item::Intrinsic { value } => {
+            //     let mut v = Vec::default();
+            //     value
+            //         .as_ref()
+            //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
+            //         .unwrap();
+            //     Box::new(v.into_iter())
+            // }
         }
     }
     pub fn refs_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
@@ -713,14 +713,14 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This => Box::new(empty()),
             Item::Asm { value } => Box::new(value.refs_mut()),
-            Item::Intrinsic { value } => {
-                let mut v = Vec::default();
-                value
-                    .as_mut()
-                    .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
-                    .unwrap();
-                Box::new(v.into_iter())
-            }
+            // Item::Intrinsic { value } => {
+            //     let mut v = Vec::default();
+            //     value
+            //         .as_mut()
+            //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
+            //         .unwrap();
+            //     Box::new(v.into_iter())
+            // }
         }
     }
 }
@@ -931,24 +931,24 @@ impl Trans<'_> {
         mut t: Id<TBlock>,
         s: &Expr,
     ) -> anyhow::Result<(Ident, Id<TBlock>)> {
-        if let Some(i2) = self.import_mapper[ImportMapperReq::Native].as_deref() {
-            if let Some(n) = s.resolve_natives(i2) {
-                let arg = n.map(&mut |e| {
-                    let x;
-                    (x, t) = self.expr(i, o, b, t, e)?;
-                    anyhow::Ok(x)
-                })?;
-                let tmp = o.regs.alloc(());
-                o.blocks[t].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Intrinsic { value: arg },
-                    span: s.span(),
-                });
-                o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
-            }
-        }
+        // if let Some(i2) = self.import_mapper[ImportMapperReq::Native].as_deref() {
+        //     if let Some(n) = s.resolve_natives(i2) {
+        //         let arg = n.map(&mut |e| {
+        //             let x;
+        //             (x, t) = self.expr(i, o, b, t, e)?;
+        //             anyhow::Ok(x)
+        //         })?;
+        //         let tmp = o.regs.alloc(());
+        //         o.blocks[t].stmts.push(TStmt {
+        //             left: LId::Id { id: tmp.clone() },
+        //             flags: ValFlags::SSA_LIKE,
+        //             right: Item::Intrinsic { value: arg },
+        //             span: s.span(),
+        //         });
+        //         o.decls.insert(tmp.clone());
+        //         return Ok((tmp, t));
+        //     }
+        // }
         match s {
             Expr::Cond(c) => {
                 let v;
