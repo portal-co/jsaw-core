@@ -1174,25 +1174,39 @@ impl Trans<'_> {
                                 .cloned()
                             {
                                 Some(Item::Func { func, arrow })
-                                    if func.params.len() >= call.args.len()
-                                        && (arrow || !func.cfg.has_this()) =>
+                                    if (arrow || !func.cfg.has_this()) =>
                                 {
                                     let u = Expr::undefined(call.span);
-                                    for (p, a) in func.params.iter().zip(call.args.iter().map(Some).chain(once(None).cycle())) {
+                                    for (p, a) in
+                                        func.params.iter().map(Some).chain(once(None).cycle()).zip(
+                                            call.args.iter().map(Some).chain(once(None).cycle()),
+                                        )
+                                    {
+                                        if p.is_none() && a.is_none() {
+                                            break;
+                                        }
                                         // let Pat::Ident(id) = &p.pat else {
                                         //     anyhow::bail!("non-simple pattern")
                                         // };
                                         let arg;
-                                        (arg, t) = self.expr(i, o, b, t, match a{
-                                            Some(a) => &a.expr,
-                                            None => &*u,
-                                        })?;
-                                        o.blocks[t].stmts.push(TStmt {
-                                            left: LId::Id { id: p.clone() },
-                                            flags: Default::default(),
-                                            right: Item::Just { id: arg },
-                                            span: a.span(),
-                                        });
+                                        (arg, t) = self.expr(
+                                            i,
+                                            o,
+                                            b,
+                                            t,
+                                            match a {
+                                                Some(a) => &a.expr,
+                                                None => &*u,
+                                            },
+                                        )?;
+                                        if let Some(p) = p {
+                                            o.blocks[t].stmts.push(TStmt {
+                                                left: LId::Id { id: p.clone() },
+                                                flags: Default::default(),
+                                                right: Item::Just { id: arg },
+                                                span: a.span(),
+                                            });
+                                        }
                                     }
                                     let tmp = o.regs.alloc(());
                                     let t2 = o.blocks.alloc(TBlock {
