@@ -1168,6 +1168,7 @@ impl Trans<'_> {
                         _ => {
                             let r#fn;
                             (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
+
                             match o
                                 .def(portal_jsc_common::LId::Id { id: r#fn.clone() })
                                 .cloned()
