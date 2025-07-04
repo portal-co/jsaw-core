@@ -1174,15 +1174,19 @@ impl Trans<'_> {
                                 .cloned()
                             {
                                 Some(Item::Func { func, arrow })
-                                    if func.params.len() == call.args.len()
+                                    if func.params.len() >= call.args.len()
                                         && (arrow || !func.cfg.has_this()) =>
                                 {
-                                    for (p, a) in func.params.iter().zip(call.args.iter()) {
+                                    let u = Expr::undefined(call.span);
+                                    for (p, a) in func.params.iter().zip(call.args.iter().map(Some).chain(once(None).cycle())) {
                                         // let Pat::Ident(id) = &p.pat else {
                                         //     anyhow::bail!("non-simple pattern")
                                         // };
                                         let arg;
-                                        (arg, t) = self.expr(i, o, b, t, &a.expr)?;
+                                        (arg, t) = self.expr(i, o, b, t, match a{
+                                            Some(a) => &a.expr,
+                                            None => &*u,
+                                        })?;
                                         o.blocks[t].stmts.push(TStmt {
                                             left: LId::Id { id: p.clone() },
                                             flags: Default::default(),
