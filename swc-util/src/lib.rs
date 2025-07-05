@@ -91,10 +91,10 @@ pub struct InlineTracer<'a> {
 impl<'a> VisitMut for InlineTracer<'a> {
     fn visit_mut_expr(&mut self, node: &mut Expr) {
         node.visit_mut_children_with(self);
-        if let Some(Native::InlineMe) = node.resolve_natives(&*self.mapper) {
-            self.inlinable = true;
-            *node = *Expr::undefined(node.span());
-        }
+        // if let Some(Native::InlineMe) = node.resolve_natives(&*self.mapper) {
+        //     self.inlinable = true;
+        //     *node = *Expr::undefined(node.span());
+        // }
     }
 }
 pub struct InlineHintInliner<'a> {
