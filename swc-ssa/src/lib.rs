@@ -33,7 +33,10 @@ impl SCfg {
                 } {
                     for arg in target.args.iter_mut() {
                         let value = self.values.alloc(SValueW {
-                            value: SValue::EdgeBlocker { value: *arg,span: None },
+                            value: SValue::EdgeBlocker {
+                                value: *arg,
+                                span: None,
+                            },
                         });
                         self.blocks[block_index].stmts.push(value);
                         *arg = value;
@@ -43,24 +46,40 @@ impl SCfg {
             self.blocks[block_index].postcedent = postcedent;
         }
     }
-    pub fn unblock_edges(&mut self){
-        for (_,val) in self.values.iter_mut(){
-            if let SValue::EdgeBlocker { value: x,span } = &val.value{
-                val.value = SValue::Item { item: Item::Just { id: *x }, span: *span}
+    pub fn unblock_edges(&mut self) {
+        for (_, val) in self.values.iter_mut() {
+            if let SValue::EdgeBlocker { value: x, span } = &val.value {
+                val.value = SValue::Item {
+                    item: Item::Just { id: *x },
+                    span: *span,
+                }
             }
         }
     }
-    pub fn equate_items(&mut self){
+    pub fn equate_items(&mut self) {
         let mut map = BTreeMap::new();
-        for (a,b) in self.values.iter(){
-            if let SValue::Item { item: Item::Just { id }, span } = &b.value{
+        for (a, b) in self.values.iter() {
+            if let SValue::Item {
+                item: Item::Just { id },
+                span,
+            } = &b.value
+            {
                 map.insert(a, *id);
             }
         }
-        for (_,b) in self.values.iter_mut(){
-            for r in b.value.vals_mut(){
-                while let Some(v2) = map.get(r){
+        for (_, b) in self.values.iter_mut() {
+            for r in b.value.vals_mut() {
+                while let Some(v2) = map.get(r) {
                     *r = *v2
+                }
+            }
+        }
+        for (_, b) in self.blocks.iter_mut() {
+            for t in b.postcedent.targets_mut() {
+                for r in t.args.iter_mut() {
+                    while let Some(v2) = map.get(r) {
+                        *r = *v2
+                    }
                 }
             }
         }
@@ -216,7 +235,10 @@ pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
         target: Ident,
         val: I,
     },
-    EdgeBlocker { value: I, span: Option<Span> },
+    EdgeBlocker {
+        value: I,
+        span: Option<Span>,
+    },
 }
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
@@ -264,7 +286,10 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::EdgeBlocker { value: v,span } => SValue::EdgeBlocker { value: v,span: *span },
+            SValue::EdgeBlocker { value: v, span } => SValue::EdgeBlocker {
+                value: v,
+                span: *span,
+            },
         }
     }
     pub fn as_mut(&mut self) -> SValue<&mut I, &mut B, &mut F> {
@@ -292,7 +317,10 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::EdgeBlocker { value: v,span } => SValue::EdgeBlocker { value: v ,span:*span},
+            SValue::EdgeBlocker { value: v, span } => SValue::EdgeBlocker {
+                value: v,
+                span: *span,
+            },
         }
     }
     pub fn map<J: Ord, C, G, X, E>(
@@ -321,7 +349,10 @@ impl<I, B, F> SValue<I, B, F> {
                 target,
                 val: ident(cx, val)?,
             },
-            SValue::EdgeBlocker { value: i,span } => SValue::EdgeBlocker { value: ident(cx, i)?,span },
+            SValue::EdgeBlocker { value: i, span } => SValue::EdgeBlocker {
+                value: ident(cx, i)?,
+                span,
+            },
         })
     }
     pub fn vals_ref<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
@@ -339,7 +370,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::EdgeBlocker { value: a,span } => Box::new(once(a)),
+            SValue::EdgeBlocker { value: a, span } => Box::new(once(a)),
         }
     }
     pub fn vals_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
@@ -357,7 +388,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::EdgeBlocker { value: a,span } => Box::new(once(a)),
+            SValue::EdgeBlocker { value: a, span } => Box::new(once(a)),
         }
     }
 }
