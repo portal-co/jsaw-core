@@ -83,6 +83,9 @@ impl SCfg {
                 }
             }
         }
+        for (_, b) in self.blocks.iter_mut() {
+            b.stmts.retain(|a| !map.contains_key(a));
+        }
     }
 }
 #[derive(Clone, Debug)]
