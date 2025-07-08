@@ -102,9 +102,7 @@ impl Rew {
                         match &func.cfg.values[*statement].value {
                             SValue::Param { block, idx, ty } => todo!(),
                             SValue::Item { item, span } => match item {
-                                Item::Just { id } => {
-                                    
-                                }
+                                Item::Just { id } => {}
                                 item => {
                                     let item_id = item.as_ref().map2(
                                         &mut (),
@@ -162,17 +160,20 @@ impl Rew {
                                     span: Span::dummy_with_cmt(),
                                 });
                             }
-                            SValue::EdgeBlocker { value: v,span } => {
-                                cfg.blocks[new_block_id].stmts.push(TStmt {
-                                    left: LId::Id {
-                                        id: mangle_value(ctxt, func, *statement),
-                                    },
-                                    flags: ValFlags::SSA_LIKE,
-                                    right: Item::Just {
-                                        id: mangle_value(ctxt, func, *v),
-                                    },
-                                    span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()),
-                                });
+                            SValue::EdgeBlocker { value: v, span } => {
+                                // cfg.blocks[new_block_id].stmts.push(TStmt {
+                                //     left: LId::Id {
+                                //         id: mangle_value(ctxt, func, *statement),
+                                //     },
+                                //     flags: ValFlags::SSA_LIKE,
+                                //     right: Item::Just {
+                                //         id: mangle_value(ctxt, func, *v),
+                                //     },
+                                //     span: span
+                                //         .as_ref()
+                                //         .cloned()
+                                //         .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                // });
                             }
                         }
                     }
@@ -267,6 +268,7 @@ pub fn mangle_value(ctxt: SyntaxContext, func: &SFunc, value_id: Id<SValueW>) ->
             item: Item::Just { id },
             span,
         } => mangle_value(ctxt, func, *id),
+        SValue::EdgeBlocker { value, span } => mangle_value(ctxt, func, *value),
         _ => {
             return (Atom::new(format!("v{}", value_id.index())), ctxt);
         }
