@@ -107,13 +107,21 @@ impl ConstantInstantiator {
             for s in inp.blocks[k].stmts.iter().cloned() {
                 let v = match inp.values[s].value.clone() {
                     SValue::Param { block, idx, ty } => todo!(),
-                    SValue::Item { item, span } => SValue::Item {
-                        item: item.map2(
-                            &mut (),
-                            &mut |_, a| params.get(&a).cloned().context("in getting a variable"),
-                            &mut |_, b| Ok(b.into()),
-                        )?,
-                        span,
+                    SValue::Item { item, span } => match item {
+                        Item::Just { id } => {
+                            params.insert(s, params.get(&id).cloned().context("in getting a variable")?);
+                            continue
+                        }
+                        item => SValue::Item {
+                            item: item.map2(
+                                &mut (),
+                                &mut |_, a| {
+                                    params.get(&a).cloned().context("in getting a variable")
+                                },
+                                &mut |_, b| Ok(b.into()),
+                            )?,
+                            span,
+                        },
                     },
                     SValue::Assign { target, val } => SValue::Assign {
                         target: target.map(&mut |a| {
@@ -126,9 +134,9 @@ impl ConstantInstantiator {
                         target,
                         val: params.get(&val).cloned().context("in getting a variable")?,
                     },
-                    SValue::BackwardEdgeBlocker(val) => {
-                        SValue::BackwardEdgeBlocker(params.get(&val).cloned().context("in getting a variable")?)
-                    }
+                    SValue::BackwardEdgeBlocker(val) => SValue::BackwardEdgeBlocker(
+                        params.get(&val).cloned().context("in getting a variable")?,
+                    ),
                 };
                 let v = match v.const_in(out) {
                     None => v,

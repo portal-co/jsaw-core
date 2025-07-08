@@ -5,7 +5,7 @@ use swc_ecma_ast::{op, BinaryOp, Bool, Expr, Number, Str, UnaryOp};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
 
 impl SCfg {
-    pub fn simplify(&mut self) {
+    pub fn simplify_conditions(&mut self) {
         for (k, kd) in self.blocks.iter_mut() {
             if let STerm::CondJmp {
                 cond,

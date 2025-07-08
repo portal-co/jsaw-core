@@ -101,22 +101,31 @@ impl Rew {
                     for statement in func.cfg.blocks[*block_id].stmts.iter() {
                         match &func.cfg.values[*statement].value {
                             SValue::Param { block, idx, ty } => todo!(),
-                            SValue::Item { item, span } => {
-                                let item_id = item.as_ref().map2(
-                                    &mut (),
-                                    &mut |_, value| anyhow::Ok(mangle_value(ctxt, func, *value)),
-                                    &mut |_, field| field.try_into(),
-                                )?;
-                                cfg.blocks[new_block_id].stmts.push(TStmt {
-                                    left: LId::Id {
-                                        id: mangle_value(ctxt, func, *statement),
-                                    },
-                                    flags: ValFlags::SSA_LIKE,
-                                    right: item_id,
-                                    span: span.clone().unwrap_or_else(|| Span::dummy_with_cmt()),
-                                });
-                                cfg.decls.insert(mangle_value(ctxt, func, *statement));
-                            }
+                            SValue::Item { item, span } => match item {
+                                Item::Just { id } => {
+                                    
+                                }
+                                item => {
+                                    let item_id = item.as_ref().map2(
+                                        &mut (),
+                                        &mut |_, value| {
+                                            anyhow::Ok(mangle_value(ctxt, func, *value))
+                                        },
+                                        &mut |_, field| field.try_into(),
+                                    )?;
+                                    cfg.blocks[new_block_id].stmts.push(TStmt {
+                                        left: LId::Id {
+                                            id: mangle_value(ctxt, func, *statement),
+                                        },
+                                        flags: ValFlags::SSA_LIKE,
+                                        right: item_id,
+                                        span: span
+                                            .clone()
+                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                    });
+                                    cfg.decls.insert(mangle_value(ctxt, func, *statement));
+                                }
+                            },
                             SValue::Assign { target, val } => {
                                 let target_id = target.clone().map(&mut |value| {
                                     let mangled = mangle_value(ctxt, func, value);
@@ -250,8 +259,16 @@ pub fn mangle_param(ctxt: SyntaxContext, block_id: Id<SBlock>, index: usize) -> 
     (Atom::new(format!("k{}p{}", block_id.index(), index)), ctxt)
 }
 pub fn mangle_value(ctxt: SyntaxContext, func: &SFunc, value_id: Id<SValueW>) -> Ident {
-    if let SValue::Param { block, idx, ty } = &func.cfg.values[value_id].value {
-        return mangle_param(ctxt, *block, *idx);
+    match &func.cfg.values[value_id].value {
+        SValue::Param { block, idx, ty } => {
+            return mangle_param(ctxt, *block, *idx);
+        }
+        SValue::Item {
+            item: Item::Just { id },
+            span,
+        } => mangle_value(ctxt, func, *id),
+        _ => {
+            return (Atom::new(format!("v{}", value_id.index())), ctxt);
+        }
     }
-    return (Atom::new(format!("v{}", value_id.index())), ctxt);
 }
