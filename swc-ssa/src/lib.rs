@@ -50,6 +50,21 @@ impl SCfg {
             }
         }
     }
+    pub fn equate_items(&mut self){
+        let mut map = BTreeMap::new();
+        for (a,b) in self.values.iter(){
+            if let SValue::Item { item: Item::Just { id }, span } = &b.value{
+                map.insert(a, *id);
+            }
+        }
+        for (_,b) in self.values.iter_mut(){
+            for r in b.value.vals_mut(){
+                while let Some(v2) = map.get(r){
+                    *r = *v2
+                }
+            }
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct SFunc {
