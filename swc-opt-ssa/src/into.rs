@@ -541,7 +541,7 @@ impl Convert {
                             None,
                         )
                     }
-                    SValue::Benc(val) => {
+                    SValue::BackwardEdgeBlocker(val) => {
                         let (mut val, mut tag) =
                             state.get(val).cloned().context("in getting the val")?;
                         while let Some(OptType::Lit(_)) = &tag {
@@ -552,7 +552,7 @@ impl Convert {
                         }
                         (
                             OptValue::Emit {
-                                val: SValue::Benc(val),
+                                val: SValue::BackwardEdgeBlocker(val),
                                 ty: tag.clone(),
                             },
                             tag,

@@ -13,19 +13,19 @@ use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};
 pub mod ch;
-pub mod idw;
+// pub mod idw;
 pub mod impls;
 pub mod rew;
 pub mod simplify;
 
-pub fn benj(swc_func: &mut SCfg) {
+pub fn block_backwards_edges(swc_func: &mut SCfg) {
     for block_index in swc_func.blocks.iter().map(|a| a.0).collect::<Vec<_>>() {
         let mut postcedent = take(&mut swc_func.blocks[block_index].postcedent);
         for target in postcedent.targets_mut() {
             if target.block.index() <= block_index.index() {
                 for arg in target.args.iter_mut() {
                     let value = swc_func.values.alloc(SValueW {
-                        value: SValue::Benc(*arg),
+                        value: SValue::BackwardEdgeBlocker(*arg),
                     });
                     swc_func.blocks[block_index].stmts.push(value);
                     *arg = value;
@@ -185,7 +185,7 @@ pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
         target: Ident,
         val: I,
     },
-    Benc(I),
+    BackwardEdgeBlocker(I),
 }
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
@@ -203,7 +203,7 @@ impl<I: Copy, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(*val)),
-            SValue::Benc(a) => Box::new(once(*a)),
+            SValue::BackwardEdgeBlocker(a) => Box::new(once(*a)),
         }
     }
 }
@@ -233,7 +233,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::Benc(v) => SValue::Benc(v),
+            SValue::BackwardEdgeBlocker(v) => SValue::BackwardEdgeBlocker(v),
         }
     }
     pub fn as_mut(&mut self) -> SValue<&mut I, &mut B, &mut F> {
@@ -261,7 +261,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::Benc(v) => SValue::Benc(v),
+            SValue::BackwardEdgeBlocker(v) => SValue::BackwardEdgeBlocker(v),
         }
     }
     pub fn map<J: Ord, C, G, X, E>(
@@ -290,7 +290,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target,
                 val: ident(cx, val)?,
             },
-            SValue::Benc(i) => SValue::Benc(ident(cx, i)?),
+            SValue::BackwardEdgeBlocker(i) => SValue::BackwardEdgeBlocker(ident(cx, i)?),
         })
     }
     pub fn vals_ref<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
@@ -308,7 +308,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::Benc(a) => Box::new(once(a)),
+            SValue::BackwardEdgeBlocker(a) => Box::new(once(a)),
         }
     }
     pub fn vals_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
@@ -326,7 +326,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::Benc(a) => Box::new(once(a)),
+            SValue::BackwardEdgeBlocker(a) => Box::new(once(a)),
         }
     }
 }

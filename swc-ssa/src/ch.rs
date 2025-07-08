@@ -11,12 +11,12 @@ pub enum ConstVal {
     Undef,
 }
 
-pub struct CH {
+pub struct ConstantInstantiator {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
 }
-pub fn ch(a: &SFunc) -> anyhow::Result<SFunc> {
+pub fn instantiate_constants(a: &SFunc) -> anyhow::Result<SFunc> {
     let mut n = SCfg::default();
-    let entry = CH {
+    let entry = ConstantInstantiator {
         all: BTreeMap::new(),
     }
     .init(&a.cfg, &mut n, a.entry)?;
@@ -31,7 +31,7 @@ pub fn ch(a: &SFunc) -> anyhow::Result<SFunc> {
         ts_params: a.ts_params.clone(),
     });
 }
-impl CH {
+impl ConstantInstantiator {
     pub fn init(
         &mut self,
         inp: &SCfg,
@@ -126,8 +126,8 @@ impl CH {
                         target,
                         val: params.get(&val).cloned().context("in getting a variable")?,
                     },
-                    SValue::Benc(val) => {
-                        SValue::Benc(params.get(&val).cloned().context("in getting a variable")?)
+                    SValue::BackwardEdgeBlocker(val) => {
+                        SValue::BackwardEdgeBlocker(params.get(&val).cloned().context("in getting a variable")?)
                     }
                 };
                 let v = match v.const_in(out) {

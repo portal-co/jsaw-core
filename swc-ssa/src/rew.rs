@@ -153,7 +153,7 @@ impl Rew {
                                     span: Span::dummy_with_cmt(),
                                 });
                             }
-                            SValue::Benc(v) => {
+                            SValue::BackwardEdgeBlocker(v) => {
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: LId::Id {
                                         id: mangle_value(ctxt, func, *statement),
