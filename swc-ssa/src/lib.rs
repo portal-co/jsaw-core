@@ -17,22 +17,38 @@ pub mod ch;
 pub mod impls;
 pub mod rew;
 pub mod simplify;
-
-pub fn block_backwards_edges(swc_func: &mut SCfg) {
-    for block_index in swc_func.blocks.iter().map(|a| a.0).collect::<Vec<_>>() {
-        let mut postcedent = take(&mut swc_func.blocks[block_index].postcedent);
-        for target in postcedent.targets_mut() {
-            if target.block.index() <= block_index.index() {
-                for arg in target.args.iter_mut() {
-                    let value = swc_func.values.alloc(SValueW {
-                        value: SValue::BackwardEdgeBlocker(*arg),
-                    });
-                    swc_func.blocks[block_index].stmts.push(value);
-                    *arg = value;
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum EdgeKind {
+    Forward,
+    Backward,
+}
+impl SCfg {
+    pub fn block_edges(&mut self, mode: EdgeKind) {
+        for block_index in self.blocks.iter().map(|a| a.0).collect::<Vec<_>>() {
+            let mut postcedent = take(&mut self.blocks[block_index].postcedent);
+            for target in postcedent.targets_mut() {
+                if match mode {
+                    EdgeKind::Backward => target.block.index() <= block_index.index(),
+                    EdgeKind::Forward => target.block.index() >= block_index.index(),
+                } {
+                    for arg in target.args.iter_mut() {
+                        let value = self.values.alloc(SValueW {
+                            value: SValue::EdgeBlocker { value: *arg,span: None },
+                        });
+                        self.blocks[block_index].stmts.push(value);
+                        *arg = value;
+                    }
                 }
             }
+            self.blocks[block_index].postcedent = postcedent;
         }
-        swc_func.blocks[block_index].postcedent = postcedent;
+    }
+    pub fn unblock_edges(&mut self){
+        for (_,val) in self.values.iter_mut(){
+            if let SValue::EdgeBlocker { value: x,span } = &val.value{
+                val.value = SValue::Item { item: Item::Just { id: *x }, span: *span}
+            }
+        }
     }
 }
 #[derive(Clone, Debug)]
@@ -185,7 +201,7 @@ pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
         target: Ident,
         val: I,
     },
-    BackwardEdgeBlocker(I),
+    EdgeBlocker { value: I, span: Option<Span> },
 }
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
@@ -203,7 +219,7 @@ impl<I: Copy, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(*val)),
-            SValue::BackwardEdgeBlocker(a) => Box::new(once(*a)),
+            SValue::EdgeBlocker { value: a, span } => Box::new(once(*a)),
         }
     }
 }
@@ -233,7 +249,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::BackwardEdgeBlocker(v) => SValue::BackwardEdgeBlocker(v),
+            SValue::EdgeBlocker { value: v,span } => SValue::EdgeBlocker { value: v,span: *span },
         }
     }
     pub fn as_mut(&mut self) -> SValue<&mut I, &mut B, &mut F> {
@@ -261,7 +277,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target: target.clone(),
                 val,
             },
-            SValue::BackwardEdgeBlocker(v) => SValue::BackwardEdgeBlocker(v),
+            SValue::EdgeBlocker { value: v,span } => SValue::EdgeBlocker { value: v ,span:*span},
         }
     }
     pub fn map<J: Ord, C, G, X, E>(
@@ -290,7 +306,7 @@ impl<I, B, F> SValue<I, B, F> {
                 target,
                 val: ident(cx, val)?,
             },
-            SValue::BackwardEdgeBlocker(i) => SValue::BackwardEdgeBlocker(ident(cx, i)?),
+            SValue::EdgeBlocker { value: i,span } => SValue::EdgeBlocker { value: ident(cx, i)?,span },
         })
     }
     pub fn vals_ref<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
@@ -308,7 +324,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::BackwardEdgeBlocker(a) => Box::new(once(a)),
+            SValue::EdgeBlocker { value: a,span } => Box::new(once(a)),
         }
     }
     pub fn vals_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
@@ -326,7 +342,7 @@ impl<I, B, F> SValue<I, B, F> {
             }
             SValue::LoadId(_) => Box::new(empty()),
             SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::BackwardEdgeBlocker(a) => Box::new(once(a)),
+            SValue::EdgeBlocker { value: a,span } => Box::new(once(a)),
         }
     }
 }

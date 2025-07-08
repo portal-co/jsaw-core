@@ -134,9 +134,7 @@ impl ConstantInstantiator {
                         target,
                         val: params.get(&val).cloned().context("in getting a variable")?,
                     },
-                    SValue::BackwardEdgeBlocker(val) => SValue::BackwardEdgeBlocker(
-                        params.get(&val).cloned().context("in getting a variable")?,
-                    ),
+                    SValue::EdgeBlocker { value: val,span } => SValue::EdgeBlocker { value: params.get(&val).cloned().context("in getting a variable")?,span },
                 };
                 let v = match v.const_in(out) {
                     None => v,

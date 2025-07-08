@@ -541,7 +541,7 @@ impl Convert {
                             None,
                         )
                     }
-                    SValue::BackwardEdgeBlocker(val) => {
+                    SValue::EdgeBlocker { value: val,span } => {
                         let (mut val, mut tag) =
                             state.get(val).cloned().context("in getting the val")?;
                         while let Some(OptType::Lit(_)) = &tag {
@@ -552,7 +552,7 @@ impl Convert {
                         }
                         (
                             OptValue::Emit {
-                                val: SValue::BackwardEdgeBlocker(val),
+                                val: SValue::EdgeBlocker { value: val,span: *span },
                                 ty: tag.clone(),
                             },
                             tag,

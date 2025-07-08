@@ -162,7 +162,7 @@ impl Rew {
                                     span: Span::dummy_with_cmt(),
                                 });
                             }
-                            SValue::BackwardEdgeBlocker(v) => {
+                            SValue::EdgeBlocker { value: v,span } => {
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: LId::Id {
                                         id: mangle_value(ctxt, func, *statement),
@@ -171,7 +171,7 @@ impl Rew {
                                     right: Item::Just {
                                         id: mangle_value(ctxt, func, *v),
                                     },
-                                    span: Span::dummy_with_cmt(),
+                                    span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()),
                                 });
                             }
                         }
