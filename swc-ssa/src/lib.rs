@@ -12,7 +12,7 @@ use portal_jsc_common::LId;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};
-pub mod ch;
+pub mod consts;
 // pub mod idw;
 pub mod impls;
 pub mod rew;
@@ -128,6 +128,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             }
             .into(),
         );
+        cfg.blocks[entry2].stmts.push(undef);
         let mut trans = ToSSAConverter {
             map: BTreeMap::new(),
             all: decls.clone(),
@@ -633,18 +634,24 @@ impl ToSSAConverter {
                 //         }
                 //     }
                 // }
-                let b = b.map2::<_, _, anyhow::Error, ()>(
-                    &mut (),
-                    &mut |_, a| Ok(self.load(&state, i, o, t, a.clone(), &cache)),
-                    &mut |_, b| b.try_into(),
-                )?;
-                let b = o.values.alloc(
-                    SValue::Item {
-                        item: b,
-                        span: Some(*s),
-                    }
-                    .into(),
-                );
+
+                let b = 'a: {
+                    let b = match b {
+                        Item::Undef => break 'a self.undef,
+                        b => b.map2::<_, _, anyhow::Error, ()>(
+                            &mut (),
+                            &mut |_, a| Ok(self.load(&state, i, o, t, a.clone(), &cache)),
+                            &mut |_, b| b.try_into(),
+                        )?,
+                    };
+                    o.values.alloc(
+                        SValue::Item {
+                            item: b,
+                            span: Some(*s),
+                        }
+                        .into(),
+                    )
+                };
                 o.blocks[t].stmts.push(b);
                 let flags = match a.clone() {
                     LId::Id { id } => match state.get_mut(&id) {

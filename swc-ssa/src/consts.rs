@@ -109,8 +109,11 @@ impl ConstantInstantiator {
                     SValue::Param { block, idx, ty } => todo!(),
                     SValue::Item { item, span } => match item {
                         Item::Just { id } => {
-                            params.insert(s, params.get(&id).cloned().context("in getting a variable")?);
-                            continue
+                            params.insert(
+                                s,
+                                params.get(&id).cloned().context("in getting a variable")?,
+                            );
+                            continue;
                         }
                         item => SValue::Item {
                             item: item.map2(
@@ -134,7 +137,20 @@ impl ConstantInstantiator {
                         target,
                         val: params.get(&val).cloned().context("in getting a variable")?,
                     },
-                    SValue::EdgeBlocker { value: val,span } => SValue::EdgeBlocker { value: params.get(&val).cloned().context("in getting a variable")?,span },
+                    SValue::EdgeBlocker { value: val, span } => {
+                        match params.get(&val).cloned().context("in getting a variable")? {
+                            value => match &out.values[value].value {
+                                SValue::Item {
+                                    item: Item::Undef,
+                                    span: _,
+                                } => SValue::Item {
+                                    item: Item::Undef,
+                                    span,
+                                },
+                                _ => SValue::EdgeBlocker { value, span },
+                            },
+                        }
+                    }
                 };
                 let v = match v.const_in(out) {
                     None => v,

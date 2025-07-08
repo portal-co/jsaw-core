@@ -50,8 +50,20 @@ impl<I: Copy, B,F> SValue<I, B,F> {
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
                 Item::Bin { left, right, op } => {
-                    let left = k.val(*left)?.const_in(k)?;
-                    let right = k.val(*right)?.const_in(k)?;
+                    let left = k.val(*left)?;
+                    let right = k.val(*right)?;
+                    match (left,right){
+                        (SValue::Item { item: Item::Undef, span: _ },SValue::Item { item: Item::Undef, span: _ }) => match op{
+                            BinaryOp::EqEqEq | BinaryOp::EqEq => return Some(Lit::Bool(Bool { span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()), value: true })),
+                            BinaryOp::NotEqEq | BinaryOp::NotEq => return Some(Lit::Bool(Bool { span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()), value: false })),
+                            _ => {}
+                        }
+                        _ => {
+
+                        }
+                    }
+                    let left = left.const_in(k)?;
+                    let right = right.const_in(k)?;
                     macro_rules! op2 {
                         ($left:expr_2021 => {$($op:tt)*} $right:expr_2021) => {
                             match (
