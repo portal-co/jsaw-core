@@ -194,6 +194,57 @@ impl TFunc {
     }
 }
 impl TCfg {
+    pub fn strip_useless(&mut self) {
+        let mut set = BTreeSet::new();
+        for (_, k) in self.blocks.iter() {
+            for l in k.stmts.iter() {
+                match &l.right {
+                    Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
+                        match &l.left {
+                            portal_jsc_common::LId::Id { id } => {
+                                set.insert(id.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for (_, k) in self.blocks.iter() {
+            for l in k.stmts.iter() {
+                for r in l
+                    .right
+                    .refs()
+                    .cloned()
+                    .chain(l.right.funcs().flat_map(|f| f.cfg.externs()))
+                {
+                    set.remove(&r);
+                }
+                match &l.left {
+                    portal_jsc_common::LId::Id { id } => {}
+                    portal_jsc_common::LId::Member { obj, mem } => {
+                        set.remove(obj);
+                        set.remove(&mem[0]);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for (_, k) in self.blocks.iter_mut() {
+            for l in take(&mut k.stmts) {
+                match &l.left {
+                    portal_jsc_common::LId::Id { id } => {
+                        if set.contains(id) {
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+                k.stmts.push(l);
+            }
+        }
+    }
     pub fn def(&self, i: portal_jsc_common::LId<Ident>) -> Option<&Item> {
         self.blocks.iter().flat_map(|a| &a.1.stmts).find_map(|a| {
             if a.left == i && a.flags.contains(ValFlags::SSA_LIKE) {
