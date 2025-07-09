@@ -8,7 +8,7 @@ use std::{
 use anyhow::Context;
 use cfg_traits::Term;
 use id_arena::{Arena, Id};
-use portal_jsc_common::LId;
+use swc_tac::LId;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};

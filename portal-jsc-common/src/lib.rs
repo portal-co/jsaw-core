@@ -245,57 +245,7 @@ impl<E> Native<E> {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[non_exhaustive]
-pub enum LId<I, M: IntoIterator<Item = I> = [I; 1]> {
-    Id { id: I },
-    Member { obj: I, mem: M },
-}
-impl<I> LId<I> {
-    pub fn map<J, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<LId<J>, E> {
-        self.map2(f, &mut |cx, a| cx(a), &mut |cx, [a]| cx(a).map(|b| [b]))
-    }
-}
-impl<I, M: IntoIterator<Item = I>> LId<I, M> {
-    pub fn as_ref<'a>(&'a self) -> LId<&'a I, &'a M>
-    where
-        &'a M: IntoIterator<Item = &'a I>,
-    {
-        match self {
-            LId::Id { id } => LId::Id { id },
-            LId::Member { obj, mem } => LId::Member { obj, mem },
-        }
-    }
-    pub fn as_mut<'a>(&'a mut self) -> LId<&'a mut I, &'a mut M>
-    where
-        &'a mut M: IntoIterator<Item = &'a mut I>,
-    {
-        match self {
-            LId::Id { id } => LId::Id { id },
-            LId::Member { obj, mem } => LId::Member { obj, mem },
-        }
-    }
-    pub fn refs(self) -> impl Iterator<Item = I> {
-        match self {
-            LId::Id { id } => Either::Left(once(id)),
-            LId::Member { obj, mem } => Either::Right(once(obj).chain(mem)),
-        }
-    }
-    pub fn map2<Cx, J, N: IntoIterator<Item = J>, E>(
-        self,
-        cx: &mut Cx,
-        f: &mut (dyn FnMut(&mut Cx, I) -> Result<J, E> + '_),
-        g: &mut (dyn FnMut(&mut Cx, M) -> Result<N, E> + '_),
-    ) -> Result<LId<J, N>, E> {
-        Ok(match self {
-            LId::Id { id } => LId::Id { id: f(cx, id)? },
-            LId::Member { obj, mem } => LId::Member {
-                obj: f(cx, obj)?,
-                mem: g(cx, mem)?,
-            },
-        })
-    }
-}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum ImportMap<T> {
     Default,

@@ -6,6 +6,7 @@ use std::mem::take;
 use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
+use either::Either;
 use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
@@ -14,7 +15,7 @@ use portal_jsc_swc_util::{ImportMapper, ResolveNatives};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
-use swc_common::{Span, Spanned};
+use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     BinaryOp, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
@@ -24,7 +25,71 @@ use swc_ecma_ast::Id as Ident;
 
 pub mod lam;
 pub mod rew;
-pub type LId = portal_jsc_common::LId<Ident>;
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[non_exhaustive]
+pub enum LId<I = Ident, M: IntoIterator<Item = I> = [I; 1]> {
+    Id { id: I },
+    Member { obj: I, mem: M },
+    Private { obj: I, id: Ident },
+}
+impl<I> LId<I> {
+    pub fn map<J, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<LId<J>, E> {
+        self.map2(f, &mut |cx, a| cx(a), &mut |cx, [a]| cx(a).map(|b| [b]))
+    }
+}
+impl<I, M: IntoIterator<Item = I>> LId<I, M> {
+    pub fn as_ref<'a>(&'a self) -> LId<&'a I, &'a M>
+    where
+        &'a M: IntoIterator<Item = &'a I>,
+    {
+        match self {
+            LId::Id { id } => LId::Id { id },
+            LId::Member { obj, mem } => LId::Member { obj, mem },
+            LId::Private { obj, id } => LId::Private {
+                obj,
+                id: id.clone(),
+            },
+        }
+    }
+    pub fn as_mut<'a>(&'a mut self) -> LId<&'a mut I, &'a mut M>
+    where
+        &'a mut M: IntoIterator<Item = &'a mut I>,
+    {
+        match self {
+            LId::Id { id } => LId::Id { id },
+            LId::Member { obj, mem } => LId::Member { obj, mem },
+            LId::Private { obj, id } => LId::Private {
+                obj,
+                id: id.clone(),
+            },
+        }
+    }
+    pub fn refs(self) -> impl Iterator<Item = I> {
+        match self {
+            LId::Id { id } => Either::Left(once(id)),
+            LId::Member { obj, mem } => Either::Right(once(obj).chain(mem)),
+            LId::Private { id, obj } => Either::Left(once(obj)),
+        }
+    }
+    pub fn map2<Cx, J, N: IntoIterator<Item = J>, E>(
+        self,
+        cx: &mut Cx,
+        f: &mut (dyn FnMut(&mut Cx, I) -> Result<J, E> + '_),
+        g: &mut (dyn FnMut(&mut Cx, M) -> Result<N, E> + '_),
+    ) -> Result<LId<J, N>, E> {
+        Ok(match self {
+            LId::Id { id } => LId::Id { id: f(cx, id)? },
+            LId::Member { obj, mem } => LId::Member {
+                obj: f(cx, obj)?,
+                mem: g(cx, mem)?,
+            },
+            LId::Private { id, obj } => LId::Private {
+                id,
+                obj: f(cx, obj)?,
+            },
+        })
+    }
+}
 
 #[cfg(feature = "simpl")]
 pub mod simpl;
@@ -56,6 +121,14 @@ bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
     pub struct ValFlags: u64{
         const SSA_LIKE = 0x1;
+    }
+}
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+    pub struct MemberFlags: u64{
+        const STATIC = 0x1;
+        const PRIVATE = 0x2;
     }
 }
 #[derive(Clone, Debug)]
@@ -204,7 +277,7 @@ impl TCfg {
                 match &l.right {
                     Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
                         match &l.left {
-                            portal_jsc_common::LId::Id { id } => {
+                            LId::Id { id } => {
                                 set.insert(id.clone());
                             }
                             _ => {}
@@ -225,8 +298,8 @@ impl TCfg {
                     set.remove(&r);
                 }
                 match &l.left {
-                    portal_jsc_common::LId::Id { id } => {}
-                    portal_jsc_common::LId::Member { obj, mem } => {
+                    LId::Id { id } => {}
+                    LId::Member { obj, mem } => {
                         set.remove(obj);
                         set.remove(&mem[0]);
                     }
@@ -237,7 +310,7 @@ impl TCfg {
         for (_, k) in self.blocks.iter_mut() {
             for l in take(&mut k.stmts) {
                 match &l.left {
-                    portal_jsc_common::LId::Id { id } => {
+                    LId::Id { id } => {
                         if set.contains(id) {
                             continue;
                         }
@@ -248,7 +321,7 @@ impl TCfg {
             }
         }
     }
-    pub fn def(&self, i: portal_jsc_common::LId<Ident>) -> Option<&Item> {
+    pub fn def(&self, i: LId<Ident>) -> Option<&Item> {
         self.blocks.iter().flat_map(|a| &a.1.stmts).find_map(|a| {
             if a.left == i && a.flags.contains(ValFlags::SSA_LIKE) {
                 Some(&a.right)
@@ -442,6 +515,7 @@ impl<I, F> PropVal<I, F> {
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { r#fn: I, member: I },
+    PrivateMember { r#fn: I, member: Ident },
     Import,
     // Static(Ident),
 }
@@ -450,6 +524,10 @@ impl<I> TCallee<I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
+            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
+                r#fn,
+                member: member.clone(),
+            },
             TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
@@ -458,6 +536,10 @@ impl<I> TCallee<I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
             TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
+            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
+                r#fn,
+                member: member.clone(),
+            },
             TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
@@ -468,6 +550,10 @@ impl<I> TCallee<I> {
             TCallee::Member { r#fn, member } => TCallee::Member {
                 r#fn: f(r#fn)?,
                 member: f(member)?,
+            },
+            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
+                r#fn: f(r#fn)?,
+                member,
             },
             TCallee::Import => TCallee::Import,
             // TCallee::Static(a) => TCallee::Static(a),
@@ -493,6 +579,10 @@ pub enum Item<I = Ident, F = TFunc> {
         obj: I,
         mem: I,
     },
+    PrivateMem {
+        obj: I,
+        mem: Ident,
+    },
     Func {
         func: F,
         arrow: bool,
@@ -509,7 +599,7 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Class {
         superclass: Option<I>,
-        members: Vec<(bool, PropKey<I>, PropVal<Option<I>, F>)>,
+        members: Vec<(MemberFlags, PropKey<I>, PropVal<Option<I>, F>)>,
         constructor: Option<F>,
     },
     Arr {
@@ -547,6 +637,10 @@ impl<I, F> Item<I, F> {
             },
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
+            Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj,
+                mem: mem.clone(),
+            },
             Item::Func { func, arrow } => Item::Func {
                 func,
                 arrow: *arrow,
@@ -611,6 +705,10 @@ impl<I, F> Item<I, F> {
             },
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
+            Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj,
+                mem: mem.clone(),
+            },
             Item::Func { func, arrow } => Item::Func {
                 func,
                 arrow: *arrow,
@@ -688,6 +786,10 @@ impl<I, F> Item<I, F> {
             Item::Mem { obj, mem } => Item::Mem {
                 obj: f(cx, obj)?,
                 mem: f(cx, mem)?,
+            },
+            Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj: f(cx, obj)?,
+                mem,
             },
             Item::Func { func, arrow } => Item::Func {
                 func: g(cx, func)?,
@@ -796,11 +898,14 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
+            Item::PrivateMem { obj, mem } => Box::new(once(obj)),
             swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
-                    swc_tac::TCallee::Val(a) => vec![a],
+                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { r#fn: a, member: _ } => {
+                        vec![a]
+                    }
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
                     TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
@@ -859,11 +964,14 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
+            Item::PrivateMem { obj, mem } => Box::new(once(obj)),
             swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
-                    swc_tac::TCallee::Val(a) => vec![a],
+                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { r#fn: a, member: _ } => {
+                        vec![a]
+                    }
                     swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
                     TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
@@ -1119,14 +1227,23 @@ impl Trans<'_> {
     ) -> anyhow::Result<(Ident, Id<TBlock>)> {
         let obj;
         (obj, t) = self.expr(i, o, b, t, &s.obj)?;
-        let mem;
-        // let e;
-        (mem, t) = self.expr(i, o, b, t, &imp(s.prop.clone()))?;
+        let i = match &s.prop {
+            MemberProp::PrivateName(p) => Item::PrivateMem {
+                obj,
+                mem: (p.name.clone(), Default::default()),
+            },
+            _ => {
+                let mem;
+                // let e;
+                (mem, t) = self.expr(i, o, b, t, &imp(s.prop.clone()))?;
+                Item::Mem { obj, mem }
+            }
+        };
         let v = o.regs.alloc(());
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id { id: v.clone() },
             flags: ValFlags::SSA_LIKE,
-            right: Item::Mem { obj, mem },
+            right: i,
             span: s.span(),
         });
         o.decls.insert(v.clone());
@@ -1178,7 +1295,7 @@ impl Trans<'_> {
             };
         }
         let mut members: Vec<(
-            bool,
+            MemberFlags,
             PropKey,
             PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
         )> = Default::default();
@@ -1187,7 +1304,7 @@ impl Trans<'_> {
             match m {
                 ClassMember::ClassProp(p) => {
                     members.push(
-                        prop_name!(p.is_static,PropVal::Item( match p.value.as_ref(){
+                        prop_name!(if p.is_static{MemberFlags::STATIC}else{MemberFlags::empty()},PropVal::Item( match p.value.as_ref(){
                                     None => None,
                                     Some(a) => Some({
                             let b2;
@@ -1224,11 +1341,49 @@ impl Trans<'_> {
                         &(&*c.function).clone().try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
                     )?;
-                    members.push(prop_name!(c.is_static, match &c.kind{
+                    members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
                         swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
                         swc_ecma_ast::MethodKind::Setter => PropVal::Setter(f),
                     }=> &c.key));
+                }
+                ClassMember::PrivateProp(p) => {
+                    members.push((
+                        if p.is_static {
+                            MemberFlags::STATIC
+                        } else {
+                            MemberFlags::empty()
+                        } | MemberFlags::PRIVATE,
+                        PropKey::Lit((p.key.name.clone(), Default::default())),
+                        PropVal::Item(match p.value.as_ref() {
+                            None => None,
+                            Some(a) => Some({
+                                let b2;
+                                (b2, t) = self.expr(i, o, b, t, a)?;
+                                b2
+                            }),
+                        }),
+                    ));
+                }
+                ClassMember::PrivateMethod(p) => {
+                    let f = TFunc::try_from_with_mapper(
+                        &(&*p.function).clone().try_into()?,
+                        static_map! {a => self.import_mapper[a].as_deref()},
+                    )?;
+                    let x = match &p.kind {
+                        swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
+                        swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
+                        swc_ecma_ast::MethodKind::Setter => PropVal::Setter(f),
+                    };
+                    members.push((
+                        if p.is_static {
+                            MemberFlags::STATIC
+                        } else {
+                            MemberFlags::empty()
+                        } | MemberFlags::PRIVATE,
+                        PropKey::Lit((p.key.name.clone(), Default::default())),
+                        x,
+                    ));
                 }
                 _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
             }
@@ -1385,30 +1540,38 @@ impl Trans<'_> {
                             SimpleAssignTarget::Member(m) => {
                                 let obj;
                                 let mem;
+                                let mut private = false;
                                 let e;
                                 (obj, t) = self.expr(i, o, b, t, &m.obj)?;
-                                (mem, t) = self.expr(
-                                    i,
-                                    o,
-                                    b,
-                                    t,
-                                    match &m.prop {
-                                        swc_ecma_ast::MemberProp::Ident(ident_name) => {
-                                            e = Expr::Ident(swc_ecma_ast::Ident::new(
-                                                ident_name.sym.clone(),
-                                                ident_name.span,
-                                                Default::default(),
-                                            ));
-                                            &e
-                                        }
-                                        swc_ecma_ast::MemberProp::PrivateName(private_name) => {
-                                            todo!()
-                                        }
-                                        swc_ecma_ast::MemberProp::Computed(computed_prop_name) => {
-                                            &computed_prop_name.expr
-                                        }
-                                    },
-                                )?;
+                                'a: {
+                                    (mem, t) = self.expr(
+                                        i,
+                                        o,
+                                        b,
+                                        t,
+                                        match &m.prop {
+                                            swc_ecma_ast::MemberProp::Ident(ident_name) => {
+                                                e = Expr::Ident(swc_ecma_ast::Ident::new(
+                                                    ident_name.sym.clone(),
+                                                    ident_name.span,
+                                                    Default::default(),
+                                                ));
+                                                &e
+                                            }
+                                            swc_ecma_ast::MemberProp::PrivateName(private_name) => {
+                                                private = true;
+                                                mem = (
+                                                    private_name.name.clone(),
+                                                    SyntaxContext::default(),
+                                                );
+                                                break 'a;
+                                            }
+                                            swc_ecma_ast::MemberProp::Computed(
+                                                computed_prop_name,
+                                            ) => &computed_prop_name.expr,
+                                        },
+                                    )?;
+                                }
                                 let item = match a.op.clone().to_update() {
                                     None => Item::Just { id: right },
                                     Some(a) => {
@@ -1416,9 +1579,16 @@ impl Trans<'_> {
                                         o.blocks[t].stmts.push(TStmt {
                                             left: LId::Id { id: id.clone() },
                                             flags: ValFlags::SSA_LIKE,
-                                            right: Item::Mem {
-                                                obj: obj.clone(),
-                                                mem: mem.clone(),
+                                            right: if private {
+                                                Item::PrivateMem {
+                                                    obj: obj.clone(),
+                                                    mem: mem.clone(),
+                                                }
+                                            } else {
+                                                Item::Mem {
+                                                    obj: obj.clone(),
+                                                    mem: mem.clone(),
+                                                }
                                             },
                                             span: m.span(),
                                         });
@@ -1430,9 +1600,16 @@ impl Trans<'_> {
                                     }
                                 };
                                 o.blocks[t].stmts.push(TStmt {
-                                    left: LId::Member {
-                                        obj: obj.clone(),
-                                        mem: [mem.clone()],
+                                    left: if private {
+                                        LId::Private {
+                                            obj: obj.clone(),
+                                            id: mem.clone(),
+                                        }
+                                    } else {
+                                        LId::Member {
+                                            obj: obj.clone(),
+                                            mem: [mem.clone()],
+                                        }
                                     },
                                     flags: Default::default(),
                                     right: item,
@@ -1465,9 +1642,17 @@ impl Trans<'_> {
                         Expr::Member(m) => {
                             let r#fn;
                             (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
-                            let member;
-                            (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
-                            TCallee::Member { r#fn, member }
+                            match &m.prop {
+                                MemberProp::PrivateName(p) => TCallee::PrivateMember {
+                                    r#fn,
+                                    member: (p.name.clone(), Default::default()),
+                                },
+                                _ => {
+                                    let member;
+                                    (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
+                                    TCallee::Member { r#fn, member }
+                                }
+                            }
                         }
                         // Expr::Fn(f) if f.function.params.len() == call.args.len() => {
                         //     for (p, a) in f.function.params.iter().zip(call.args.iter()) {
@@ -1506,10 +1691,7 @@ impl Trans<'_> {
                             let r#fn;
                             (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
 
-                            match o
-                                .def(portal_jsc_common::LId::Id { id: r#fn.clone() })
-                                .cloned()
-                            {
+                            match o.def(LId::Id { id: r#fn.clone() }).cloned() {
                                 Some(Item::Func { func, arrow })
                                     if (arrow || !func.cfg.has_this()) =>
                                 {
