@@ -141,14 +141,19 @@ pub trait Externs<I> {
 }
 impl TFunc {
     pub fn remark(&mut self) {
+        let d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>> = domtree(&*self);
+        self.cfg.remark_with_domtree(d);
+    }
+}
+impl TCfg {
+    pub fn remark_with_domtree(&mut self, d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
         let mut a: BTreeMap<LId, usize> = BTreeMap::new();
-        let d = domtree(&*self);
-        for (b, s) in self.cfg.blocks.iter() {
+        for (b, s) in self.blocks.iter() {
             'a: for s in &s.stmts {
                 if match &s.left {
-                    LId::Id { id } => !self.cfg.decls.contains(&id),
+                    LId::Id { id } => !self.decls.contains(&id),
                     LId::Member { obj, mem } => {
-                        !self.cfg.decls.contains(&obj) || !self.cfg.decls.contains(&mem[0])
+                        !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
                     }
                     _ => todo!(),
                 } {
@@ -158,28 +163,28 @@ impl TFunc {
                     continue 'a;
                 }
                 if let LId::Id { id } = &s.left {
-                    for (b2, t) in self.cfg.blocks.iter() {
+                    for (b2, t) in self.blocks.iter() {
                         for t in t.stmts.iter() {
                             if t.right.refs().any(|r| *r == *id) {
-                                if !dominates::<Self>(&d, Some(b), Some(b2)) {
+                                if !dominates::<TFunc>(&d, Some(b), Some(b2)) {
                                     *a.entry(s.left.clone()).or_default() += 2usize;
                                     continue 'a;
                                 }
                             }
                         }
                     }
-                }
 
-                *a.entry(s.left.clone()).or_default() += 1usize;
+                    *a.entry(s.left.clone()).or_default() += 1usize;
+                }
             }
         }
         // let d =
 
-        for s in self.cfg.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
+        for s in self.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
             if match &s.left {
-                LId::Id { id } => !self.cfg.decls.contains(&id),
+                LId::Id { id } => !self.decls.contains(&id),
                 LId::Member { obj, mem } => {
-                    !self.cfg.decls.contains(&obj) || !self.cfg.decls.contains(&mem[0])
+                    !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
                 }
                 _ => todo!(),
             } {
@@ -192,8 +197,6 @@ impl TFunc {
             }
         }
     }
-}
-impl TCfg {
     pub fn strip_useless(&mut self) {
         let mut set = BTreeSet::new();
         for (_, k) in self.blocks.iter() {
