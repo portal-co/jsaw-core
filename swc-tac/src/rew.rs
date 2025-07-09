@@ -7,11 +7,6 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::ObjectLit;
-use swc_ecma_ast::Pat;
-use swc_ecma_ast::Prop;
-use swc_ecma_ast::PropOrSpread;
-use swc_ecma_ast::Stmt;
 use swc_ecma_ast::UnaryExpr;
 use swc_ecma_ast::{ArrayLit, Param};
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
@@ -22,10 +17,15 @@ use swc_ecma_ast::{BinExpr, BindingIdent, TsTypeAnn};
 use swc_ecma_ast::{BinaryOp, CallExpr, Lit, Number};
 use swc_ecma_ast::{BlockStmt, FnExpr, GetterProp, ReturnStmt};
 use swc_ecma_ast::{Callee, MemberExpr};
+use swc_ecma_ast::{Class, ClassExpr, Pat};
+use swc_ecma_ast::{ClassMember, ClassMethod, ClassProp, Prop};
 use swc_ecma_ast::{ComputedPropName, ThisExpr};
+use swc_ecma_ast::{Constructor, ParamOrTsParamProp, PropOrSpread};
 use swc_ecma_ast::{Expr, SimpleAssignTarget};
 use swc_ecma_ast::{ExprStmt, Str};
 use swc_ecma_ast::{Id as Ident, SetterProp};
+use swc_ecma_ast::{IdentName, Stmt};
+use swc_ecma_ast::{MethodProp, ObjectLit};
 
 use crate::{Item, TBlock, TCallee, TCfg, TFunc};
 
@@ -364,10 +364,137 @@ impl Rew {
                                                 body: f.body,
                                             }
                                         }),
+                                        crate::PropVal::Method(s) => Prop::Method({
+                                            let f: Function = s.try_into()?;
+                                            MethodProp {
+                                                key: name,
+                                                function: Box::new(f),
+                                            }
+                                        }),
                                     })
                                 }))
                             })
                             .collect::<Result<_, anyhow::Error>>()?,
+                    }),
+                    Item::Class {
+                        superclass,
+                        members,
+                        constructor,
+                    } => Expr::Class(ClassExpr {
+                        ident: None,
+                        class: Box::new(Class {
+                            span,
+                            ctxt: Default::default(),
+                            decorators: vec![],
+                            super_class: superclass.as_ref().map(|a| sr(a)),
+                            is_abstract: false,
+                            type_params: None,
+                            super_type_params: None,
+                            implements: Default::default(),
+                            body: members
+                                .iter()
+                                .map(|a| {
+                                    Ok({
+                                        let name = match &a.1 {
+                                            crate::PropKey::Lit(l) => {
+                                                swc_ecma_ast::PropName::Ident(
+                                                    swc_ecma_ast::IdentName {
+                                                        span: span,
+                                                        sym: l.0.clone(),
+                                                    },
+                                                )
+                                            }
+                                            crate::PropKey::Computed(c) => {
+                                                swc_ecma_ast::PropName::Computed(ComputedPropName {
+                                                    span: span,
+                                                    expr: sr(c),
+                                                })
+                                            }
+                                        };
+                                        match &a.2 {
+                                            crate::PropVal::Item(i) => {
+                                                ClassMember::ClassProp(ClassProp {
+                                                    span,
+                                                    key: name,
+                                                    value: match i.as_ref() {
+                                                        None => None,
+                                                        Some(a) => Some(sr(a)),
+                                                    },
+                                                    type_ann: None,
+                                                    is_static: a.0,
+                                                    decorators: Default::default(),
+                                                    accessibility: None,
+                                                    is_abstract: false,
+                                                    is_optional: false,
+                                                    is_override: false,
+                                                    readonly: false,
+                                                    declare: false,
+                                                    definite: false,
+                                                })
+                                            }
+                                            crate::PropVal::Getter(m) => {
+                                                swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                                    span,
+                                                    key: name,
+                                                    function: Box::new(m.try_into()?),
+                                                    kind: swc_ecma_ast::MethodKind::Getter,
+                                                    is_static: a.0,
+                                                    accessibility: None,
+                                                    is_abstract: false,
+                                                    is_optional: false,
+                                                    is_override: false,
+                                                })
+                                            }
+                                            crate::PropVal::Setter(m) => {
+                                                swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                                    span,
+                                                    key: name,
+                                                    function: Box::new(m.try_into()?),
+                                                    kind: swc_ecma_ast::MethodKind::Setter,
+                                                    is_static: a.0,
+                                                    accessibility: None,
+                                                    is_abstract: false,
+                                                    is_optional: false,
+                                                    is_override: false,
+                                                })
+                                            }
+                                            crate::PropVal::Method(m) => {
+                                                swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                                    span,
+                                                    key: name,
+                                                    function: Box::new(m.try_into()?),
+                                                    kind: swc_ecma_ast::MethodKind::Method,
+                                                    is_static: a.0,
+                                                    accessibility: None,
+                                                    is_abstract: false,
+                                                    is_optional: false,
+                                                    is_override: false,
+                                                })
+                                            }
+                                        }
+                                    })
+                                })
+                                .chain(constructor.iter().map(|x| {
+                                    let x: Function = x.try_into()?;
+                                    Ok(ClassMember::Constructor(Constructor {
+                                        span: x.span,
+                                        ctxt: x.ctxt,
+                                        key: swc_ecma_ast::PropName::Ident(IdentName {
+                                            span: x.span,
+                                            sym: Atom::new("constructor"),
+                                        }),
+                                        params: x
+                                            .params
+                                            .into_iter()
+                                            .map(ParamOrTsParamProp::Param)
+                                            .collect(),
+                                        body: x.body,
+                                        accessibility: None,
+                                        is_optional: false,
+                                    }))
+                                }))
+                                .collect::<Result<_, anyhow::Error>>()?,
+                        }),
                     }),
                     crate::Item::Arr { members } => Expr::Array(ArrayLit {
                         span: span,

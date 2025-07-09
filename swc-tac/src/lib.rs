@@ -16,8 +16,8 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{
-    BinaryOp, Callee, Expr, Function, Lit, MemberExpr, MemberProp, Number, Param, Pat,
-    SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    BinaryOp, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
+    Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 
 use swc_ecma_ast::Id as Ident;
@@ -405,6 +405,7 @@ pub enum PropVal<I, F> {
     Item(I),
     Getter(F),
     Setter(F),
+    Method(F),
 }
 impl<I, F> PropVal<I, F> {
     pub fn as_ref(&self) -> PropVal<&I, &F> {
@@ -412,6 +413,7 @@ impl<I, F> PropVal<I, F> {
             PropVal::Item(a) => PropVal::Item(a),
             PropVal::Getter(f) => PropVal::Getter(f),
             PropVal::Setter(f) => PropVal::Setter(f),
+            PropVal::Method(f) => PropVal::Method(f),
         }
     }
     pub fn as_mut(&mut self) -> PropVal<&mut I, &mut F> {
@@ -419,6 +421,7 @@ impl<I, F> PropVal<I, F> {
             PropVal::Item(a) => PropVal::Item(a),
             PropVal::Getter(f) => PropVal::Getter(f),
             PropVal::Setter(f) => PropVal::Setter(f),
+            PropVal::Method(f) => PropVal::Method(f),
         }
     }
     pub fn map<I2, F2, Cx: ?Sized, E>(
@@ -431,6 +434,7 @@ impl<I, F> PropVal<I, F> {
             PropVal::Item(a) => PropVal::Item(i(cx, a)?),
             PropVal::Getter(a) => PropVal::Getter(f(cx, a)?),
             PropVal::Setter(a) => PropVal::Setter(f(cx, a)?),
+            PropVal::Method(a) => PropVal::Method(f(cx, a)?),
         })
     }
 }
@@ -503,6 +507,11 @@ pub enum Item<I = Ident, F = TFunc> {
     Obj {
         members: Vec<(PropKey<I>, PropVal<I, F>)>,
     },
+    Class {
+        superclass: Option<I>,
+        members: Vec<(bool, PropKey<I>, PropVal<Option<I>, F>)>,
+        constructor: Option<F>,
+    },
     Arr {
         members: Vec<I>,
     },
@@ -566,9 +575,30 @@ impl<I, F> Item<I, F> {
             },
             Item::Undef => Item::Undef,
             Item::This => Item::This,
-            // Item::Intrinsic { value } => Item::Intrinsic {
-            //     value: value.as_ref(),
-            // },
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Item::Class {
+                superclass: superclass.as_ref(),
+                constructor: constructor.as_ref(),
+                members: members
+                    .iter()
+                    .map(|(a, b, c)| {
+                        (
+                            *a,
+                            b.as_ref(),
+                            c.as_ref()
+                                .map(
+                                    &mut (),
+                                    &mut |cx, a: &Option<I>| Ok::<_, Infallible>(a.as_ref()),
+                                    &mut |cx, b| Ok(b),
+                                )
+                                .unwrap(),
+                        )
+                    })
+                    .collect(),
+            },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
@@ -609,6 +639,30 @@ impl<I, F> Item<I, F> {
             },
             Item::Undef => Item::Undef,
             Item::This => Item::This,
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Item::Class {
+                superclass: superclass.as_mut(),
+                constructor: constructor.as_mut(),
+                members: members
+                    .iter_mut()
+                    .map(|(a, b, c)| {
+                        (
+                            *a,
+                            b.as_mut(),
+                            c.as_mut()
+                                .map(
+                                    &mut (),
+                                    &mut |cx, a| Ok::<_, Infallible>(a.as_mut()),
+                                    &mut |cx, b| Ok(b),
+                                )
+                                .unwrap(),
+                        )
+                    })
+                    .collect(),
+            },
             // Item::Intrinsic { value } => Item::Intrinsic {
             //     value: value.as_mut(),
             // },
@@ -674,6 +728,39 @@ impl<I, F> Item<I, F> {
                 value: value.map(&mut |a| f(cx, a))?,
             },
             Item::This => Item::This,
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Item::Class {
+                superclass: match superclass {
+                    None => None,
+                    Some(a) => Some(f(cx, a)?),
+                },
+                constructor: match constructor {
+                    None => None,
+                    Some(a) => Some(g(cx, a)?),
+                },
+                members: members
+                    .into_iter()
+                    .map(|(a, b, c)| {
+                        Ok((
+                            a,
+                            b.map(&mut |a| f(cx, a))?,
+                            c.map(
+                                cx,
+                                &mut |cx, a: Option<I>| {
+                                    Ok(match a {
+                                        None => None,
+                                        Some(v) => Some(f(cx, v)?),
+                                    })
+                                },
+                                g,
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<_, E>>()?,
+            },
             // Item::Intrinsic { value } => Item::Intrinsic {
             //     value: value.map(&mut |a| f(cx, a))?,
             // },
@@ -683,9 +770,22 @@ impl<I, F> Item<I, F> {
         match self {
             Item::Func { func, arrow } => Box::new(once(func)),
             Item::Obj { members } => Box::new(members.iter().filter_map(|m| match &m.1 {
-                PropVal::Getter(f) | PropVal::Setter(f) => Some(f),
+                PropVal::Getter(f) | PropVal::Setter(f) | PropVal::Method(f) => Some(f),
                 _ => None,
             })),
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Box::new(
+                members
+                    .iter()
+                    .filter_map(|m| match &m.2 {
+                        PropVal::Getter(f) | PropVal::Setter(f) | PropVal::Method(f) => Some(f),
+                        _ => None,
+                    })
+                    .chain(constructor.iter()),
+            ),
             _ => Box::new(empty()),
         }
     }
@@ -709,7 +809,9 @@ impl<I, F> Item<I, F> {
             ),
             swc_tac::Item::Obj { members } => Box::new(members.iter().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
-                    PropVal::Getter(a) | PropVal::Setter(a) => Box::new(empty()),
+                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                        Box::new(empty())
+                    }
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.0 {
@@ -723,6 +825,23 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This => Box::new(empty()),
             Item::Asm { value } => Box::new(value.refs()),
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Box::new(superclass.iter().chain(members.iter().flat_map(|m| {
+                let v: Box<dyn Iterator<Item = &I> + '_> = match &m.2 {
+                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                        Box::new(empty())
+                    }
+                    PropVal::Item(i) => Box::new(i.iter()),
+                };
+                let w: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
+                    swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                    swc_tac::PropKey::Computed(c) => Box::new(once(c)),
+                };
+                v.chain(w)
+            }))),
             // Item::Intrinsic { value } => {
             //     let mut v = Vec::default();
             //     value
@@ -753,7 +872,9 @@ impl<I, F> Item<I, F> {
             ),
             swc_tac::Item::Obj { members } => Box::new(members.iter_mut().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
-                    PropVal::Getter(a) | PropVal::Setter(a) => Box::new(empty()),
+                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                        Box::new(empty())
+                    }
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.0 {
@@ -767,6 +888,27 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This => Box::new(empty()),
             Item::Asm { value } => Box::new(value.refs_mut()),
+            Item::Class {
+                superclass,
+                members,
+                constructor,
+            } => Box::new(
+                superclass
+                    .iter_mut()
+                    .chain(members.iter_mut().flat_map(|m| {
+                        let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.2 {
+                            PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                                Box::new(empty())
+                            }
+                            PropVal::Item(i) => Box::new(i.iter_mut()),
+                        };
+                        let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
+                            swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                            swc_tac::PropKey::Computed(c) => Box::new(once(c)),
+                        };
+                        v.chain(w)
+                    })),
+            ),
             // Item::Intrinsic { value } => {
             //     let mut v = Vec::default();
             //     value
@@ -902,7 +1044,20 @@ impl Trans<'_> {
             }
             Stmt::Empty(_) => return Ok(t),
             Stmt::Decl(d) => match d {
-                swc_ecma_ast::Decl::Class(class_decl) => todo!(),
+                swc_ecma_ast::Decl::Class(f) => {
+                    let c;
+                    (c, t) = self.class(i, o, b, t, &f.class)?;
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id {
+                            id: f.ident.clone().into(),
+                        },
+                        flags: Default::default(),
+                        right: Item::Just { id: c },
+                        span: f.span(),
+                    });
+                    o.decls.insert(f.ident.clone().into());
+                    return Ok(t);
+                }
                 swc_ecma_ast::Decl::Fn(f) => {
                     o.blocks[t].stmts.push(TStmt {
                         left: LId::Id {
@@ -977,6 +1132,121 @@ impl Trans<'_> {
         o.decls.insert(v.clone());
         Ok((v, t))
     }
+    pub fn class(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        s: &Class,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        let superclass = match &s.super_class {
+            None => None,
+            Some(a) => Some({
+                let b2;
+                (b2, t) = self.expr(i, o, b, t, a)?;
+                b2
+            }),
+        };
+        macro_rules! prop_name {
+            ( $w:expr , $v:expr => $a:expr) => {
+                match $v {
+                    v => match $w {
+                        w => match $a {
+                            swc_ecma_ast::PropName::Ident(ident_name) => (
+                                w,
+                                PropKey::Lit((ident_name.sym.clone(), Default::default())),
+                                v,
+                            ),
+                            swc_ecma_ast::PropName::Str(s) => {
+                                ((w, PropKey::Lit((s.value.clone(), Default::default())), v))
+                            }
+                            swc_ecma_ast::PropName::Num(number) => {
+                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                            }
+                            swc_ecma_ast::PropName::Computed(computed_prop_name) => {
+                                let w2;
+                                (w2, t) = self.expr(i, o, b, t, &computed_prop_name.expr)?;
+                                ((w, PropKey::Computed(w2), v))
+                            }
+                            swc_ecma_ast::PropName::BigInt(big_int) => {
+                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                            }
+                        },
+                    },
+                }
+            };
+        }
+        let mut members: Vec<(
+            bool,
+            PropKey,
+            PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
+        )> = Default::default();
+        let mut constructor: Option<TFunc> = Default::default();
+        for m in s.body.iter() {
+            match m {
+                ClassMember::ClassProp(p) => {
+                    members.push(
+                        prop_name!(p.is_static,PropVal::Item( match p.value.as_ref(){
+                                    None => None,
+                                    Some(a) => Some({
+                            let b2;
+                            (b2, t) = self.expr(i, o, b, t, a)?;
+                            b2
+                        }),
+                    }) => &p.key),
+                    );
+                }
+                ClassMember::Constructor(c) => {
+                    constructor = Some(TFunc::try_from_with_mapper(
+                        &Function {
+                            body: c.body.clone(),
+                            params: c
+                                .params
+                                .iter()
+                                .filter_map(|a| a.as_param())
+                                .cloned()
+                                .collect(),
+                            is_async: false,
+                            is_generator: false,
+                            span: c.span,
+                            decorators: vec![],
+                            ctxt: Default::default(),
+                            type_params: None,
+                            return_type: None,
+                        }
+                        .try_into()?,
+                        static_map! {a => self.import_mapper[a].as_deref()},
+                    )?)
+                }
+                ClassMember::Method(c) => {
+                    let f = TFunc::try_from_with_mapper(
+                        &(&*c.function).clone().try_into()?,
+                        static_map! {a => self.import_mapper[a].as_deref()},
+                    )?;
+                    members.push(prop_name!(c.is_static, match &c.kind{
+                        swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
+                        swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
+                        swc_ecma_ast::MethodKind::Setter => PropVal::Setter(f),
+                    }=> &c.key));
+                }
+                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            }
+        }
+        let tmp = o.regs.alloc(());
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id { id: tmp.clone() },
+            flags: Default::default(),
+            right: Item::Class {
+                superclass,
+                members,
+                constructor,
+            },
+            span: s.span(),
+        });
+        o.decls.insert(tmp.clone());
+        Ok((tmp, t))
+    }
     pub fn expr(
         &mut self,
         i: &Cfg,
@@ -1004,6 +1274,19 @@ impl Trans<'_> {
         //     }
         // }
         match s {
+            Expr::Class(c) => {
+                let d;
+                (d, t) = self.class(i, o, b, t, &*c.class)?;
+                if let Some(n) = c.ident.as_ref() {
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: n.to_id() },
+                        flags: Default::default(),
+                        right: Item::Just { id: d.clone() },
+                        span: n.span(),
+                    });
+                }
+                Ok((d, t))
+            }
             Expr::Cond(c) => {
                 let v;
                 (v, t) = self.expr(i, o, b, t, &c.test)?;
@@ -1489,7 +1772,8 @@ impl Trans<'_> {
                                         }
                                         swc_ecma_ast::PropName::Computed(computed_prop_name) => {
                                             let w;
-                                            (w, t) = self.expr(i, o, b, t, s)?;
+                                            (w, t) =
+                                                self.expr(i, o, b, t, &computed_prop_name.expr)?;
                                             Some((PropKey::Computed(w), v))
                                         }
                                         swc_ecma_ast::PropName::BigInt(big_int) => {
@@ -1565,7 +1849,11 @@ impl Trans<'_> {
                                     prop_name!(v => &setter_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Method(method_prop) => {
-                                    anyhow::bail!("todo: {}:{}", file!(), line!())
+                                    let v = PropVal::Method(TFunc::try_from_with_mapper(
+                                        &(&*method_prop.function).clone().try_into()?,
+                                        static_map! {a => self.import_mapper[a].as_deref()},
+                                    )?);
+                                    prop_name!(v => &method_prop.key)
                                 }
                             },
                         })
