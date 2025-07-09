@@ -87,6 +87,35 @@ impl SCfg {
             b.stmts.retain(|a| !map.contains_key(a));
         }
     }
+    pub fn strip_useless(&mut self) {
+        let mut set = BTreeSet::new();
+        for (val, SValueW { value }) in self.values.iter_mut() {
+            match value {
+                SValue::Item { item, span } => match item {
+                    Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
+                        set.insert(val);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        for (_, b) in self.values.iter_mut() {
+            for r in b.value.vals_mut() {
+                set.remove(r);
+            }
+        }
+        for (_, b) in self.blocks.iter_mut() {
+            for t in b.postcedent.targets_mut() {
+                for r in t.args.iter_mut() {
+                    set.remove(r);
+                }
+            }
+        }
+        for (_, b) in self.blocks.iter_mut() {
+            b.stmts.retain(|a| !set.contains(a));
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct SFunc {
