@@ -1,8 +1,8 @@
 use crate::*;
-use portal_jsc_swc_util::SemanticCfg;
+use portal_jsc_swc_util::{SemanticCfg, SemanticFlags};
 use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
-use swc_ecma_ast::{op, BinaryOp, Bool, Expr, Number, Str, UnaryOp};
+use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
 
 impl SCfg {
@@ -29,8 +29,8 @@ impl SCfg {
         }
     }
 }
-pub trait SValGetter<I: Copy, B,F = SFunc> {
-    fn val(&self, id: I) -> Option<&SValue<I, B,F>>;
+pub trait SValGetter<I: Copy, B, F = SFunc> {
+    fn val(&self, id: I) -> Option<&SValue<I, B, F>>;
 }
 impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
     fn val(&self, id: Id<SValueW>) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
@@ -45,26 +45,100 @@ pub(crate) fn default_ctx() -> ExprCtx {
         remaining_depth: 4,
     }
 }
-impl<I: Copy, B,F> SValue<I, B,F> {
-    pub fn const_in(&self,semantics: &SemanticCfg, k: &impl SValGetter<I, B,F>) -> Option<Lit> {
+impl<I: Copy, B, F> SValue<I, B, F> {
+    pub fn const_in(&self, semantics: &SemanticCfg, k: &impl SValGetter<I, B, F>) -> Option<Lit> {
         match self {
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
                 Item::Bin { left, right, op } => {
                     let left = k.val(*left)?;
                     let right = k.val(*right)?;
-                    match (left,right){
-                        (SValue::Item { item: Item::Undef, span: _ },SValue::Item { item: Item::Undef, span: _ }) => match op{
-                            BinaryOp::EqEqEq | BinaryOp::EqEq => return Some(Lit::Bool(Bool { span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()), value: true })),
-                            BinaryOp::NotEqEq | BinaryOp::NotEq => return Some(Lit::Bool(Bool { span: span.as_ref().cloned().unwrap_or_else(||Span::dummy_with_cmt()), value: false })),
-                            _ => {}
+                    let (left, right) = match (left, right) {
+                        (
+                            SValue::Item {
+                                item: Item::Undef,
+                                span: _,
+                            },
+                            SValue::Item {
+                                item: Item::Undef,
+                                span: _,
+                            },
+                        ) => match op {
+                            BinaryOp::EqEqEq | BinaryOp::EqEq => {
+                                return Some(Lit::Bool(Bool {
+                                    span: span
+                                        .as_ref()
+                                        .cloned()
+                                        .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                    value: true,
+                                }));
+                            }
+                            BinaryOp::NotEqEq | BinaryOp::NotEq => {
+                                return Some(Lit::Bool(Bool {
+                                    span: span
+                                        .as_ref()
+                                        .cloned()
+                                        .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                    value: false,
+                                }));
+                            }
+                            _ => {
+                                let left = left.const_in(semantics, k)?;
+                                let right = right.const_in(semantics, k)?;
+                                (left, right)
+                            }
+                        },
+                        (left_val, right_val) => {
+                            let left = left_val.const_in(semantics, k);
+                            let right = right_val.const_in(semantics, k);
+                            match (left_val, right_val, &left, &right) {
+                                (
+                                    SValue::Item {
+                                        item: Item::Undef,
+                                        span: _,
+                                    },
+                                    _,
+                                    _,
+                                    Some(_),
+                                )
+                                | (
+                                    _,
+                                    SValue::Item {
+                                        item: Item::Undef,
+                                        span: _,
+                                    },
+                                    Some(_),
+                                    _,
+                                ) => match op {
+                                    BinaryOp::EqEqEq => {
+                                        return Some(Lit::Bool(Bool {
+                                            span: span
+                                                .as_ref()
+                                                .cloned()
+                                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                            value: false,
+                                        }));
+                                    }
+                                    BinaryOp::NotEqEq => {
+                                        return Some(Lit::Bool(Bool {
+                                            span: span
+                                                .as_ref()
+                                                .cloned()
+                                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                            value: true,
+                                        }));
+                                    }
+                                    _ => {
+                                        // let left = left.const_in(semantics, k)?;
+                                        // let right = right.const_in(semantics, k)?;
+                                        (left?, right?)
+                                    }
+                                },
+                                (_, _, Some(v), Some(v2)) => (left?, right?),
+                                _ => return None,
+                            }
                         }
-                        _ => {
-
-                        }
-                    }
-                    let left = left.const_in(semantics,k)?;
-                    let right = right.const_in(semantics,k)?;
+                    };
                     macro_rules! op2 {
                         ($left:expr_2021 => {$($op:tt)*} $right:expr_2021) => {
                             match (
@@ -243,7 +317,7 @@ impl<I: Copy, B,F> SValue<I, B,F> {
                             raw: None,
                         }));
                     }
-                    let l = k.val(*arg)?.const_in(semantics,k)?;
+                    let l = k.val(*arg)?.const_in(semantics, k)?;
                     match op {
                         swc_ecma_ast::UnaryOp::Minus => match l {
                             Lit::Num(n) => Some(Lit::Num(Number {
@@ -299,8 +373,31 @@ impl<I: Copy, B,F> SValue<I, B,F> {
                         swc_ecma_ast::UnaryOp::Delete => None,
                     }
                 }
-                Item::Mem { obj, mem } => None,
-                Item::Func { func,arrow } => None,
+                Item::Mem { obj, mem } => {
+                    match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
+                        Some(Lit::Str(s)) => match &*s.value {
+                            "length" => match k.val(*obj) {
+                                Some(SValue::Item {
+                                    item: Item::Arr { members },
+                                    span,
+                                }) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                                    Some(Lit::Num(Number {
+                                        span: span
+                                            .as_ref()
+                                            .cloned()
+                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                        value: members.len() as f64,
+                                        raw: None,
+                                    }))
+                                }
+                                _ => None,
+                            },
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                }
+                Item::Func { func, arrow } => None,
                 Item::Lit { lit } => Some(lit.clone()),
                 Item::Call { callee, args } => None,
                 Item::Obj { members } => None,
