@@ -5,8 +5,9 @@ use std::{
 
 use anyhow::Context;
 use id_arena::Id;
+use portal_jsc_swc_util::SemanticCfg;
 use swc_ecma_ast::{BinaryOp, UnaryOp};
-use swc_ssa::{simplify::SValGetter, SBlock, SCatch, SFunc, STarget, STerm, SValue, SCfg};
+use swc_ssa::{SBlock, SCatch, SCfg, SFunc, STarget, STerm, SValue, simplify::SValGetter};
 use swc_tac::Item;
 
 use crate::{OptBlock, OptCfg, OptFunc, OptType, OptValue, OptValueW};
@@ -21,7 +22,12 @@ fn deopt(
     mut ty: Option<OptType>,
 ) -> anyhow::Result<Id<OptValueW>> {
     while let Some(t) = ty {
-        let w = out.values.alloc(OptValueW { value: OptValue::Deopt { value: v, deoptimizer: () } });
+        let w = out.values.alloc(OptValueW {
+            value: OptValue::Deopt {
+                value: v,
+                deoptimizer: (),
+            },
+        });
         out.blocks[k].insts.push(w);
         v = w;
         ty = t.parent(Default::default());
@@ -39,7 +45,12 @@ fn bi_id_deopt(
     let mut s = false;
     while ty1 != ty2 {
         if let Some(t) = ty1 {
-            let w = out.values.alloc(OptValueW { value: OptValue::Deopt { value: v1, deoptimizer: ()  } });
+            let w = out.values.alloc(OptValueW {
+                value: OptValue::Deopt {
+                    value: v1,
+                    deoptimizer: (),
+                },
+            });
             out.blocks[k].insts.push(w);
             v1 = w;
             ty1 = t.parent(Default::default());
@@ -61,6 +72,7 @@ impl Convert {
         out: &mut OptCfg,
         i: Id<SBlock>,
         tys: Vec<Option<OptType>>,
+        semantic: &SemanticCfg,
     ) -> anyhow::Result<Id<OptBlock>> {
         loop {
             if let Some(k) = self.all.get(&i).and_then(|v| v.get(&tys)) {
@@ -95,7 +107,7 @@ impl Convert {
                     SCatch::Just {
                         target: STarget {
                             args,
-                            block: self.transform(inp, out, target.block, xs)?,
+                            block: self.transform(inp, out, target.block, xs, semantic)?,
                         },
                     }
                 }
@@ -125,19 +137,22 @@ impl Convert {
                                 state.get(left).cloned().context("in getting the value")?;
                             let (right, rty) =
                                 state.get(right).cloned().context("in getting the value")?;
-                            let cnstl = out.val(left).and_then(|a| a.const_in(out));
-                            let cnstr = out.val(right).and_then(|a| a.const_in(out));
+                            let cnstl = out.val(left).and_then(|a| a.const_in(semantic, out));
+                            let cnstr = out.val(right).and_then(|a| a.const_in(semantic, out));
                             match (cnstl, cnstr) {
                                 (Some(_), Some(_)) => {
-                                    let v: SValue<Id<OptValueW>, Id<OptBlock>,OptFunc> = SValue::Item {
-                                        item: Item::Bin {
-                                            left,
-                                            right,
-                                            op: op.clone(),
-                                        },
-                                        span: span.clone(),
+                                    let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
+                                        SValue::Item {
+                                            item: Item::Bin {
+                                                left,
+                                                right,
+                                                op: op.clone(),
+                                            },
+                                            span: span.clone(),
+                                        };
+                                    let Some(a) = v.const_in(semantic, out) else {
+                                        todo!()
                                     };
-                                    let Some(a) = v.const_in(out) else { todo!() };
                                     (
                                         OptValue::Emit {
                                             val: SValue::Item {
@@ -293,17 +308,20 @@ impl Convert {
                         swc_tac::Item::Un { arg, op } => {
                             let (arg, tag) =
                                 state.get(arg).cloned().context("in getting the value")?;
-                            let cnst = out.val(arg).and_then(|a| a.const_in(out));
+                            let cnst = out.val(arg).and_then(|a| a.const_in(semantic, out));
                             match cnst {
                                 Some(k) => {
-                                    let v: SValue<Id<OptValueW>, Id<OptBlock>,OptFunc> = SValue::Item {
-                                        item: Item::Un {
-                                            arg: arg,
-                                            op: op.clone(),
-                                        },
-                                        span: span.clone(),
+                                    let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
+                                        SValue::Item {
+                                            item: Item::Un {
+                                                arg: arg,
+                                                op: op.clone(),
+                                            },
+                                            span: span.clone(),
+                                        };
+                                    let Some(a) = v.const_in(semantic, out) else {
+                                        todo!()
                                     };
-                                    let Some(a) = v.const_in(out) else { todo!() };
                                     (
                                         OptValue::Emit {
                                             val: SValue::Item {
@@ -366,10 +384,12 @@ impl Convert {
                                         };
                                         match op {
                                             UnaryOp::Plus => {
-                                                let val = OptValueW { value: OptValue::Emit {
-                                                    val: result,
-                                                    ty: None,
-                                                } };
+                                                let val = OptValueW {
+                                                    value: OptValue::Emit {
+                                                        val: result,
+                                                        ty: None,
+                                                    },
+                                                };
                                                 let val = out.values.alloc(val);
                                                 out.blocks[k].insts.push(val);
                                                 (
@@ -446,7 +466,12 @@ impl Convert {
                                 elem_tys,
                             }) = &oty
                             {
-                                let w = out.values.alloc(OptValueW { value: OptValue::Deopt { value: obj, deoptimizer: ()  } });
+                                let w = out.values.alloc(OptValueW {
+                                    value: OptValue::Deopt {
+                                        value: obj,
+                                        deoptimizer: (),
+                                    },
+                                });
                                 out.blocks[k].insts.push(w);
                                 obj = w;
                                 oty = oty.unwrap().parent(Default::default());
@@ -487,11 +512,15 @@ impl Convert {
                             }
                         }
                         a => {
-                            let a = a.clone().map2(&mut (),&mut |_,x| {
-                                let (val, tag) =
-                                    state.get(&x).cloned().context("in getting the val")?;
-                                deopt(out, k, val, tag)
-                            },&mut |_,a|a.try_into())?;
+                            let a = a.clone().map2(
+                                &mut (),
+                                &mut |_, x| {
+                                    let (val, tag) =
+                                        state.get(&x).cloned().context("in getting the val")?;
+                                    deopt(out, k, val, tag)
+                                },
+                                &mut |_, a| a.try_into(),
+                            )?;
                             (
                                 OptValue::Emit {
                                     val: SValue::Item {
@@ -541,18 +570,26 @@ impl Convert {
                             None,
                         )
                     }
-                    SValue::EdgeBlocker { value: val,span } => {
+                    SValue::EdgeBlocker { value: val, span } => {
                         let (mut val, mut tag) =
                             state.get(val).cloned().context("in getting the val")?;
                         while let Some(OptType::Lit(_)) = &tag {
-                            let w = out.values.alloc(OptValueW { value: OptValue::Deopt { value: val, deoptimizer: ()  } });
+                            let w = out.values.alloc(OptValueW {
+                                value: OptValue::Deopt {
+                                    value: val,
+                                    deoptimizer: (),
+                                },
+                            });
                             out.blocks[k].insts.push(w);
                             val = w;
                             tag = tag.unwrap().parent(Default::default());
                         }
                         (
                             OptValue::Emit {
-                                val: SValue::EdgeBlocker { value: val,span: *span },
+                                val: SValue::EdgeBlocker {
+                                    value: val,
+                                    span: *span,
+                                },
                                 ty: tag.clone(),
                             },
                             tag,
@@ -579,7 +616,7 @@ impl Convert {
                     .collect();
                 anyhow::Ok(STarget {
                     args,
-                    block: this.transform(inp, out, target.block, xs)?,
+                    block: this.transform(inp, out, target.block, xs, semantic)?,
                 })
             };
             let term = match &inp.blocks[i].postcedent.term {
@@ -636,7 +673,12 @@ impl Convert {
                         .collect::<anyhow::Result<Vec<_>>>()?;
                     for (m, _) in blocks.iter_mut() {
                         while out.values[*m].ty(&out) != ty {
-                            let n = out.values.alloc(OptValueW { value: OptValue::Deopt { value: *m, deoptimizer: () } });
+                            let n = out.values.alloc(OptValueW {
+                                value: OptValue::Deopt {
+                                    value: *m,
+                                    deoptimizer: (),
+                                },
+                            });
                             out.blocks[k].insts.push(n);
                             *m = n;
                         }
@@ -649,11 +691,26 @@ impl Convert {
         }
     }
 }
+impl<'a> TryFrom<&'a SFunc> for OptFunc {
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: &'a SFunc) -> Result<Self, Self::Error> {
+        Self::try_from_ssa_with_semantic(value, &Default::default())
+    }
+}
 impl TryFrom<SFunc> for OptFunc {
     type Error = anyhow::Error;
 
-    fn try_from(mut value: SFunc) -> Result<Self, Self::Error> {
-        ssa_impls::maxssa::maxssa(&mut value);
+    fn try_from(value: SFunc) -> Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
+    }
+}
+impl OptFunc {
+    pub fn try_from_ssa_with_semantic(
+        value: &SFunc,
+        semantic: &SemanticCfg,
+    ) -> anyhow::Result<Self> {
+        //  ssa_impls::maxssa::maxssa(&mut value);
         let mut cfg = OptCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());
         let mut t = Convert {
@@ -664,7 +721,7 @@ impl TryFrom<SFunc> for OptFunc {
             .iter()
             .map(|_| None)
             .collect();
-        let x = t.transform(&value.cfg, &mut cfg, value.entry, tys)?;
+        let x = t.transform(&value.cfg, &mut cfg, value.entry, tys, semantic)?;
         Ok(OptFunc {
             cfg,
             entry: x,

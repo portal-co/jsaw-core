@@ -1,21 +1,26 @@
-use std::{
-    collections::BTreeMap,
-    mem::take,
-};
+use std::{collections::BTreeMap, mem::take};
 
+use bitflags::bitflags;
 pub use portal_jsc_common as common;
 pub use portal_jsc_common::ImportMap;
 use portal_jsc_common::Native;
 use portal_solutions_swibb::ConstCollector;
 use swc_atoms::Atom;
-use swc_common::{
-    Span, Spanned,
-};
-use swc_ecma_ast::{
-    BinaryOp, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp,
-    ModuleItem,
-};
+use swc_common::{Span, Spanned};
+use swc_ecma_ast::{BinaryOp, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp, ModuleItem};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+    pub struct SemanticFlags: u64{
+        const ASSUME_SES = 0x1;
+    }
+}
+#[derive(Default, Clone)]
+#[non_exhaustive]
+pub struct SemanticCfg {
+    pub flags: SemanticFlags,
+}
 pub trait ResolveNatives {
     fn resolve_natives(&self, import_map: &(dyn ImportMapper + '_)) -> Option<Native<&Expr>>;
 }

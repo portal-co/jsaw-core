@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use portal_jsc_swc_util::SemanticCfg;
 use swc_common::Spanned;
 use swc_ecma_ast::Expr;
 use swc_ecma_utils::{ExprExt, Value};
@@ -14,12 +15,12 @@ pub enum ConstVal {
 pub struct ConstantInstantiator {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
 }
-pub fn instantiate_constants(a: &SFunc) -> anyhow::Result<SFunc> {
+pub fn instantiate_constants(a: &SFunc, semantic: &SemanticCfg) -> anyhow::Result<SFunc> {
     let mut n = SCfg::default();
     let entry = ConstantInstantiator {
         all: BTreeMap::new(),
     }
-    .init(&a.cfg, &mut n, a.entry)?;
+    .init(&a.cfg, &mut n, a.entry, semantic)?;
     n.decls.extend(a.cfg.decls.clone().into_iter());
     n.generics = a.cfg.generics.clone();
     n.ts_retty = a.cfg.ts_retty.clone();
@@ -37,9 +38,10 @@ impl ConstantInstantiator {
         inp: &SCfg,
         out: &mut SCfg,
         k: Id<SBlock>,
+        semantic: &SemanticCfg,
     ) -> anyhow::Result<Id<SBlock>> {
         let lits = inp.blocks[k].params.iter().map(|_| None).collect();
-        return self.go(inp, out, k, lits);
+        return self.go(inp, out, k, lits, semantic);
     }
     pub fn go(
         &mut self,
@@ -47,6 +49,7 @@ impl ConstantInstantiator {
         out: &mut SCfg,
         k: Id<SBlock>,
         lits: Vec<Option<ConstVal>>,
+        semantic: &SemanticCfg,
         // lsk: &BTreeMap<Id<SBlock>, NonZeroUsize>,
     ) -> anyhow::Result<Id<SBlock>> {
         let lits: Vec<Option<ConstVal>> = lits
@@ -152,7 +155,7 @@ impl ConstantInstantiator {
                         }
                     }
                 };
-                let v = match v.const_in(out) {
+                let v = match v.const_in(semantic, out) {
                     None => v,
                     Some(a) => SValue::Item {
                         item: Item::Lit { lit: a.clone() },
@@ -199,7 +202,7 @@ impl ConstantInstantiator {
                     .cloned()
                     .collect();
                 anyhow::Ok(STarget {
-                    block: this.go(inp, out, t.block, funcs)?,
+                    block: this.go(inp, out, t.block, funcs, semantic)?,
                     args,
                 })
             };

@@ -1,4 +1,5 @@
 use crate::*;
+use portal_jsc_swc_util::SemanticCfg;
 use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{op, BinaryOp, Bool, Expr, Number, Str, UnaryOp};
@@ -45,7 +46,7 @@ pub(crate) fn default_ctx() -> ExprCtx {
     }
 }
 impl<I: Copy, B,F> SValue<I, B,F> {
-    pub fn const_in(&self, k: &impl SValGetter<I, B,F>) -> Option<Lit> {
+    pub fn const_in(&self,semantics: &SemanticCfg, k: &impl SValGetter<I, B,F>) -> Option<Lit> {
         match self {
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
@@ -62,8 +63,8 @@ impl<I: Copy, B,F> SValue<I, B,F> {
 
                         }
                     }
-                    let left = left.const_in(k)?;
-                    let right = right.const_in(k)?;
+                    let left = left.const_in(semantics,k)?;
+                    let right = right.const_in(semantics,k)?;
                     macro_rules! op2 {
                         ($left:expr_2021 => {$($op:tt)*} $right:expr_2021) => {
                             match (
@@ -242,7 +243,7 @@ impl<I: Copy, B,F> SValue<I, B,F> {
                             raw: None,
                         }));
                     }
-                    let l = k.val(*arg)?.const_in(k)?;
+                    let l = k.val(*arg)?.const_in(semantics,k)?;
                     match op {
                         swc_ecma_ast::UnaryOp::Minus => match l {
                             Lit::Num(n) => Some(Lit::Num(Number {
