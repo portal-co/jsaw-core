@@ -11,7 +11,7 @@ use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives};
+use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
@@ -141,9 +141,10 @@ pub struct TFunc {
     pub is_async: bool,
 }
 impl TFunc {
-    pub fn try_from_with_mapper<'a>(
+    pub fn try_from_with_mapper(
         value: &Func,
-        import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
+        import_mapper: StaticMap<ImportMapperReq, Option<&(dyn ImportMapper + '_)>>,
+        semantic: &SemanticCfg,
     ) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
         let entry = Trans {
@@ -151,7 +152,8 @@ impl TFunc {
             ret_to: None,
             recatch: TCatch::Throw,
             this: None,
-            import_mapper,
+            import_mapper: static_map! {a =>import_mapper[a].as_deref()},
+            semantic,
         }
         .trans(&value.cfg, &mut cfg, value.entry)?;
         cfg.ts_retty = value.cfg.ts_retty.clone();
@@ -182,7 +184,11 @@ impl<'a> TryFrom<&'a Func> for TFunc {
     type Error = anyhow::Error;
 
     fn try_from(value: &'a Func) -> Result<Self, Self::Error> {
-        TFunc::try_from_with_mapper(value, linearize::static_map! {_ => None})
+        TFunc::try_from_with_mapper(
+            value,
+            linearize::static_map! {_ => None},
+            &SemanticCfg::default(),
+        )
     }
 }
 impl TryFrom<Func> for TFunc {
@@ -1029,7 +1035,7 @@ impl<I, F> Item<I, F> {
     }
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 #[non_exhaustive]
 pub struct Trans<'a> {
     pub map: BTreeMap<Id<Block>, Id<TBlock>>,
@@ -1037,6 +1043,7 @@ pub struct Trans<'a> {
     pub recatch: TCatch,
     pub this: Option<Ident>,
     pub import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
+    pub semantic: &'a SemanticCfg,
 }
 impl Trans<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
@@ -1334,12 +1341,14 @@ impl Trans<'_> {
                         }
                         .try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
+                        self.semantic,
                     )?)
                 }
                 ClassMember::Method(c) => {
                     let f = TFunc::try_from_with_mapper(
                         &(&*c.function).clone().try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
+                        self.semantic,
                     )?;
                     members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1369,6 +1378,7 @@ impl Trans<'_> {
                     let f = TFunc::try_from_with_mapper(
                         &(&*p.function).clone().try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
+                        self.semantic,
                     )?;
                     let x = match &p.kind {
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1745,6 +1755,7 @@ impl Trans<'_> {
                                             Some((Atom::new("globalThis"), Default::default()))
                                         },
                                         import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
+                                        semantic: self.semantic,
                                     };
                                     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
                                     o.blocks[t].post.term = TTerm::Jmp(t3);
@@ -2002,6 +2013,7 @@ impl Trans<'_> {
                                         TFunc::try_from_with_mapper(
                                             &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
+                                            self.semantic,
                                         )?
                                     });
                                     prop_name!(v => &getter_prop.key)
@@ -2028,6 +2040,7 @@ impl Trans<'_> {
                                         TFunc::try_from_with_mapper(
                                             &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
+                                            self.semantic,
                                         )?
                                     });
                                     prop_name!(v => &setter_prop.key)
@@ -2036,6 +2049,7 @@ impl Trans<'_> {
                                     let v = PropVal::Method(TFunc::try_from_with_mapper(
                                         &(&*method_prop.function).clone().try_into()?,
                                         static_map! {a => self.import_mapper[a].as_deref()},
+                                        self.semantic,
                                     )?);
                                     prop_name!(v => &method_prop.key)
                                 }
