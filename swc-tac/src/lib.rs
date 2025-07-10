@@ -1692,9 +1692,7 @@ impl Trans<'_> {
                             (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
 
                             match o.def(LId::Id { id: r#fn.clone() }).cloned() {
-                                Some(Item::Func { func, arrow })
-                                    if (arrow || !func.cfg.has_this()) =>
-                                {
+                                Some(Item::Func { func, arrow }) => {
                                     let u = Expr::undefined(call.span);
                                     for (p, a) in
                                         func.params.iter().map(Some).chain(once(None).cycle()).zip(
@@ -1741,7 +1739,11 @@ impl Trans<'_> {
                                         map: Default::default(),
                                         ret_to: Some((tmp.clone(), t2)),
                                         recatch: o.blocks[t].post.catch.clone(),
-                                        this: Some((Atom::new("globalThis"), Default::default())),
+                                        this: if arrow || !func.cfg.has_this() {
+                                            self.this.clone()
+                                        } else {
+                                            Some((Atom::new("globalThis"), Default::default()))
+                                        },
                                         import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
                                     };
                                     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
