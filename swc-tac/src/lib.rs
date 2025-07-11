@@ -309,6 +309,9 @@ impl TCfg {
                         set.remove(obj);
                         set.remove(&mem[0]);
                     }
+                    LId::Private { obj, id } => {
+                        set.remove(obj);
+                    }
                     _ => {}
                 }
             }
