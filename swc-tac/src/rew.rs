@@ -183,18 +183,44 @@ impl Rew {
             for statement_data in tcfg.blocks[block_id].stmts.iter() {
                 let span = statement_data.span;
                 let mut mark = false;
-                let mut sr = |left: &Ident| match state.remove(left) {
-                    None => Box::new(Expr::Ident(ident(left, span))),
-                    Some(right) => Box::new(Expr::Assign(AssignExpr {
-                        span: right.span(),
-                        op: AssignOp::Assign,
-                        left: AssignTarget::Simple(SimpleAssignTarget::Ident(BindingIdent {
-                            id: ident(left, span),
-                            type_ann: None,
-                        })),
-                        right,
-                    })),
-                };
+                fn _sr(
+                    left: &Ident,
+                    tcfg: &TCfg,
+                    state: &mut HashMap<Ident, Box<Expr>>,
+                    span: Span,
+                ) -> Box<Expr> {
+                    match tcfg.def(crate::LId::Id { id: left.clone() }) {
+                        Some(Item::Asm { value }) => match value {
+                            portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
+                                span,
+                                op: BinaryOp::BitOr,
+                                left: _sr(a,tcfg,state,span),
+                                right: Box::new(Expr::Lit(Lit::Num(Number {
+                                    span,
+                                    value: 0.0,
+                                    raw: None,
+                                }))),
+                            })),
+                            _ => todo!(),
+                        },
+                        Some(Item::Lit { lit }) => Box::new(Expr::Lit(lit.clone())),
+                        _ => match state.remove(left) {
+                            None => Box::new(Expr::Ident(ident(left, span))),
+                            Some(right) => Box::new(Expr::Assign(AssignExpr {
+                                span: right.span(),
+                                op: AssignOp::Assign,
+                                left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                    BindingIdent {
+                                        id: ident(left, span),
+                                        type_ann: None,
+                                    },
+                                )),
+                                right,
+                            })),
+                        },
+                    }
+                }
+                let mut sr = |left: &Ident| _sr(left, tcfg, &mut state, span);
                 let left = match &statement_data.left {
                     crate::LId::Id { id } => swc_ecma_ast::AssignTarget::Simple(
                         swc_ecma_ast::SimpleAssignTarget::Ident(swc_ecma_ast::BindingIdent {
