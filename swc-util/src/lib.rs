@@ -17,10 +17,17 @@ bitflags! {
         const ASSUME_AOT = 0x2;
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[non_exhaustive]
+pub enum SemanticTarget {
+    #[default]
+    ECMAScript,
+}
 #[derive(Default, Clone)]
 #[non_exhaustive]
 pub struct SemanticCfg {
     pub flags: SemanticFlags,
+    pub target: SemanticTarget,
 }
 pub trait ResolveNatives {
     fn resolve_natives(&self, import_map: &(dyn ImportMapper + '_)) -> Option<Native<&Expr>>;
