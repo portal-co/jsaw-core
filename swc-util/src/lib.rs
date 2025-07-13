@@ -15,6 +15,7 @@ bitflags! {
     pub struct SemanticFlags: u64{
         const ASSUME_SES = 0x1;
         const ASSUME_AOT = 0x2;
+        const BITWISE_OR_ABSENT_NAN = 0x4;
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]

@@ -7,7 +7,7 @@ use swc_tac::Item;
 pub mod impls;
 pub mod into;
 pub use portal_jsc_swc_util::r#type::{ObjType, OptType};
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 #[non_exhaustive]
 pub enum OptValue<I = Id<OptValueW>, B = Id<OptBlock>, F = OptFunc, D = ()> {
     Deopt {
@@ -74,9 +74,9 @@ impl<I, B, F, D> OptValue<I, B, F, D> {
         })
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub struct OptValueW { pub value: OptValue }
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug,PartialEq)]
 pub struct OptBlock {
     pub params: Vec<(Id<OptValueW>, Option<OptType>)>,
     pub insts: Vec<Id<OptValueW>>,
@@ -86,7 +86,7 @@ pub type OptPostcedent = SPostcedent<Id<OptValueW>, Id<OptBlock>>;
 pub type OptTarget = STarget<Id<OptValueW>, Id<OptBlock>>;
 pub type OptTerm = STerm<Id<OptValueW>, Id<OptBlock>>;
 pub type OptCatch = SCatch<Id<OptValueW>, Id<OptBlock>>;
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug,PartialEq)]
 pub struct OptCfg {
     pub values: Arena<OptValueW>,
     pub blocks: Arena<OptBlock>,
@@ -126,7 +126,7 @@ impl SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc> for OptCfg {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub struct OptFunc {
     pub cfg: OptCfg,
     pub entry: Id<OptBlock>,

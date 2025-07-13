@@ -45,7 +45,10 @@ pub(crate) fn default_ctx() -> ExprCtx {
         remaining_depth: 4,
     }
 }
-impl<I: Copy, B, F> SValue<I, B, F> {
+impl<I: Copy, B, F> SValue<I, B, F>
+where
+    Self: PartialEq,
+{
     pub fn const_in(&self, semantics: &SemanticCfg, k: &impl SValGetter<I, B, F>) -> Option<Lit> {
         match self {
             SValue::Item { item, span } => match item {
@@ -88,6 +91,38 @@ impl<I: Copy, B, F> SValue<I, B, F> {
                                 (left, right)
                             }
                         },
+                        (a, b)
+                            if a == b
+                                && semantics
+                                    .flags
+                                    .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN) =>
+                        {
+                            match op {
+                                BinaryOp::EqEqEq | BinaryOp::EqEq => {
+                                    return Some(Lit::Bool(Bool {
+                                        span: span
+                                            .as_ref()
+                                            .cloned()
+                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                        value: true,
+                                    }));
+                                }
+                                BinaryOp::NotEqEq | BinaryOp::NotEq => {
+                                    return Some(Lit::Bool(Bool {
+                                        span: span
+                                            .as_ref()
+                                            .cloned()
+                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                        value: false,
+                                    }));
+                                }
+                                _ => {
+                                    let left = left.const_in(semantics, k)?;
+                                    let right = right.const_in(semantics, k)?;
+                                    (left, right)
+                                }
+                            }
+                        }
                         (left_val, right_val) => {
                             let left = left_val.const_in(semantics, k);
                             let right = right_val.const_in(semantics, k);

@@ -9,6 +9,13 @@ resolver="3"
 version = "0.8.0-pre.7"
 
 [workspace.dependencies]
+swc-cfg =             { version = "^0.8.0-pre.7", path = "swc-cfg", package = "portal-jsc-swc-cfg" }
+swc-tac =             { version = "^0.8.0-pre.7", path = "swc-tac", package = "portal-jsc-swc-tac" }
+swc-ssa =             { version = "^0.8.0-pre.7", path = "swc-ssa", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util = { version = "^0.8.0-pre.7", path = "swc-util", features = ["ty"] }
+portal-jsc-common =   { version = "^0.8.0-pre.7", path = "portal-jsc-common" }
+
+
 anyhow = "^1.0.87"
 bimap = "^0.6.3"
 id-arena = "^2.2.1"
@@ -61,8 +68,3 @@ swc_ecma_quote = "^17"
 
 portal-solutions-swibb="^0.2.6"
 
-swc-cfg =             { version = "^0.8.0-pre.7", path = "swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac =             { version = "^0.8.0-pre.7", path = "swc-tac", package = "portal-jsc-swc-tac" }
-swc-ssa =             { version = "^0.8.0-pre.7", path = "swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util = { version = "^0.8.0-pre.7", path = "swc-util", features = ["ty"] }
-portal-jsc-common =   { version = "^0.8.0-pre.7", path = "portal-jsc-common" }

@@ -520,7 +520,7 @@ impl<I, F> PropVal<I, F> {
         })
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { r#fn: I, member: I },
@@ -569,7 +569,7 @@ impl<I> TCallee<I> {
         })
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 #[non_exhaustive]
 pub enum Item<I = Ident, F = TFunc> {
     Just {

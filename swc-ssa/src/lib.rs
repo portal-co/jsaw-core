@@ -117,7 +117,7 @@ impl SCfg {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub struct SFunc {
     pub cfg: SCfg,
     pub entry: Id<SBlock>,
@@ -194,7 +194,7 @@ impl TryFrom<TFunc> for SFunc {
         TryFrom::try_from(&value)
     }
 }
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug,PartialEq)]
 pub struct SCfg {
     pub blocks: Arena<SBlock>,
     pub values: Arena<SValueW>,
@@ -227,13 +227,13 @@ impl SCfg {
             .collect();
     }
 }
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug,PartialEq)]
 pub struct SBlock {
     pub params: Vec<(Id<SValueW>, ())>,
     pub stmts: Vec<Id<SValueW>>,
     pub postcedent: SPostcedent,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub struct SPostcedent<I = Id<SValueW>, B = Id<SBlock>> {
     pub term: STerm<I, B>,
     pub catch: SCatch<I, B>,
@@ -247,7 +247,7 @@ impl<I, B> Default for SPostcedent<I, B> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 #[non_exhaustive]
 pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
     Param {
@@ -426,7 +426,7 @@ impl<I, B, F> SValue<I, B, F> {
     }
 }
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 pub struct SValueW {
     pub value: SValue,
 }
@@ -440,7 +440,7 @@ impl From<SValueW> for SValue {
         value.value
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 #[non_exhaustive]
 pub enum SCatch<I = Id<SValueW>, B = Id<SBlock>> {
     Throw,
@@ -456,7 +456,7 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     pub block: B,
     pub args: Vec<I>,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq)]
 #[non_exhaustive]
 pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
     Throw(I),
