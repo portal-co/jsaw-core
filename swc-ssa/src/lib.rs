@@ -17,6 +17,7 @@ pub mod consts;
 pub mod impls;
 pub mod rew;
 pub mod simplify;
+pub mod opt_stub;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum EdgeKind {
     Forward,
@@ -117,7 +118,7 @@ impl SCfg {
         }
     }
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 pub struct SFunc {
     pub cfg: SCfg,
     pub entry: Id<SBlock>,
@@ -194,7 +195,7 @@ impl TryFrom<TFunc> for SFunc {
         TryFrom::try_from(&value)
     }
 }
-#[derive(Default, Clone, Debug,PartialEq)]
+#[derive(Default, Clone, Debug,PartialEq,Eq)]
 pub struct SCfg {
     pub blocks: Arena<SBlock>,
     pub values: Arena<SValueW>,
@@ -227,13 +228,13 @@ impl SCfg {
             .collect();
     }
 }
-#[derive(Default, Clone, Debug,PartialEq)]
+#[derive(Default, Clone, Debug,PartialEq,Eq)]
 pub struct SBlock {
     pub params: Vec<(Id<SValueW>, ())>,
     pub stmts: Vec<Id<SValueW>>,
     pub postcedent: SPostcedent,
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 pub struct SPostcedent<I = Id<SValueW>, B = Id<SBlock>> {
     pub term: STerm<I, B>,
     pub catch: SCatch<I, B>,
@@ -247,7 +248,7 @@ impl<I, B> Default for SPostcedent<I, B> {
     }
 }
 
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 #[non_exhaustive]
 pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
     Param {
@@ -426,7 +427,7 @@ impl<I, B, F> SValue<I, B, F> {
     }
 }
 #[repr(transparent)]
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 pub struct SValueW {
     pub value: SValue,
 }
@@ -440,7 +441,7 @@ impl From<SValueW> for SValue {
         value.value
     }
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 #[non_exhaustive]
 pub enum SCatch<I = Id<SValueW>, B = Id<SBlock>> {
     Throw,
@@ -456,7 +457,7 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     pub block: B,
     pub args: Vec<I>,
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug,PartialEq,Eq)]
 #[non_exhaustive]
 pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
     Throw(I),

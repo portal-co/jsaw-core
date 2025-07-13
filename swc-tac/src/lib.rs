@@ -15,7 +15,7 @@ use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
-use swc_common::{Span, Spanned, SyntaxContext};
+use swc_common::{EqIgnoreSpan, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     BinaryOp, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
@@ -458,6 +458,7 @@ pub enum PropKey<I = Ident> {
     Lit(Ident),
     Computed(I),
 }
+
 impl<I> PropKey<I> {
     pub fn as_ref(&self) -> PropKey<&I> {
         match self {
@@ -520,11 +521,11 @@ impl<I, F> PropVal<I, F> {
         })
     }
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TCallee<I = Ident> {
     Val(I),
-    Member { r#fn: I, member: I },
-    PrivateMember { r#fn: I, member: Ident },
+    Member { func: I, member: I },
+    PrivateMember { func: I, member: Ident },
     Import,
     // Static(Ident),
 }
@@ -532,9 +533,9 @@ impl<I> TCallee<I> {
     pub fn as_ref(&self) -> TCallee<&I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
-            TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
-            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
-                r#fn,
+            TCallee::Member { func: r#fn, member } => TCallee::Member { func: r#fn, member },
+            TCallee::PrivateMember { func: r#fn, member } => TCallee::PrivateMember {
+                func: r#fn,
                 member: member.clone(),
             },
             TCallee::Import => TCallee::Import,
@@ -544,9 +545,9 @@ impl<I> TCallee<I> {
     pub fn as_mut(&mut self) -> TCallee<&mut I> {
         match self {
             TCallee::Val(a) => TCallee::Val(a),
-            TCallee::Member { r#fn, member } => TCallee::Member { r#fn, member },
-            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
-                r#fn,
+            TCallee::Member { func: r#fn, member } => TCallee::Member { func: r#fn, member },
+            TCallee::PrivateMember { func: r#fn, member } => TCallee::PrivateMember {
+                func: r#fn,
                 member: member.clone(),
             },
             TCallee::Import => TCallee::Import,
@@ -556,12 +557,12 @@ impl<I> TCallee<I> {
     pub fn map<J: Ord, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<TCallee<J>, E> {
         Ok(match self {
             TCallee::Val(a) => TCallee::Val(f(a)?),
-            TCallee::Member { r#fn, member } => TCallee::Member {
-                r#fn: f(r#fn)?,
+            TCallee::Member { func: r#fn, member } => TCallee::Member {
+                func: f(r#fn)?,
                 member: f(member)?,
             },
-            TCallee::PrivateMember { r#fn, member } => TCallee::PrivateMember {
-                r#fn: f(r#fn)?,
+            TCallee::PrivateMember { func: r#fn, member } => TCallee::PrivateMember {
+                func: f(r#fn)?,
                 member,
             },
             TCallee::Import => TCallee::Import,
@@ -569,7 +570,7 @@ impl<I> TCallee<I> {
         })
     }
 }
-#[derive(Clone, Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Item<I = Ident, F = TFunc> {
     Just {
@@ -601,6 +602,10 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Call {
         callee: TCallee<I>,
+        args: Vec<I>,
+    },
+    New {
+        class: I,
         args: Vec<I>,
     },
     Obj {
@@ -657,6 +662,10 @@ impl<I, F> Item<I, F> {
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_ref(),
+                args: args.iter().collect(),
+            },
+            Item::New { class, args } => Item::New {
+                class,
                 args: args.iter().collect(),
             },
             Item::Obj { members } => Item::Obj {
@@ -725,6 +734,10 @@ impl<I, F> Item<I, F> {
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_mut(),
+                args: args.iter_mut().collect(),
+            },
+            Item::New { class, args } => Item::New {
+                class,
                 args: args.iter_mut().collect(),
             },
             Item::Obj { members } => Item::Obj {
@@ -807,6 +820,13 @@ impl<I, F> Item<I, F> {
             Item::Lit { lit } => Item::Lit { lit },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.map(&mut |a| f(cx, a))?,
+                args: args
+                    .into_iter()
+                    .map(|a| f(cx, a))
+                    .collect::<Result<Vec<J>, E>>()?,
+            },
+            Item::New { class, args } => Item::New {
+                class: f(cx, class)?,
                 args: args
                     .into_iter()
                     .map(|a| f(cx, a))
@@ -912,15 +932,16 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
-                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { r#fn: a, member: _ } => {
+                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
                         vec![a]
                     }
-                    swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
+                    swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
                     TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter()),
             ),
+            Item::New { class, args } => Box::new(args.iter().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
                     PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
@@ -978,15 +999,16 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
-                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { r#fn: a, member: _ } => {
+                    swc_tac::TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
                         vec![a]
                     }
-                    swc_tac::TCallee::Member { r#fn, member } => vec![r#fn, member],
+                    swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
                     TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut()),
             ),
+            Item::New { class, args } => Box::new(args.iter_mut().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter_mut().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
                     PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
@@ -1648,6 +1670,29 @@ impl Trans<'_> {
                 };
                 return Ok((right, t));
             }
+            Expr::New(n) => {
+                let obj;
+                (obj, t) = self.expr(i, o, b, t, &n.callee)?;
+                let args = n
+                    .args
+                    .iter()
+                    .flatten()
+                    .map(|a| {
+                        let arg;
+                        (arg, t) = self.expr(i, o, b, t, &a.expr)?;
+                        anyhow::Ok(arg)
+                    })
+                    .collect::<anyhow::Result<_>>()?;
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::New { class: obj, args },
+                    span: n.span(),
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
+            }
             Expr::Call(call) => {
                 let c = match &call.callee {
                     Callee::Import(i) => TCallee::Import,
@@ -1657,13 +1702,13 @@ impl Trans<'_> {
                             (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
                             match &m.prop {
                                 MemberProp::PrivateName(p) => TCallee::PrivateMember {
-                                    r#fn,
+                                    func: r#fn,
                                     member: (p.name.clone(), Default::default()),
                                 },
                                 _ => {
                                     let member;
                                     (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
-                                    TCallee::Member { r#fn, member }
+                                    TCallee::Member { func: r#fn, member }
                                 }
                             }
                         }

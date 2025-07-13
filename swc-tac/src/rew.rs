@@ -7,7 +7,7 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::{ArrayLit, Param, PrivateMethod, PrivateName};
+use swc_ecma_ast::{ArrayLit, NewExpr, Param, PrivateMethod, PrivateName};
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
 use swc_ecma_ast::{AssignOp, ExprOrSpread};
@@ -194,7 +194,7 @@ impl Rew {
                             portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
                                 span,
                                 op: BinaryOp::BitOr,
-                                left: _sr(a,tcfg,state,span),
+                                left: _sr(a, tcfg, state, span),
                                 right: Box::new(Expr::Lit(Lit::Num(Number {
                                     span,
                                     value: 0.0,
@@ -306,6 +306,24 @@ impl Rew {
                         }
                     },
                     crate::Item::Lit { lit } => Expr::Lit(lit.clone()),
+                    Item::New { class, args } => {
+                        mark = true;
+                        Expr::New(NewExpr {
+                            span,
+                            ctxt: SyntaxContext::empty(),
+                            callee: sr(class),
+                            type_args: None,
+                            args: Some(
+                                args.iter()
+                                    .map(&mut sr)
+                                    .map(|e| ExprOrSpread {
+                                        spread: None,
+                                        expr: e,
+                                    })
+                                    .collect(),
+                            ),
+                        })
+                    }
                     crate::Item::Call { callee, args } => {
                         mark = true;
                         Expr::Call(CallExpr {
@@ -313,7 +331,7 @@ impl Rew {
                             ctxt: SyntaxContext::empty(),
                             callee: 'a: {
                                 swc_ecma_ast::Callee::Expr(match callee {
-                                    crate::TCallee::Member { r#fn, member } => {
+                                    crate::TCallee::Member { func: r#fn, member } => {
                                         let f = sr(r#fn);
                                         Box::new(Expr::Member(MemberExpr {
                                             span: span,
@@ -326,7 +344,7 @@ impl Rew {
                                             ),
                                         }))
                                     }
-                                    TCallee::PrivateMember { r#fn, member } => {
+                                    TCallee::PrivateMember { func: r#fn, member } => {
                                         let f = sr(r#fn);
                                         Box::new(Expr::Member(MemberExpr {
                                             span: span,
