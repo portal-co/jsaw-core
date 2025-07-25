@@ -265,11 +265,32 @@ impl Rew {
                         cond,
                         then,
                         otherwise,
-                    } => Expr::Cond(CondExpr {
+                    } => Expr::Seq(SeqExpr {
                         span,
-                        test: sr(cond),
-                        cons: sr(then),
-                        alt: sr(otherwise),
+                        exprs: [cond, then, otherwise]
+                            .map(|a| {
+                                let s = sr(a);
+                                let n = tcfg.refs().filter(|left| a == left).count();
+                                match n {
+                                    0 | 1 => Box::new(Expr::Assign(AssignExpr {
+                                        span,
+                                        op: AssignOp::Assign,
+                                        left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                            ident(a, span).into(),
+                                        )),
+                                        right: s,
+                                    })),
+                                    _ => s,
+                                }
+                            })
+                            .into_iter()
+                            .chain([Box::new(Expr::Cond(CondExpr {
+                                span,
+                                test: sr(cond),
+                                cons: sr(then),
+                                alt: sr(otherwise),
+                            }))])
+                            .collect(),
                     }),
                     crate::Item::Just { id } => Expr::Ident(ident(id, span)),
                     crate::Item::Bin { left, right, op } => Expr::Bin(BinExpr {
