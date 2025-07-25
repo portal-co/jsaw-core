@@ -27,7 +27,7 @@ pub mod lam;
 pub mod rew;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
-pub enum LId<I = Ident, M: IntoIterator<Item = I> = [I; 1]> {
+pub enum LId<I = Ident, M = [I; 1]> {
     Id { id: I },
     Member { obj: I, mem: M },
     Private { obj: I, id: Ident },
@@ -37,10 +37,10 @@ impl<I> LId<I> {
         self.map2(f, &mut |cx, a| cx(a), &mut |cx, [a]| cx(a).map(|b| [b]))
     }
 }
-impl<I, M: IntoIterator<Item = I>> LId<I, M> {
+impl<I, M> LId<I, M> {
     pub fn as_ref<'a>(&'a self) -> LId<&'a I, &'a M>
-    where
-        &'a M: IntoIterator<Item = &'a I>,
+where
+        // &'a M: IntoIterator<Item = &'a I>,
     {
         match self {
             LId::Id { id } => LId::Id { id },
@@ -52,8 +52,8 @@ impl<I, M: IntoIterator<Item = I>> LId<I, M> {
         }
     }
     pub fn as_mut<'a>(&'a mut self) -> LId<&'a mut I, &'a mut M>
-    where
-        &'a mut M: IntoIterator<Item = &'a mut I>,
+where
+        // &'a mut M: IntoIterator<Item = &'a mut I>,
     {
         match self {
             LId::Id { id } => LId::Id { id },
@@ -64,14 +64,17 @@ impl<I, M: IntoIterator<Item = I>> LId<I, M> {
             },
         }
     }
-    pub fn refs(self) -> impl Iterator<Item = I> {
+    pub fn refs(self) -> impl Iterator<Item = I>
+    where
+        M: IntoIterator<Item = I>,
+    {
         match self {
             LId::Id { id } => Either::Left(once(id)),
             LId::Member { obj, mem } => Either::Right(once(obj).chain(mem)),
             LId::Private { id, obj } => Either::Left(once(obj)),
         }
     }
-    pub fn map2<Cx, J, N: IntoIterator<Item = J>, E>(
+    pub fn map2<Cx, J, N, E>(
         self,
         cx: &mut Cx,
         f: &mut (dyn FnMut(&mut Cx, I) -> Result<J, E> + '_),
