@@ -268,22 +268,26 @@ impl Rew {
                     } => Expr::Seq(SeqExpr {
                         span,
                         exprs: [cond, then, otherwise]
-                            .map(|a| {
-                                let s = sr(a);
-                                let n = tcfg.refs().filter(|left| a == left).count();
-                                match n {
-                                    0 | 1 => Box::new(Expr::Assign(AssignExpr {
-                                        span,
-                                        op: AssignOp::Assign,
-                                        left: AssignTarget::Simple(SimpleAssignTarget::Ident(
-                                            ident(a, span).into(),
-                                        )),
-                                        right: s,
-                                    })),
-                                    _ => s,
+                            .map(|a| match tcfg.def(LId::Id { id: a.clone() }) {
+                                Some(Item::Lit { .. }) => None,
+                                _ => {
+                                    let s = sr(a);
+                                    let n = tcfg.refs().filter(|left| a == left).count();
+                                    Some(match n {
+                                        0 | 1 => Box::new(Expr::Assign(AssignExpr {
+                                            span,
+                                            op: AssignOp::Assign,
+                                            left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                                ident(a, span).into(),
+                                            )),
+                                            right: s,
+                                        })),
+                                        _ => s,
+                                    })
                                 }
                             })
                             .into_iter()
+                            .flatten()
                             .chain([Box::new(Expr::Cond(CondExpr {
                                 span,
                                 test: sr(cond),
