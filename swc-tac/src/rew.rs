@@ -7,7 +7,7 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::{ArrayLit, NewExpr, Param, PrivateMethod, PrivateName};
+use swc_ecma_ast::{ArrayLit, CondExpr, NewExpr, Param, PrivateMethod, PrivateName};
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
 use swc_ecma_ast::{AssignOp, ExprOrSpread};
@@ -189,6 +189,7 @@ impl Rew {
                     state: &mut HashMap<Ident, Box<Expr>>,
                     span: Span,
                 ) -> Box<Expr> {
+                    let n = tcfg.refs().filter(|a| a == left).count();
                     match tcfg.def(crate::LId::Id { id: left.clone() }) {
                         Some(Item::Asm { value }) => match value {
                             portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
@@ -206,17 +207,20 @@ impl Rew {
                         Some(Item::Lit { lit }) => Box::new(Expr::Lit(lit.clone())),
                         _ => match state.remove(left) {
                             None => Box::new(Expr::Ident(ident(left, span))),
-                            Some(right) => Box::new(Expr::Assign(AssignExpr {
-                                span: right.span(),
-                                op: AssignOp::Assign,
-                                left: AssignTarget::Simple(SimpleAssignTarget::Ident(
-                                    BindingIdent {
-                                        id: ident(left, span),
-                                        type_ann: None,
-                                    },
-                                )),
-                                right,
-                            })),
+                            Some(right) => match n {
+                                0 | 1 => right,
+                                _ => Box::new(Expr::Assign(AssignExpr {
+                                    span: right.span(),
+                                    op: AssignOp::Assign,
+                                    left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                        BindingIdent {
+                                            id: ident(left, span),
+                                            type_ann: None,
+                                        },
+                                    )),
+                                    right,
+                                })),
+                            },
                         },
                     }
                 }
@@ -257,6 +261,16 @@ impl Rew {
                 };
 
                 let right = Box::new(match &statement_data.right {
+                    Item::Select {
+                        cond,
+                        then,
+                        otherwise,
+                    } => Expr::Cond(CondExpr {
+                        span,
+                        test: sr(cond),
+                        cons: sr(then),
+                        alt: sr(otherwise),
+                    }),
                     crate::Item::Just { id } => Expr::Ident(ident(id, span)),
                     crate::Item::Bin { left, right, op } => Expr::Bin(BinExpr {
                         span: span,

@@ -11,6 +11,7 @@ use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
+use portal_jsc_swc_util::brighten::Purity;
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
@@ -643,6 +644,11 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Undef,
     This,
+    Select {
+        cond: I,
+        then: I,
+        otherwise: I,
+    },
     // Intrinsic {
     //     value: Native<I>,
     // },
@@ -723,10 +729,28 @@ impl<I, F> Item<I, F> {
                     })
                     .collect(),
             },
+            Item::Select {
+                cond,
+                then,
+                otherwise,
+            } => Item::Select {
+                cond,
+                then,
+                otherwise,
+            },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
         match self {
+            Item::Select {
+                cond,
+                then,
+                otherwise,
+            } => Item::Select {
+                cond,
+                then,
+                otherwise,
+            },
             Item::Just { id } => Item::Just { id },
             Item::Bin { left, right, op } => Item::Bin {
                 left,
@@ -807,6 +831,15 @@ impl<I, F> Item<I, F> {
         g: &mut (dyn FnMut(&mut C, F) -> Result<G, E> + '_),
     ) -> Result<Item<J, G>, E> {
         Ok(match self {
+            Item::Select {
+                cond,
+                then,
+                otherwise,
+            } => Item::Select {
+                cond: f(cx, cond)?,
+                then: f(cx, then)?,
+                otherwise: f(cx, otherwise)?,
+            },
             Item::Just { id } => Item::Just { id: f(cx, id)? },
             Item::Bin { left, right, op } => Item::Bin {
                 left: f(cx, left)?,
@@ -989,6 +1022,11 @@ impl<I, F> Item<I, F> {
                 };
                 v.chain(w)
             }))),
+            Item::Select {
+                cond,
+                then,
+                otherwise,
+            } => Box::new([cond, then, otherwise].into_iter()),
             // Item::Intrinsic { value } => {
             //     let mut v = Vec::default();
             //     value
@@ -1002,6 +1040,11 @@ impl<I, F> Item<I, F> {
     pub fn refs_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
         use crate as swc_tac;
         match self {
+            Item::Select {
+                cond,
+                then,
+                otherwise,
+            } => Box::new([cond, then, otherwise].into_iter()),
             swc_tac::Item::Just { id } => Box::new(once(id)),
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
@@ -1534,54 +1577,74 @@ impl Trans<'_> {
             Expr::Cond(c) => {
                 let v;
                 (v, t) = self.expr(i, o, b, t, &c.test)?;
-                let then = o.blocks.alloc(TBlock {
-                    stmts: vec![],
-                    post: TPostecedent {
-                        catch: o.blocks[t].post.catch.clone(),
-                        term: Default::default(),
-                        orig_span: Some(c.span),
-                    },
-                });
-                let els = o.blocks.alloc(TBlock {
-                    stmts: vec![],
-                    post: TPostecedent {
-                        catch: o.blocks[t].post.catch.clone(),
-                        term: Default::default(),
-                        orig_span: Some(c.span),
-                    },
-                });
-                let done = o.blocks.alloc(TBlock {
-                    stmts: vec![],
-                    post: TPostecedent {
-                        catch: o.blocks[t].post.catch.clone(),
-                        term: Default::default(),
-                        orig_span: Some(c.span),
-                    },
-                });
-                o.blocks[t].post.term = TTerm::CondJmp {
-                    cond: v,
-                    if_true: then,
-                    if_false: els,
-                };
-                let tmp = o.regs.alloc(());
-                o.decls.insert(tmp.clone());
-                let (a, then) = self.expr(i, o, b, then, &c.cons)?;
-                o.blocks[then].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Just { id: a },
-                    span: s.span(),
-                });
-                o.blocks[then].post.term = TTerm::Jmp(done);
-                let (a, els) = self.expr(i, o, b, els, &c.alt)?;
-                o.blocks[els].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Just { id: a },
-                    span: s.span(),
-                });
-                o.blocks[els].post.term = TTerm::Jmp(done);
-                return Ok((tmp, done));
+                if c.cons.is_pure() && c.alt.is_pure() {
+                    let cons;
+                    let alt;
+                    (cons, t) = self.expr(i, o, b, t, &c.cons)?;
+                    (alt, t) = self.expr(i, o, b, t, &c.alt)?;
+                    let tmp = o.regs.alloc(());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: tmp.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Select {
+                            cond: v,
+                            then: cons,
+                            otherwise: alt,
+                        },
+                        span: c.span(),
+                    });
+                    o.decls.insert(tmp.clone());
+                    Ok((tmp, t))
+                } else {
+                    let then = o.blocks.alloc(TBlock {
+                        stmts: vec![],
+                        post: TPostecedent {
+                            catch: o.blocks[t].post.catch.clone(),
+                            term: Default::default(),
+                            orig_span: Some(c.span),
+                        },
+                    });
+                    let els = o.blocks.alloc(TBlock {
+                        stmts: vec![],
+                        post: TPostecedent {
+                            catch: o.blocks[t].post.catch.clone(),
+                            term: Default::default(),
+                            orig_span: Some(c.span),
+                        },
+                    });
+                    let done = o.blocks.alloc(TBlock {
+                        stmts: vec![],
+                        post: TPostecedent {
+                            catch: o.blocks[t].post.catch.clone(),
+                            term: Default::default(),
+                            orig_span: Some(c.span),
+                        },
+                    });
+                    o.blocks[t].post.term = TTerm::CondJmp {
+                        cond: v,
+                        if_true: then,
+                        if_false: els,
+                    };
+                    let tmp = o.regs.alloc(());
+                    o.decls.insert(tmp.clone());
+                    let (a, then) = self.expr(i, o, b, then, &c.cons)?;
+                    o.blocks[then].stmts.push(TStmt {
+                        left: LId::Id { id: tmp.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Just { id: a },
+                        span: s.span(),
+                    });
+                    o.blocks[then].post.term = TTerm::Jmp(done);
+                    let (a, els) = self.expr(i, o, b, els, &c.alt)?;
+                    o.blocks[els].stmts.push(TStmt {
+                        left: LId::Id { id: tmp.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Just { id: a },
+                        span: s.span(),
+                    });
+                    o.blocks[els].post.term = TTerm::Jmp(done);
+                    return Ok((tmp, done));
+                }
             }
             Expr::This(this) => {
                 let id = match self.this.clone() {
