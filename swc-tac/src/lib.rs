@@ -15,7 +15,7 @@ use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
-use swc_common::{EqIgnoreSpan, Span, Spanned, SyntaxContext};
+use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     BinaryOp, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
@@ -148,7 +148,7 @@ impl TFunc {
         value: &Func,
         import_mapper: StaticMap<ImportMapperReq, Option<&(dyn ImportMapper + '_)>>,
         semantic: &SemanticCfg,
-        privates: &BTreeSet<Ident>,
+        privates: &BTreeMap<Atom, SyntaxContext>,
     ) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
         let entry = Trans {
@@ -193,7 +193,7 @@ impl<'a> TryFrom<&'a Func> for TFunc {
             value,
             linearize::static_map! {_ => None},
             &SemanticCfg::default(),
-            &BTreeSet::default(),
+            &BTreeMap::default(),
         )
     }
 }
@@ -1075,7 +1075,7 @@ pub struct Trans<'a> {
     pub this: Option<Ident>,
     pub import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
     pub semantic: &'a SemanticCfg,
-    pub privates: &'a BTreeSet<Ident>,
+    pub privates: &'a BTreeMap<Atom, SyntaxContext>,
 }
 impl Trans<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
@@ -1269,7 +1269,13 @@ impl Trans<'_> {
         let i = match &s.prop {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
-                mem: (p.name.clone(), Default::default()),
+                mem: (
+                    p.name.clone(),
+                    self.privates
+                        .get(&p.name)
+                        .context("in getting the private")?
+                        .clone(),
+                ),
             },
             _ => {
                 let mem;
@@ -1343,10 +1349,16 @@ impl Trans<'_> {
         for m in s.body.iter() {
             match m {
                 ClassMember::PrivateMethod(m) => {
-                    privates.insert((m.key.name.clone(), SyntaxContext::default()));
+                    privates.insert(
+                        m.key.name.clone(),
+                        SyntaxContext::empty().apply_mark(Mark::new()),
+                    );
                 }
                 ClassMember::PrivateProp(m) => {
-                    privates.insert((m.key.name.clone(), SyntaxContext::default()));
+                    privates.insert(
+                        m.key.name.clone(),
+                        SyntaxContext::empty().apply_mark(Mark::new()),
+                    );
                 }
                 _ => {}
             }
@@ -1409,7 +1421,13 @@ impl Trans<'_> {
                         } else {
                             MemberFlags::empty()
                         } | MemberFlags::PRIVATE,
-                        PropKey::Lit((p.key.name.clone(), Default::default())),
+                        PropKey::Lit((
+                            p.key.name.clone(),
+                            privates
+                                .get(&p.key.name)
+                                .context("in getting the private")?
+                                .clone(),
+                        )),
                         PropVal::Item(match p.value.as_ref() {
                             None => None,
                             Some(a) => Some({
@@ -1438,7 +1456,13 @@ impl Trans<'_> {
                         } else {
                             MemberFlags::empty()
                         } | MemberFlags::PRIVATE,
-                        PropKey::Lit((p.key.name.clone(), Default::default())),
+                        PropKey::Lit((
+                            p.key.name.clone(),
+                            privates
+                                .get(&p.key.name)
+                                .context("in getting the private")?
+                                .clone(),
+                        )),
                         x,
                     ));
                 }
@@ -1619,7 +1643,10 @@ impl Trans<'_> {
                                                 private = true;
                                                 mem = (
                                                     private_name.name.clone(),
-                                                    SyntaxContext::default(),
+                                                    self.privates
+                                                        .get(&private_name.name)
+                                                        .context("in getting the private")?
+                                                        .clone(),
                                                 );
                                                 break 'a;
                                             }
