@@ -265,37 +265,51 @@ impl Rew {
                         cond,
                         then,
                         otherwise,
-                    } => Expr::Seq(SeqExpr {
-                        span,
-                        exprs: [cond, then, otherwise]
-                            .map(|a| match tcfg.def(LId::Id { id: a.clone() }) {
-                                Some(Item::Lit { .. }) => None,
-                                _ => {
-                                    let s = sr(a);
-                                    let n = tcfg.refs().filter(|left| a == left).count();
-                                    Some(match n {
-                                        0 | 1 => Box::new(Expr::Assign(AssignExpr {
-                                            span,
-                                            op: AssignOp::Assign,
-                                            left: AssignTarget::Simple(SimpleAssignTarget::Ident(
-                                                ident(a, span).into(),
-                                            )),
-                                            right: s,
-                                        })),
-                                        _ => s,
-                                    })
+                    } => match 'a: {
+                        Box::new(Expr::Seq(SeqExpr {
+                            span,
+                            exprs: match [cond, then, otherwise]
+                                .map(|a| match tcfg.def(LId::Id { id: a.clone() }) {
+                                    Some(Item::Lit { .. }) => None,
+                                    _ => {
+                                        let s = sr(a);
+                                        let n = tcfg.refs().filter(|left| a == left).count();
+                                        Some(match n {
+                                            0 | 1 => Box::new(Expr::Assign(AssignExpr {
+                                                span,
+                                                op: AssignOp::Assign,
+                                                left: AssignTarget::Simple(
+                                                    SimpleAssignTarget::Ident(
+                                                        ident(a, span).into(),
+                                                    ),
+                                                ),
+                                                right: s,
+                                            })),
+                                            _ => s,
+                                        })
+                                    }
+                                })
+                                .into_iter()
+                                .flatten()
+                                .chain([sr(cond)])
+                                .collect::<Vec<_>>()
+                            {
+                                mut v => {
+                                    if v.len() == 1 {
+                                        break 'a v.pop().unwrap();
+                                    }
+                                    v
                                 }
-                            })
-                            .into_iter()
-                            .flatten()
-                            .chain([Box::new(Expr::Cond(CondExpr {
-                                span,
-                                test: sr(cond),
-                                cons: sr(then),
-                                alt: sr(otherwise),
-                            }))])
-                            .collect(),
-                    }),
+                            },
+                        }))
+                    } {
+                        seq => Expr::Cond(CondExpr {
+                            span,
+                            test: seq,
+                            cons: sr(then),
+                            alt: sr(otherwise),
+                        }),
+                    },
                     crate::Item::Just { id } => Expr::Ident(ident(id, span)),
                     crate::Item::Bin { left, right, op } => Expr::Bin(BinExpr {
                         span: span,
