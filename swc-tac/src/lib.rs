@@ -26,7 +26,11 @@ use swc_ecma_ast::Id as Ident;
 pub mod lam;
 pub mod rew;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Private(pub Atom,pub SyntaxContext);
+pub struct Private {
+    pub sym: Atom,
+    pub ctxt: SyntaxContext,
+    pub span: Span,
+}
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
 pub enum LId<I = Ident, M = [I; 1]> {
@@ -1271,13 +1275,15 @@ impl Trans<'_> {
         let i = match &s.prop {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
-                mem: Private(
-                    p.name.clone(),
-                    self.privates
+                mem: Private {
+                    sym: p.name.clone(),
+                    ctxt: self
+                        .privates
                         .get(&p.name)
                         .context("in getting the private")?
                         .clone(),
-                ),
+                    span: p.span,
+                },
             },
             _ => {
                 let mem;
@@ -1644,15 +1650,19 @@ impl Trans<'_> {
                                             }
                                             swc_ecma_ast::MemberProp::PrivateName(private_name) => {
                                                 private = true;
-                                                priv_ = Some(Private (
-                                                    private_name.name.clone(),
-                                                    self.privates
+                                                priv_ = Some(Private {
+                                                    sym: private_name.name.clone(),
+                                                    ctxt: self
+                                                        .privates
                                                         .get(&private_name.name)
                                                         .context("in getting the private")?
                                                         .clone(),
-                                                ));
-                                                mem = match priv_.clone().unwrap(){
-                                                    Private(a,b) => (a,b)
+                                                    span: private_name.span,
+                                                });
+                                                mem = match priv_.clone().unwrap() {
+                                                    Private {
+                                                        sym: a, ctxt: b, ..
+                                                    } => (a, b),
                                                 };
                                                 break 'a;
                                             }
@@ -1758,7 +1768,11 @@ impl Trans<'_> {
                             match &m.prop {
                                 MemberProp::PrivateName(p) => TCallee::PrivateMember {
                                     func: r#fn,
-                                    member: Private(p.name.clone(), Default::default()),
+                                    member: Private {
+                                        sym: p.name.clone(),
+                                        ctxt: Default::default(),
+                                        span: p.span,
+                                    },
                                 },
                                 _ => {
                                     let member;

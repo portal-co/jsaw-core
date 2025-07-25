@@ -27,7 +27,7 @@ use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
 
-use crate::{Item, MemberFlags, PropKey, TBlock, TCallee, TCfg, TFunc};
+use crate::{Item, LId, MemberFlags, PropKey, TBlock, TCallee, TCfg, TFunc};
 
 impl<'a> TryFrom<&'a TFunc> for Func {
     type Error = anyhow::Error;
@@ -243,6 +243,16 @@ impl Rew {
                             ),
                         }))
                     }
+                    LId::Private { obj, id } => {
+                        AssignTarget::Simple(swc_ecma_ast::SimpleAssignTarget::Member(MemberExpr {
+                            span: span,
+                            obj: sr(obj),
+                            prop: swc_ecma_ast::MemberProp::PrivateName(PrivateName {
+                                span: id.span,
+                                name: id.sym.clone(),
+                            }),
+                        }))
+                    }
                     _ => todo!(),
                 };
 
@@ -278,8 +288,8 @@ impl Rew {
                         span: span,
                         obj: sr(obj),
                         prop: swc_ecma_ast::MemberProp::PrivateName(PrivateName {
-                            span,
-                            name: mem.0.clone(),
+                            span: mem.span,
+                            name: mem.sym.clone(),
                         }),
                     }),
                     crate::Item::Func { func, arrow } => match func.try_into()? {
@@ -352,7 +362,7 @@ impl Rew {
                                             prop: swc_ecma_ast::MemberProp::PrivateName(
                                                 PrivateName {
                                                     span,
-                                                    name: member.0.clone(),
+                                                    name: member.sym.clone(),
                                                 },
                                             ),
                                         }))
