@@ -148,6 +148,7 @@ impl TFunc {
         value: &Func,
         import_mapper: StaticMap<ImportMapperReq, Option<&(dyn ImportMapper + '_)>>,
         semantic: &SemanticCfg,
+        privates: &BTreeSet<Ident>,
     ) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
         let entry = Trans {
@@ -157,6 +158,7 @@ impl TFunc {
             this: None,
             import_mapper: static_map! {a =>import_mapper[a].as_deref()},
             semantic,
+            privates,
         }
         .trans(&value.cfg, &mut cfg, value.entry)?;
         cfg.ts_retty = value.cfg.ts_retty.clone();
@@ -191,6 +193,7 @@ impl<'a> TryFrom<&'a Func> for TFunc {
             value,
             linearize::static_map! {_ => None},
             &SemanticCfg::default(),
+            &BTreeSet::default(),
         )
     }
 }
@@ -1072,6 +1075,7 @@ pub struct Trans<'a> {
     pub this: Option<Ident>,
     pub import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
     pub semantic: &'a SemanticCfg,
+    pub privates: &'a BTreeSet<Ident>,
 }
 impl Trans<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
@@ -1335,6 +1339,18 @@ impl Trans<'_> {
             PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
         )> = Default::default();
         let mut constructor: Option<TFunc> = Default::default();
+        let mut privates = self.privates.clone();
+        for m in s.body.iter() {
+            match m {
+                ClassMember::PrivateMethod(m) => {
+                    privates.insert((m.key.name.clone(), SyntaxContext::default()));
+                }
+                ClassMember::PrivateProp(m) => {
+                    privates.insert((m.key.name.clone(), SyntaxContext::default()));
+                }
+                _ => {}
+            }
+        }
         for m in s.body.iter() {
             match m {
                 ClassMember::ClassProp(p) => {
@@ -1370,6 +1386,7 @@ impl Trans<'_> {
                         .try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
                         self.semantic,
+                        &privates,
                     )?)
                 }
                 ClassMember::Method(c) => {
@@ -1377,6 +1394,7 @@ impl Trans<'_> {
                         &(&*c.function).clone().try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
                         self.semantic,
+                        &privates,
                     )?;
                     members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1407,6 +1425,7 @@ impl Trans<'_> {
                         &(&*p.function).clone().try_into()?,
                         static_map! {a => self.import_mapper[a].as_deref()},
                         self.semantic,
+                        &privates,
                     )?;
                     let x = match &p.kind {
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1807,6 +1826,7 @@ impl Trans<'_> {
                                         },
                                         import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
                                         semantic: self.semantic,
+                                        privates: self.privates,
                                     };
                                     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
                                     o.blocks[t].post.term = TTerm::Jmp(t3);
@@ -2065,6 +2085,7 @@ impl Trans<'_> {
                                             &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
                                             self.semantic,
+                                            self.privates,
                                         )?
                                     });
                                     prop_name!(v => &getter_prop.key)
@@ -2092,6 +2113,7 @@ impl Trans<'_> {
                                             &c,
                                             static_map! {a => self.import_mapper[a].as_deref()},
                                             self.semantic,
+                                            self.privates,
                                         )?
                                     });
                                     prop_name!(v => &setter_prop.key)
@@ -2101,6 +2123,7 @@ impl Trans<'_> {
                                         &(&*method_prop.function).clone().try_into()?,
                                         static_map! {a => self.import_mapper[a].as_deref()},
                                         self.semantic,
+                                        self.privates,
                                     )?);
                                     prop_name!(v => &method_prop.key)
                                 }
