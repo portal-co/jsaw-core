@@ -26,11 +26,13 @@ use swc_ecma_ast::Id as Ident;
 pub mod lam;
 pub mod rew;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Private(pub Atom,pub SyntaxContext);
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
 pub enum LId<I = Ident, M = [I; 1]> {
     Id { id: I },
     Member { obj: I, mem: M },
-    Private { obj: I, id: Ident },
+    Private { obj: I, id: Private },
 }
 impl<I> LId<I> {
     pub fn map<J, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<LId<J>, E> {
@@ -531,7 +533,7 @@ impl<I, F> PropVal<I, F> {
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { func: I, member: I },
-    PrivateMember { func: I, member: Ident },
+    PrivateMember { func: I, member: Private },
     Import,
     // Static(Ident),
 }
@@ -597,7 +599,7 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     PrivateMem {
         obj: I,
-        mem: Ident,
+        mem: Private,
     },
     Func {
         func: F,
@@ -1269,7 +1271,7 @@ impl Trans<'_> {
         let i = match &s.prop {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
-                mem: (
+                mem: Private(
                     p.name.clone(),
                     self.privates
                         .get(&p.name)
@@ -1621,6 +1623,7 @@ impl Trans<'_> {
                             SimpleAssignTarget::Member(m) => {
                                 let obj;
                                 let mem;
+                                let mut priv_ = None;
                                 let mut private = false;
                                 let e;
                                 (obj, t) = self.expr(i, o, b, t, &m.obj)?;
@@ -1641,13 +1644,16 @@ impl Trans<'_> {
                                             }
                                             swc_ecma_ast::MemberProp::PrivateName(private_name) => {
                                                 private = true;
-                                                mem = (
+                                                priv_ = Some(Private (
                                                     private_name.name.clone(),
                                                     self.privates
                                                         .get(&private_name.name)
                                                         .context("in getting the private")?
                                                         .clone(),
-                                                );
+                                                ));
+                                                mem = match priv_.clone().unwrap(){
+                                                    Private(a,b) => (a,b)
+                                                };
                                                 break 'a;
                                             }
                                             swc_ecma_ast::MemberProp::Computed(
@@ -1666,7 +1672,7 @@ impl Trans<'_> {
                                             right: if private {
                                                 Item::PrivateMem {
                                                     obj: obj.clone(),
-                                                    mem: mem.clone(),
+                                                    mem: priv_.as_ref().unwrap().clone(),
                                                 }
                                             } else {
                                                 Item::Mem {
@@ -1687,7 +1693,7 @@ impl Trans<'_> {
                                     left: if private {
                                         LId::Private {
                                             obj: obj.clone(),
-                                            id: mem.clone(),
+                                            id: priv_.as_ref().unwrap().clone(),
                                         }
                                     } else {
                                         LId::Member {
@@ -1752,7 +1758,7 @@ impl Trans<'_> {
                             match &m.prop {
                                 MemberProp::PrivateName(p) => TCallee::PrivateMember {
                                     func: r#fn,
-                                    member: (p.name.clone(), Default::default()),
+                                    member: Private(p.name.clone(), Default::default()),
                                 },
                                 _ => {
                                     let member;
