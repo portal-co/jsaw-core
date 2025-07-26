@@ -588,6 +588,14 @@ impl<I> TCallee<I> {
         })
     }
 }
+pub trait ItemGetter<I = Ident, F = TFunc> {
+    fn get_item(&self, i: I) -> Option<&Item<I, F>>;
+}
+impl ItemGetter for TCfg {
+    fn get_item(&self, i: (Atom, SyntaxContext)) -> Option<&Item<(Atom, SyntaxContext), TFunc>> {
+        self.def(LId::Id { id: i })
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Item<I = Ident, F = TFunc> {

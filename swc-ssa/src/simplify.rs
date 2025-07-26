@@ -4,6 +4,7 @@ use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
+pub use swc_tac::{Item, ItemGetter};
 
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -29,14 +30,48 @@ impl SCfg {
         }
     }
 }
-pub trait SValGetter<I: Copy, B, F = SFunc> {
+
+pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
     fn val(&self, id: I) -> Option<&SValue<I, B, F>>;
+}
+#[doc(hidden)]
+pub fn _get_item<'a, I: Copy, B, F>(
+    a: &'a (dyn SValGetter<I, B, F> + 'a),
+    mut i: I,
+) -> Option<&'a Item<I, F>> {
+    loop {
+        match a.val(i)? {
+            SValue::Param { block, idx, ty } => return None,
+            SValue::Item { item, span } => return Some(item),
+            SValue::Assign { target, val } => {
+                i = *val;
+            }
+            SValue::LoadId(_) => return None,
+            SValue::StoreId { target, val } => {
+                i = *val;
+            }
+            SValue::EdgeBlocker { value, span } => {
+                i = *value;
+            }
+        }
+    }
+}
+#[macro_export]
+macro_rules! sval_item {
+    ($(<$($a:tt)*>)? $ty:ty [block $block:ty]) => {
+        impl<$($($a)*,)?I: Copy,F> $crate::simplify::ItemGetter<I,F> for $ty where Self: $crate::simplify::SValGetter<I,$block,F>{
+fn get_item(&self, i: I) -> Option<&$crate::simplify::Item<I, F>>{
+    $crate::simplify::_get_item(self,i)
+}
+        }
+    };
 }
 impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
     fn val(&self, id: Id<SValueW>) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
         Some(&self.values[id].value)
     }
 }
+sval_item!(SCfg [block Id<SBlock>]);
 pub(crate) fn default_ctx() -> ExprCtx {
     ExprCtx {
         unresolved_ctxt: SyntaxContext::empty(),

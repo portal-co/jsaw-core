@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use id_arena::{Arena, Id};
 use swc_ecma_ast::Lit;
-use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, simplify::SValGetter};
+use swc_ssa::{simplify::SValGetter, sval_item, SCatch, SPostcedent, STarget, STerm, SValue};
 use swc_tac::Item;
 pub mod impls;
 pub mod into;
@@ -126,6 +126,7 @@ impl SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc> for OptCfg {
         }
     }
 }
+sval_item!(OptCfg [block Id<OptBlock>]);
 #[derive(Clone, Debug,PartialEq,Eq)]
 pub struct OptFunc {
     pub cfg: OptCfg,
