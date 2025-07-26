@@ -64,7 +64,7 @@ impl VisitMut for Prepa<'_> {
             } else {
                 struct Traverse {
                     props: HashMap<Prop, Box<Expr>>,
-                };
+                }
                 impl VisitMut for Traverse {
                     fn visit_mut_class(&mut self, node: &mut Class) {}
                     fn visit_mut_expr(&mut self, node: &mut Expr) {
