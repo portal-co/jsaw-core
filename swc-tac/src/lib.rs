@@ -18,8 +18,9 @@ use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
-    BinaryOp, Bool, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp,
-    Number, Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
+    ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, Number, Param, Pat,
+    SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 
 use swc_ecma_ast::Id as Ident;
@@ -1143,7 +1144,11 @@ impl<I, F> Item<I, F> {
         }
     }
 }
-
+enum Frame {
+    Assign(AssignTarget, AssignOp),
+    Member(MemberProp),
+    Member2(Expr, Expr),
+}
 // #[derive(Default)]
 #[non_exhaustive]
 pub struct Trans<'a> {
@@ -1344,7 +1349,18 @@ impl Trans<'_> {
     ) -> anyhow::Result<(Ident, Id<TBlock>)> {
         let obj;
         (obj, t) = self.expr(i, o, b, t, &s.obj)?;
-        let i = match &s.prop {
+        self.member_prop(i, o, b, t, &s.prop, obj)
+    }
+    pub fn member_prop(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        s: &MemberProp,
+        obj: Ident,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        let i = match s {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
                 mem: Private {
@@ -1360,7 +1376,7 @@ impl Trans<'_> {
             _ => {
                 let mem;
                 // let e;
-                (mem, t) = self.expr(i, o, b, t, &imp(s.prop.clone()))?;
+                (mem, t) = self.expr(i, o, b, t, &imp(s.clone()))?;
                 Item::Mem { obj, mem }
             }
         };
@@ -1558,6 +1574,177 @@ impl Trans<'_> {
         o.decls.insert(tmp.clone());
         Ok((tmp, t))
     }
+    fn assign(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        tgt: &AssignTarget,
+        op: &AssignOp,
+        mut right: Ident,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match tgt {
+            swc_ecma_ast::AssignTarget::Simple(simple_assign_target) => match &simple_assign_target
+            {
+                SimpleAssignTarget::Ident(i) => {
+                    let item = match op.clone().to_update() {
+                        None => Item::Just { id: right.clone() },
+                        Some(a) => Item::Bin {
+                            left: right.clone(),
+                            right: i.id.clone().into(),
+                            op: a,
+                        },
+                    };
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id {
+                            id: i.id.clone().into(),
+                        },
+                        flags: Default::default(),
+                        right: item,
+                        span: i.span(),
+                    });
+                    // right = i.id.clone().into();
+                }
+                SimpleAssignTarget::Member(m) => {
+                    let obj;
+                    let mem;
+                    let mut priv_ = None;
+                    let mut private = false;
+                    let e;
+                    (obj, t) = self.expr(i, o, b, t, &m.obj)?;
+                    'a: {
+                        (mem, t) = self.expr(
+                            i,
+                            o,
+                            b,
+                            t,
+                            match &m.prop {
+                                swc_ecma_ast::MemberProp::Ident(ident_name) => {
+                                    e = Expr::Ident(swc_ecma_ast::Ident::new(
+                                        ident_name.sym.clone(),
+                                        ident_name.span,
+                                        Default::default(),
+                                    ));
+                                    &e
+                                }
+                                swc_ecma_ast::MemberProp::PrivateName(private_name) => {
+                                    private = true;
+                                    priv_ = Some(Private {
+                                        sym: private_name.name.clone(),
+                                        ctxt: self
+                                            .privates
+                                            .get(&private_name.name)
+                                            .context("in getting the private")?
+                                            .clone(),
+                                        span: private_name.span,
+                                    });
+                                    mem = match priv_.clone().unwrap() {
+                                        Private {
+                                            sym: a, ctxt: b, ..
+                                        } => (a, b),
+                                    };
+                                    break 'a;
+                                }
+                                swc_ecma_ast::MemberProp::Computed(computed_prop_name) => {
+                                    &computed_prop_name.expr
+                                }
+                            },
+                        )?;
+                    }
+                    let item = match op.clone().to_update() {
+                        None => Item::Just { id: right.clone() },
+                        Some(a) => {
+                            let id = o.regs.alloc(());
+                            o.blocks[t].stmts.push(TStmt {
+                                left: LId::Id { id: id.clone() },
+                                flags: ValFlags::SSA_LIKE,
+                                right: if private {
+                                    Item::PrivateMem {
+                                        obj: obj.clone(),
+                                        mem: priv_.as_ref().unwrap().clone(),
+                                    }
+                                } else {
+                                    Item::Mem {
+                                        obj: obj.clone(),
+                                        mem: mem.clone(),
+                                    }
+                                },
+                                span: m.span(),
+                            });
+                            Item::Bin {
+                                left: right.clone(),
+                                right: id,
+                                op: a,
+                            }
+                        }
+                    };
+                    o.blocks[t].stmts.push(TStmt {
+                        left: if private {
+                            LId::Private {
+                                obj: obj.clone(),
+                                id: priv_.as_ref().unwrap().clone(),
+                            }
+                        } else {
+                            LId::Member {
+                                obj: obj.clone(),
+                                mem: [mem.clone()],
+                            }
+                        },
+                        flags: Default::default(),
+                        right: item,
+                        span: m.span(),
+                    });
+                    // right = o.regs.alloc(());
+                    // o.blocks[t].stmts.push(TStmt {
+                    //     left: LId::Id { id: right.clone() },
+                    //     flags: ValFlags::SSA_LIKE,
+                    //     right: Item::Mem { obj, mem },
+                    //     span: m.span(),
+                    // });
+                    // o.decls.insert(right.clone());
+                }
+                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            },
+            swc_ecma_ast::AssignTarget::Pat(assign_target_pat) => match &assign_target_pat {
+                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            },
+        };
+        Ok((right, t))
+    }
+    fn frame(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        f: Frame,
+        s: Ident,
+        r: Ident,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match f {
+            Frame::Assign(assign_target, assign_op) => {
+                self.assign(i, o, b, t, &assign_target, &assign_op, s)
+            }
+            Frame::Member(m) => self.member_prop(i, o, b, t, &m, s),
+            Frame::Member2(a, b2) => self.member_prop(
+                i,
+                o,
+                b,
+                t,
+                &MemberProp::Computed(ComputedPropName {
+                    span: Span::dummy_with_cmt(),
+                    expr: Box::new(Expr::Cond(CondExpr {
+                        span: Span::dummy_with_cmt(),
+                        test: r.into(),
+                        cons: Box::new(a),
+                        alt: Box::new(b2),
+                    })),
+                }),
+                s,
+            ),
+        }
+    }
     pub fn expr(
         &mut self,
         i: &Cfg,
@@ -1618,23 +1805,82 @@ impl Trans<'_> {
                     }
                     _ => {}
                 }
-                if c.cons.is_pure() && c.alt.is_pure() {
+                fn px<'a, 'b>(
+                    a: &'a Expr,
+                    b: &'b Expr,
+                ) -> Option<(Vec<Frame>, &'a Expr, &'b Expr)> {
+                    if a.is_pure() && b.is_pure() {
+                        Some((vec![], a, b))
+                    } else {
+                        match (a, b) {
+                            (Expr::Assign(a), Expr::Assign(b))
+                                if a.left.eq_ignore_span(&b.left)
+                                    && a.left.as_simple().is_some_and(|s| s.is_ident())
+                                    && a.op == b.op =>
+                            {
+                                let (e, a2, b) = px(&a.right, &b.right)?;
+                                Some((
+                                    [Frame::Assign(a.left.clone(), a.op)]
+                                        .into_iter()
+                                        .chain(e)
+                                        .collect(),
+                                    a2,
+                                    b,
+                                ))
+                            }
+                            (Expr::Member(a), Expr::Member(b))
+                                if a.prop.eq_ignore_span(&b.prop) =>
+                            {
+                                let (e, a2, b) = px(&a.obj, &b.obj)?;
+                                Some((
+                                    [Frame::Member(a.prop.clone())]
+                                        .into_iter()
+                                        .chain(e)
+                                        .collect(),
+                                    a2,
+                                    b,
+                                ))
+                            }
+                            (Expr::Member(a), Expr::Member(b))
+                                if a.prop.is_computed() && b.prop.is_computed() =>
+                            {
+                                let (e, a2, b2) = px(&a.obj, &b.obj)?;
+                                Some((
+                                    [Frame::Member2(
+                                        *a.prop.as_computed().unwrap().expr.clone(),
+                                        *b.prop.as_computed().unwrap().expr.clone(),
+                                    )]
+                                    .into_iter()
+                                    .chain(e)
+                                    .collect(),
+                                    a2,
+                                    b2,
+                                ))
+                            }
+                            _ => None,
+                        }
+                    }
+                }
+                if let Some((frames, c2, a2)) = px(&c.cons, &c.alt) {
                     let cons;
                     let alt;
-                    (cons, t) = self.expr(i, o, b, t, &c.cons)?;
-                    (alt, t) = self.expr(i, o, b, t, &c.alt)?;
-                    let tmp = o.regs.alloc(());
+                    (cons, t) = self.expr(i, o, b, t, &c2)?;
+                    (alt, t) = self.expr(i, o, b, t, &a2)?;
+                    let mut tmp = o.regs.alloc(());
                     o.blocks[t].stmts.push(TStmt {
                         left: LId::Id { id: tmp.clone() },
                         flags: ValFlags::SSA_LIKE,
                         right: Item::Select {
-                            cond: v,
+                            cond: v.clone(),
                             then: cons,
                             otherwise: alt,
                         },
                         span: c.span(),
                     });
                     o.decls.insert(tmp.clone());
+                    for f in frames.into_iter().rev() {
+                        (tmp, t) = self.frame(i, o, b, t, f, tmp, v.clone())?;
+                    }
                     Ok((tmp, t))
                 } else {
                     let then = o.blocks.alloc(TBlock {
@@ -1708,135 +1954,7 @@ impl Trans<'_> {
             Expr::Assign(a) => {
                 let mut right;
                 (right, t) = self.expr(i, o, b, t, &a.right)?;
-                match &a.left {
-                    swc_ecma_ast::AssignTarget::Simple(simple_assign_target) => {
-                        match &simple_assign_target {
-                            SimpleAssignTarget::Ident(i) => {
-                                let item = match a.op.clone().to_update() {
-                                    None => Item::Just { id: right },
-                                    Some(a) => Item::Bin {
-                                        left: right,
-                                        right: i.id.clone().into(),
-                                        op: a,
-                                    },
-                                };
-                                o.blocks[t].stmts.push(TStmt {
-                                    left: LId::Id {
-                                        id: i.id.clone().into(),
-                                    },
-                                    flags: Default::default(),
-                                    right: item,
-                                    span: i.span(),
-                                });
-                                right = i.id.clone().into();
-                            }
-                            SimpleAssignTarget::Member(m) => {
-                                let obj;
-                                let mem;
-                                let mut priv_ = None;
-                                let mut private = false;
-                                let e;
-                                (obj, t) = self.expr(i, o, b, t, &m.obj)?;
-                                'a: {
-                                    (mem, t) = self.expr(
-                                        i,
-                                        o,
-                                        b,
-                                        t,
-                                        match &m.prop {
-                                            swc_ecma_ast::MemberProp::Ident(ident_name) => {
-                                                e = Expr::Ident(swc_ecma_ast::Ident::new(
-                                                    ident_name.sym.clone(),
-                                                    ident_name.span,
-                                                    Default::default(),
-                                                ));
-                                                &e
-                                            }
-                                            swc_ecma_ast::MemberProp::PrivateName(private_name) => {
-                                                private = true;
-                                                priv_ = Some(Private {
-                                                    sym: private_name.name.clone(),
-                                                    ctxt: self
-                                                        .privates
-                                                        .get(&private_name.name)
-                                                        .context("in getting the private")?
-                                                        .clone(),
-                                                    span: private_name.span,
-                                                });
-                                                mem = match priv_.clone().unwrap() {
-                                                    Private {
-                                                        sym: a, ctxt: b, ..
-                                                    } => (a, b),
-                                                };
-                                                break 'a;
-                                            }
-                                            swc_ecma_ast::MemberProp::Computed(
-                                                computed_prop_name,
-                                            ) => &computed_prop_name.expr,
-                                        },
-                                    )?;
-                                }
-                                let item = match a.op.clone().to_update() {
-                                    None => Item::Just { id: right },
-                                    Some(a) => {
-                                        let id = o.regs.alloc(());
-                                        o.blocks[t].stmts.push(TStmt {
-                                            left: LId::Id { id: id.clone() },
-                                            flags: ValFlags::SSA_LIKE,
-                                            right: if private {
-                                                Item::PrivateMem {
-                                                    obj: obj.clone(),
-                                                    mem: priv_.as_ref().unwrap().clone(),
-                                                }
-                                            } else {
-                                                Item::Mem {
-                                                    obj: obj.clone(),
-                                                    mem: mem.clone(),
-                                                }
-                                            },
-                                            span: m.span(),
-                                        });
-                                        Item::Bin {
-                                            left: right,
-                                            right: id,
-                                            op: a,
-                                        }
-                                    }
-                                };
-                                o.blocks[t].stmts.push(TStmt {
-                                    left: if private {
-                                        LId::Private {
-                                            obj: obj.clone(),
-                                            id: priv_.as_ref().unwrap().clone(),
-                                        }
-                                    } else {
-                                        LId::Member {
-                                            obj: obj.clone(),
-                                            mem: [mem.clone()],
-                                        }
-                                    },
-                                    flags: Default::default(),
-                                    right: item,
-                                    span: m.span(),
-                                });
-                                right = o.regs.alloc(());
-                                o.blocks[t].stmts.push(TStmt {
-                                    left: LId::Id { id: right.clone() },
-                                    flags: ValFlags::SSA_LIKE,
-                                    right: Item::Mem { obj, mem },
-                                    span: m.span(),
-                                });
-                                o.decls.insert(right.clone());
-                            }
-                            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                        }
-                    }
-                    swc_ecma_ast::AssignTarget::Pat(assign_target_pat) => {
-                        match &assign_target_pat {
-                            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                        }
-                    }
-                };
+                let (right, t) = self.assign(i, o, b, t, &a.left, &a.op, right)?;
                 return Ok((right, t));
             }
             Expr::New(n) => {
@@ -2079,6 +2197,48 @@ impl Trans<'_> {
                     let right;
                     (left, t) = self.expr(i, o, b, t, l)?;
                     (right, t) = self.expr(i, o, b, t, r)?;
+                    if left == right
+                        && self
+                            .semantic
+                            .flags
+                            .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
+                    {
+                        match op {
+                            BinaryOp::EqEqEq => {
+                                let tmp = o.regs.alloc(());
+                                o.blocks[t].stmts.push(TStmt {
+                                    left: LId::Id { id: tmp.clone() },
+                                    flags: ValFlags::SSA_LIKE,
+                                    right: Item::Lit {
+                                        lit: Lit::Bool(Bool {
+                                            span: bin.span,
+                                            value: true,
+                                        }),
+                                    },
+                                    span: bin.span(),
+                                });
+                                o.decls.insert(tmp.clone());
+                                return Ok((tmp, t));
+                            }
+                            BinaryOp::NotEqEq => {
+                                let tmp = o.regs.alloc(());
+                                o.blocks[t].stmts.push(TStmt {
+                                    left: LId::Id { id: tmp.clone() },
+                                    flags: ValFlags::SSA_LIKE,
+                                    right: Item::Lit {
+                                        lit: Lit::Bool(Bool {
+                                            span: bin.span,
+                                            value: false,
+                                        }),
+                                    },
+                                    span: bin.span(),
+                                });
+                                o.decls.insert(tmp.clone());
+                                return Ok((tmp, t));
+                            }
+                            _ => {}
+                        }
+                    }
                     let tmp = o.regs.alloc(());
                     o.blocks[t].stmts.push(TStmt {
                         left: LId::Id { id: tmp.clone() },

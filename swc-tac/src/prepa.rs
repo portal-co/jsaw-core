@@ -1,12 +1,64 @@
-use swc_ecma_ast::{AssignExpr, ExprStmt, PrivateName, SeqExpr, ThisExpr};
+use std::mem::replace;
+
+use swc_ecma_ast::{
+    AssignExpr, BinExpr, CondExpr, Decl, ExprStmt, ModuleItem, PrivateName, SeqExpr, ThisExpr,
+    VarDecl, VarDeclarator,
+};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
 
 use super::*;
 #[non_exhaustive]
 pub struct Prepa<'a> {
     pub semantics: &'a SemanticCfg,
+    vars: BTreeSet<Ident>,
 }
 impl VisitMut for Prepa<'_> {
+    fn visit_mut_stmts(&mut self, node: &mut Vec<Stmt>) {
+        let vars = take(&mut self.vars);
+        node.visit_mut_children_with(self);
+        let vars = replace(&mut self.vars, vars);
+        node.insert(
+            0,
+            Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: Span::dummy_with_cmt(),
+                ctxt: Default::default(),
+                kind: swc_ecma_ast::VarDeclKind::Let,
+                declare: false,
+                decls: vars
+                    .into_iter()
+                    .map(|a| VarDeclarator {
+                        span: Span::dummy_with_cmt(),
+                        name: Pat::Ident(a.into()),
+                        init: None,
+                        definite: false,
+                    })
+                    .collect(),
+            }))),
+        );
+    }
+    fn visit_mut_module(&mut self, node: &mut swc_ecma_ast::Module) {
+        let vars = take(&mut self.vars);
+        node.visit_mut_children_with(self);
+        let vars = replace(&mut self.vars, vars);
+        node.body.insert(
+            0,
+            ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: Span::dummy_with_cmt(),
+                ctxt: Default::default(),
+                kind: swc_ecma_ast::VarDeclKind::Let,
+                declare: false,
+                decls: vars
+                    .into_iter()
+                    .map(|a| VarDeclarator {
+                        span: Span::dummy_with_cmt(),
+                        name: Pat::Ident(a.into()),
+                        init: None,
+                        definite: false,
+                    })
+                    .collect(),
+            })))),
+        );
+    }
     fn visit_mut_class(&mut self, node: &mut Class) {
         node.visit_mut_children_with(self);
         let span = node.span;
@@ -106,6 +158,53 @@ impl VisitMut for Prepa<'_> {
                 i.visit_mut_children_with(&mut Traverse {
                     props: take(&mut m),
                 });
+            }
+        }
+    }
+    fn visit_mut_expr(&mut self, node: &mut Expr) {
+        node.visit_mut_children_with(self);
+        if self
+            .semantics
+            .flags
+            .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
+        {
+            for a in [(Atom::new("globalThis"), SyntaxContext::empty())] {
+                *node = match take(node) {
+                    Expr::Member(m) => {
+                        let b = (
+                            Atom::new("$"),
+                            SyntaxContext::empty().apply_mark(Mark::new()),
+                        );
+                        self.vars.insert(b.clone());
+                        Expr::Cond(CondExpr {
+                            span: m.span,
+                            test: Box::new(Expr::Bin(BinExpr {
+                                span: m.span,
+                                op: BinaryOp::EqEqEq,
+                                left: Box::new(Expr::Assign(AssignExpr {
+                                    span: m.span,
+                                    op: swc_ecma_ast::AssignOp::Assign,
+                                    left: swc_ecma_ast::AssignTarget::Simple(
+                                        SimpleAssignTarget::Ident(b.clone().into()),
+                                    ),
+                                    right: m.obj,
+                                })),
+                                right: a.clone().into(),
+                            })),
+                            cons: Box::new(Expr::Member(MemberExpr {
+                                span: m.span,
+                                obj: a.clone().into(),
+                                prop: m.prop.clone(),
+                            })),
+                            alt: Box::new(Expr::Member(MemberExpr {
+                                span: m.span,
+                                obj: b.clone().into(),
+                                prop: m.prop.clone(),
+                            })),
+                        })
+                    }
+                    node => node,
+                }
             }
         }
     }

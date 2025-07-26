@@ -689,7 +689,7 @@ impl ToSSAConverter {
                             *f &= *flags;
                             let f = *f;
                             *a = b;
-                            if !f.contains(ValFlags::SSA_LIKE) {
+                            if !f.contains(ValFlags::SSA_LIKE) && shim.is_some(){
                                 let u = o.blocks.alloc(SBlock {
                                     params: vec![],
                                     stmts: vec![],
