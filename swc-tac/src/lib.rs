@@ -12,19 +12,20 @@ use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
 use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg};
+use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
-    BinaryOp, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
-    Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    BinaryOp, Bool, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp,
+    Number, Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 
 use swc_ecma_ast::Id as Ident;
 
 pub mod lam;
+pub mod prepa;
 pub mod rew;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Private {
@@ -540,6 +541,7 @@ pub enum TCallee<I = Ident> {
     Member { func: I, member: I },
     PrivateMember { func: I, member: Private },
     Import,
+    Super,
     // Static(Ident),
 }
 impl<I> TCallee<I> {
@@ -552,6 +554,7 @@ impl<I> TCallee<I> {
                 member: member.clone(),
             },
             TCallee::Import => TCallee::Import,
+            TCallee::Super => TCallee::Super,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -564,6 +567,7 @@ impl<I> TCallee<I> {
                 member: member.clone(),
             },
             TCallee::Import => TCallee::Import,
+            TCallee::Super => TCallee::Super,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -579,6 +583,7 @@ impl<I> TCallee<I> {
                 member,
             },
             TCallee::Import => TCallee::Import,
+            TCallee::Super => TCallee::Super,
             // TCallee::Static(a) => TCallee::Static(a),
         })
     }
@@ -997,7 +1002,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter()),
@@ -1074,7 +1079,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut()),
@@ -1588,6 +1593,23 @@ impl Trans<'_> {
             Expr::Cond(c) => {
                 let v;
                 (v, t) = self.expr(i, o, b, t, &c.test)?;
+                match o.def(LId::Id { id: v.clone() }) {
+                    Some(Item::Lit { lit: Lit::Bool(b2) }) => {
+                        let w;
+                        (w, t) = self.expr(
+                            i,
+                            o,
+                            b,
+                            t,
+                            match b2.value {
+                                true => &c.cons,
+                                false => &c.alt,
+                            },
+                        )?;
+                        return Ok((w, t));
+                    }
+                    _ => {}
+                }
                 if c.cons.is_pure() && c.alt.is_pure() {
                     let cons;
                     let alt;
@@ -1835,6 +1857,7 @@ impl Trans<'_> {
             Expr::Call(call) => {
                 let c = match &call.callee {
                     Callee::Import(i) => TCallee::Import,
+                    Callee::Super(s) => TCallee::Super,
                     Callee::Expr(e) => match e.as_ref() {
                         Expr::Member(m) => {
                             let r#fn;
@@ -1996,6 +2019,30 @@ impl Trans<'_> {
                         left: LId::Id { id: tmp.clone() },
                         flags: ValFlags::SSA_LIKE,
                         right: Item::HasPrivateMem { obj: o2, mem },
+                        span: bin.span(),
+                    });
+                    o.decls.insert(tmp.clone());
+                    return Ok((tmp, t));
+                }
+                (Expr::Lit(Lit::Str(s)), obj, BinaryOp::In)
+                    if self
+                        .semantic
+                        .flags
+                        .contains(SemanticFlags::PLUGIN_AS_TILDE_PLUGIN)
+                        && s.value == "~plugin" =>
+                {
+                    let o2;
+                    (o2, t) = self.expr(i, o, b, t, obj)?;
+                    let tmp = o.regs.alloc(());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: tmp.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Lit {
+                            lit: Lit::Bool(Bool {
+                                span: s.span,
+                                value: false,
+                            }),
+                        },
                         span: bin.span(),
                     });
                     o.decls.insert(tmp.clone());

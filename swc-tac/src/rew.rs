@@ -439,6 +439,12 @@ impl Rew {
                                             phase: Default::default(),
                                         });
                                     }
+                                    TCallee::Super => {
+                                        break 'a Callee::Super(swc_ecma_ast::Super {
+                                            span,
+                                            // phase: Default::default(),
+                                        });
+                                    }
                                 })
                             },
                             args: args
