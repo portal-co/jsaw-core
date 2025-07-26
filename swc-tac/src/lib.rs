@@ -606,6 +606,10 @@ pub enum Item<I = Ident, F = TFunc> {
         obj: I,
         mem: Private,
     },
+    HasPrivateMem {
+        obj: I,
+        mem: Private,
+    },
     Func {
         func: F,
         arrow: bool,
@@ -670,6 +674,10 @@ impl<I, F> Item<I, F> {
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
             Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj,
+                mem: mem.clone(),
+            },
+            Item::HasPrivateMem { obj, mem } => Item::HasPrivateMem {
                 obj,
                 mem: mem.clone(),
             },
@@ -760,6 +768,10 @@ impl<I, F> Item<I, F> {
             Item::Un { arg, op } => Item::Un { arg, op: *op },
             Item::Mem { obj, mem } => Item::Mem { obj, mem },
             Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj,
+                mem: mem.clone(),
+            },
+            Item::HasPrivateMem { obj, mem } => Item::HasPrivateMem {
                 obj,
                 mem: mem.clone(),
             },
@@ -855,6 +867,10 @@ impl<I, F> Item<I, F> {
                 mem: f(cx, mem)?,
             },
             Item::PrivateMem { obj, mem } => Item::PrivateMem {
+                obj: f(cx, obj)?,
+                mem,
+            },
+            Item::HasPrivateMem { obj, mem } => Item::HasPrivateMem {
                 obj: f(cx, obj)?,
                 mem,
             },
@@ -972,7 +988,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem } => Box::new(once(obj)),
+            Item::PrivateMem { obj, mem } | Item::HasPrivateMem { obj, mem } => Box::new(once(obj)),
             swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
@@ -1049,7 +1065,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem } => Box::new(once(obj)),
+            Item::PrivateMem { obj, mem } | Item::HasPrivateMem { obj, mem } => Box::new(once(obj)),
             swc_tac::Item::Func { func, arrow } => Box::new(empty()),
             swc_tac::Item::Lit { lit } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
@@ -1397,19 +1413,14 @@ impl Trans<'_> {
         )> = Default::default();
         let mut constructor: Option<TFunc> = Default::default();
         let mut privates = self.privates.clone();
+        let ctx = SyntaxContext::empty().apply_mark(Mark::new());
         for m in s.body.iter() {
             match m {
                 ClassMember::PrivateMethod(m) => {
-                    privates.insert(
-                        m.key.name.clone(),
-                        SyntaxContext::empty().apply_mark(Mark::new()),
-                    );
+                    privates.insert(m.key.name.clone(), ctx);
                 }
                 ClassMember::PrivateProp(m) => {
-                    privates.insert(
-                        m.key.name.clone(),
-                        SyntaxContext::empty().apply_mark(Mark::new()),
-                    );
+                    privates.insert(m.key.name.clone(), ctx);
                 }
                 _ => {}
             }
@@ -1968,6 +1979,28 @@ impl Trans<'_> {
                 return Ok((tmp, t));
             }
             Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op.clone()) {
+                (Expr::PrivateName(p), obj, BinaryOp::In) => {
+                    let o2;
+                    (o2, t) = self.expr(i, o, b, t, obj)?;
+                    let mem = Private {
+                        sym: p.name.clone(),
+                        ctxt: self
+                            .privates
+                            .get(&p.name)
+                            .cloned()
+                            .context("in getting the private")?,
+                        span: p.span,
+                    };
+                    let tmp = o.regs.alloc(());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: tmp.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::HasPrivateMem { obj: o2, mem },
+                        span: bin.span(),
+                    });
+                    o.decls.insert(tmp.clone());
+                    return Ok((tmp, t));
+                }
                 (l, Expr::Lit(Lit::Num(Number { value: 0.0, .. })), BinaryOp::BitOr)
                 | (Expr::Lit(Lit::Num(Number { value: 0.0, .. })), l, BinaryOp::BitOr) => {
                     let left;

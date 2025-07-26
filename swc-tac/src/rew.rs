@@ -317,6 +317,15 @@ impl Rew {
                         left: sr(left),
                         right: sr(right),
                     }),
+                    Item::HasPrivateMem { obj, mem } => Expr::Bin(BinExpr {
+                        span,
+                        op: BinaryOp::In,
+                        left: Box::new(Expr::PrivateName(PrivateName {
+                            span: mem.span,
+                            name: mem.sym.clone(),
+                        })),
+                        right: sr(obj),
+                    }),
                     crate::Item::Un { arg, op } => Expr::Unary(UnaryExpr {
                         span: span,
                         op: *op,
