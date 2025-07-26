@@ -1818,44 +1818,26 @@ impl Trans<'_> {
                                     && a.left.as_simple().is_some_and(|s| s.is_ident())
                                     && a.op == b.op =>
                             {
-                                let (e, a2, b) = px(&a.right, &b.right)?;
-                                Some((
-                                    [Frame::Assign(a.left.clone(), a.op)]
-                                        .into_iter()
-                                        .chain(e)
-                                        .collect(),
-                                    a2,
-                                    b,
-                                ))
+                                let (mut e, a2, b) = px(&a.right, &b.right)?;
+                                e.push(Frame::Assign(a.left.clone(), a.op));
+                                Some((e, a2, b))
                             }
                             (Expr::Member(a), Expr::Member(b))
                                 if a.prop.eq_ignore_span(&b.prop) =>
                             {
-                                let (e, a2, b) = px(&a.obj, &b.obj)?;
-                                Some((
-                                    [Frame::Member(a.prop.clone())]
-                                        .into_iter()
-                                        .chain(e)
-                                        .collect(),
-                                    a2,
-                                    b,
-                                ))
+                                let (mut e, a2, b) = px(&a.obj, &b.obj)?;
+                                e.push(Frame::Member(a.prop.clone()));
+                                Some((e, a2, b))
                             }
                             (Expr::Member(a), Expr::Member(b))
                                 if a.prop.is_computed() && b.prop.is_computed() =>
                             {
-                                let (e, a2, b2) = px(&a.obj, &b.obj)?;
-                                Some((
-                                    [Frame::Member2(
-                                        *a.prop.as_computed().unwrap().expr.clone(),
-                                        *b.prop.as_computed().unwrap().expr.clone(),
-                                    )]
-                                    .into_iter()
-                                    .chain(e)
-                                    .collect(),
-                                    a2,
-                                    b2,
-                                ))
+                                let (mut e, a2, b2) = px(&a.obj, &b.obj)?;
+                                e.push(Frame::Member2(
+                                    *a.prop.as_computed().unwrap().expr.clone(),
+                                    *b.prop.as_computed().unwrap().expr.clone(),
+                                ));
+                                Some((e, a2, b2))
                             }
                             _ => None,
                         }
@@ -1878,7 +1860,7 @@ impl Trans<'_> {
                         span: c.span(),
                     });
                     o.decls.insert(tmp.clone());
-                    for f in frames.into_iter().rev() {
+                    for f in frames.into_iter() {
                         (tmp, t) = self.frame(i, o, b, t, f, tmp, v.clone())?;
                     }
                     Ok((tmp, t))
