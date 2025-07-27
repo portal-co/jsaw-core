@@ -66,5 +66,5 @@ swc_ecma_parser = "^22.0.0"
 swc_ecma_codegen = "^16"
 
 
-portal-solutions-swibb="^0.3.1"
+portal-solutions-swibb="^0.3.3"
 

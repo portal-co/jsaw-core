@@ -1,5 +1,5 @@
 use crate::*;
-use portal_jsc_swc_util::{SemanticCfg, SemanticFlags};
+use portal_jsc_swc_util::{SemanticCfg, SemanticFlags, ses_method};
 use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
@@ -81,7 +81,92 @@ pub(crate) fn default_ctx() -> ExprCtx {
     }
 }
 impl<I: Copy + Eq, B, F> SValue<I, B, F> {
-    pub fn const_in(&self, semantics: &SemanticCfg, k: &impl SValGetter<I, B, F>) -> Option<Lit> {
+    pub fn array_in(
+        &self,
+        semantics: &SemanticCfg,
+        k: &(dyn SValGetter<I, B, F> + '_),
+    ) -> Option<Vec<I>> {
+        match self {
+            SValue::Item { item, span } => match item {
+                Item::Arr { members } => Some(members.clone()),
+                Item::Mem { obj, mem } => {
+                    match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
+                        Some(Lit::Num(n)) => match k.val(*obj) {
+                            Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                                match i.array_in(semantics, k) {
+                                    None => None,
+                                    Some(a) => a
+                                        .get((n.value.round() as usize))
+                                        .and_then(|a| k.val(*a))
+                                        .and_then(|a| a.array_in(semantics, k)),
+                                }
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                }
+                Item::Call { callee, args }
+                    if semantics.flags.contains(SemanticFlags::ASSUME_SES) =>
+                {
+                    match callee {
+                        TCallee::Member { func, member } => {
+                            let member = k.val(*member)?.const_in(semantics, k)?;
+                            let Lit::Str(s) = member else {
+                                return None;
+                            };
+                            let func = k.val(*func)?;
+                            match func.array_in(semantics, k) {
+                                Some(members) => match s.value.as_str() {
+                                    "concat" => {
+                                        let mut members: Vec<I> = members;
+                                        for a in args.iter().cloned() {
+                                            let a = k.val(a)?;
+                                            let i = a.array_in(semantics, k)?;
+                                            members.extend(i);
+                                        }
+                                        Some(members)
+                                    }
+                                    "slice" => {
+                                        let begin: Option<usize> = args
+                                            .get(0)
+                                            .cloned()
+                                            .and_then(|a| k.val(a))
+                                            .and_then(|v| v.const_in(semantics, k))
+                                            .and_then(|v| v.as_num().map(|a| a.value as usize));
+                                        let end: Option<usize> = args
+                                            .get(1)
+                                            .cloned()
+                                            .and_then(|a| k.val(a))
+                                            .and_then(|v| v.const_in(semantics, k))
+                                            .and_then(|v| v.as_num().map(|a| a.value as usize));
+                                        let mut members: Vec<I> = members;
+                                        members = match (begin, end) {
+                                            (Some(a), Some(b)) => members.drain(a..b).collect(),
+                                            (None, None) => members,
+                                            (None, Some(a)) => members.drain(..a).collect(),
+                                            (Some(a), None) => members.drain(a..).collect(),
+                                        };
+                                        Some(members)
+                                    }
+                                    _ => None,
+                                },
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    pub fn const_in(
+        &self,
+        semantics: &SemanticCfg,
+        k: &(dyn SValGetter<I, B, F> + '_),
+    ) -> Option<Lit> {
         match self {
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
@@ -440,23 +525,81 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
                         Some(Lit::Str(s)) => match &*s.value {
                             "length" => match k.val(*obj) {
-                                Some(SValue::Item {
-                                    item: Item::Arr { members },
-                                    span,
-                                }) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
-                                    Some(Lit::Num(Number {
-                                        span: span
-                                            .as_ref()
-                                            .cloned()
-                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
-                                        value: members.len() as f64,
-                                        raw: None,
-                                    }))
+                                Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                                    match i.array_in(semantics, k) {
+                                        None => {
+                                            let l = i.const_in(semantics, k)?;
+                                            let Lit::Str(s) = l else {
+                                                return None;
+                                            };
+                                            Some(Lit::Num(Number {
+                                                span: s.span,
+                                                value: s.value.len() as f64,
+                                                raw: None,
+                                            }))
+                                        }
+                                        Some(a) => Some(Lit::Num(Number {
+                                            span: span
+                                                .as_ref()
+                                                .cloned()
+                                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                            value: a.len() as f64,
+                                            raw: None,
+                                        })),
+                                    }
                                 }
                                 _ => None,
                             },
                             _ => None,
                         },
+                        Some(Lit::Num(n)) => match k.val(*obj) {
+                            Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                                match i.array_in(semantics, k) {
+                                    None => None,
+                                    Some(a) => a
+                                        .get((n.value.round() as usize))
+                                        .and_then(|a| k.val(*a))
+                                        .and_then(|a| a.const_in(semantics, k)),
+                                }
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                }
+                Item::Call { callee, args }
+                    if semantics.flags.contains(SemanticFlags::ASSUME_SES) =>
+                {
+                    match callee {
+                        TCallee::Member { func, member } => {
+                            let member = k.val(*member)?.const_in(semantics, k)?;
+                            let Lit::Str(s) = member else {
+                                return None;
+                            };
+                            let func = k.val(*func)?;
+                            match func {
+                                _ => {
+                                    let func = func.const_in(semantics, k)?;
+                                    let mut i;
+                                    let ses = ses_method(
+                                        &func,
+                                        &s.value,
+                                        &mut match args.iter() {
+                                            i2 => {
+                                                i = i2;
+                                                std::iter::from_fn(|| {
+                                                    let n = i.next()?;
+                                                    let i = k.val(*n)?.const_in(semantics, k)?;
+                                                    Some(i)
+                                                })
+                                                .fuse()
+                                            }
+                                        },
+                                    )?;
+                                    Some(ses)
+                                }
+                            }
+                        }
                         _ => None,
                     }
                 }

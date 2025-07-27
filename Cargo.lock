@@ -732,6 +732,7 @@ dependencies = [
  "portal-jsc-common",
  "portal-jsc-swc-cfg",
  "portal-jsc-swc-util",
+ "portal-solutions-swibb",
  "relooper",
  "ssa-impls",
  "ssa-reloop",
@@ -777,9 +778,9 @@ dependencies = [
 
 [[package]]
 name = "portal-solutions-swibb"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f54b3f7196ba0e587b7f27ee20ca8cdfbc017e9879f83614a061dc286e469c7"
+checksum = "b9c381c7e270f8b92ff6b676bef59158acf91b7b777e47afd824e620f8eedbe0"
 dependencies = [
  "swc_atoms",
  "swc_common",

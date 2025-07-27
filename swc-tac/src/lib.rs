@@ -12,7 +12,7 @@ use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
 use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags};
+use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
@@ -2090,7 +2090,7 @@ impl Trans<'_> {
                     },
                     _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
                 };
-                let args = call
+                let args: Vec<(Atom, SyntaxContext)> = call
                     .args
                     .iter()
                     .map(|a| {
@@ -2099,15 +2099,69 @@ impl Trans<'_> {
                         anyhow::Ok(arg)
                     })
                     .collect::<anyhow::Result<_>>()?;
-                let tmp = o.regs.alloc(());
-                o.blocks[t].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Call { callee: c, args },
-                    span: call.span(),
-                });
-                o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                match self
+                    .semantic
+                    .flags
+                    .contains(SemanticFlags::ASSUME_SES)
+                    .then(|| {
+                        let mut i;
+                        match &c {
+                            TCallee::Member { func, member } => {
+                                match o.def(LId::Id { id: member.clone() })? {
+                                    Item::Lit { lit: Lit::Str(s) } => match o
+                                        .def(LId::Id { id: func.clone() })?
+                                    {
+                                        Item::Lit { lit } => ses_method(
+                                            lit,
+                                            &s.value,
+                                            &mut match args.iter() {
+                                                i2 => {
+                                                    i = i2;
+                                                    std::iter::from_fn(|| {
+                                                        let n = i.next()?;
+                                                        let i = o.def(LId::Id { id: n.clone() })?;
+                                                        let Item::Lit { lit } = i else {
+                                                            return None;
+                                                        };
+                                                        Some(lit.clone())
+                                                    })
+                                                    .fuse()
+                                                }
+                                            },
+                                        ),
+                                        _ => None,
+                                    },
+                                    _ => None,
+                                }
+                            }
+                            _ => None,
+                        }
+                    })
+                    .flatten()
+                {
+                    None => {
+                        let tmp = o.regs.alloc(());
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: tmp.clone() },
+                            flags: ValFlags::SSA_LIKE,
+                            right: Item::Call { callee: c, args },
+                            span: call.span(),
+                        });
+                        o.decls.insert(tmp.clone());
+                        return Ok((tmp, t));
+                    }
+                    Some(l) => {
+                        let tmp = o.regs.alloc(());
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: tmp.clone() },
+                            flags: ValFlags::SSA_LIKE,
+                            right: Item::Lit { lit: l },
+                            span: call.span(),
+                        });
+                        o.decls.insert(tmp.clone());
+                        return Ok((tmp, t));
+                    }
+                }
             }
             Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op.clone()) {
                 (Expr::PrivateName(p), obj, BinaryOp::In) => {
