@@ -67,4 +67,4 @@ swc_ecma_codegen = "^16"
 
 
 portal-solutions-swibb="^0.3.3"
-
+portal-solutions-proxy-signs = "^0.1.0"

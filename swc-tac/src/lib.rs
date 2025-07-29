@@ -13,6 +13,7 @@ use linearize::{StaticMap, static_map};
 use portal_jsc_common::{Asm, Native};
 use portal_jsc_swc_util::brighten::Purity;
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
+use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
@@ -152,22 +153,41 @@ pub struct TFunc {
     pub is_generator: bool,
     pub is_async: bool,
 }
+#[derive(Clone)]
+#[non_exhaustive]
+pub struct Mapper<'a> {
+    pub import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
+    pub semantic: &'a SemanticCfg,
+    pub privates: &'a BTreeMap<Atom, SyntaxContext>,
+    pub consts: Option<&'a ConstCollector>,
+}
+pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
+    return a(Mapper {
+        import_mapper: static_map! {_ => None},
+        semantic: &SemanticCfg::default(),
+        privates: &BTreeMap::new(),
+        consts: None,
+    });
+}
+impl<'a> Mapper<'a> {
+    pub fn bud(&self) -> Mapper<'_> {
+        Mapper {
+            import_mapper: static_map! {a =>self.import_mapper[a].as_deref()},
+            semantic: self.semantic,
+            privates: self.privates,
+            consts: self.consts.as_deref(),
+        }
+    }
+}
 impl TFunc {
-    pub fn try_from_with_mapper(
-        value: &Func,
-        import_mapper: StaticMap<ImportMapperReq, Option<&(dyn ImportMapper + '_)>>,
-        semantic: &SemanticCfg,
-        privates: &BTreeMap<Atom, SyntaxContext>,
-    ) -> anyhow::Result<Self> {
+    pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
         let entry = Trans {
             map: BTreeMap::new(),
             ret_to: None,
             recatch: TCatch::Throw,
             this: None,
-            import_mapper: static_map! {a =>import_mapper[a].as_deref()},
-            semantic,
-            privates,
+            mapper,
         }
         .trans(&value.cfg, &mut cfg, value.entry)?;
         cfg.ts_retty = value.cfg.ts_retty.clone();
@@ -198,12 +218,7 @@ impl<'a> TryFrom<&'a Func> for TFunc {
     type Error = anyhow::Error;
 
     fn try_from(value: &'a Func) -> Result<Self, Self::Error> {
-        TFunc::try_from_with_mapper(
-            value,
-            linearize::static_map! {_ => None},
-            &SemanticCfg::default(),
-            &BTreeMap::default(),
-        )
+        mapped(|m| TFunc::try_from_with_mapper(value, m))
     }
 }
 impl TryFrom<Func> for TFunc {
@@ -1156,9 +1171,7 @@ pub struct Trans<'a> {
     pub ret_to: Option<(Ident, Id<TBlock>)>,
     pub recatch: TCatch,
     pub this: Option<Ident>,
-    pub import_mapper: StaticMap<ImportMapperReq, Option<&'a (dyn ImportMapper + 'a)>>,
-    pub semantic: &'a SemanticCfg,
-    pub privates: &'a BTreeMap<Atom, SyntaxContext>,
+    pub mapper: Mapper<'a>,
 }
 impl Trans<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
@@ -1366,6 +1379,7 @@ impl Trans<'_> {
                 mem: Private {
                     sym: p.name.clone(),
                     ctxt: self
+                        .mapper
                         .privates
                         .get(&p.name)
                         .context("in getting the private")?
@@ -1441,7 +1455,7 @@ impl Trans<'_> {
             PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
         )> = Default::default();
         let mut constructor: Option<TFunc> = Default::default();
-        let mut privates = self.privates.clone();
+        let mut privates = self.mapper.privates.clone();
         let ctx = SyntaxContext::empty().apply_mark(Mark::new());
         for m in s.body.iter() {
             match m {
@@ -1454,6 +1468,9 @@ impl Trans<'_> {
                 _ => {}
             }
         }
+        let mut mapper = self.mapper.clone();
+        let mut mapper = mapper.bud();
+        mapper.privates = &privates;
         for m in s.body.iter() {
             match m {
                 ClassMember::ClassProp(p) => {
@@ -1487,17 +1504,13 @@ impl Trans<'_> {
                             return_type: None,
                         }
                         .try_into()?,
-                        static_map! {a => self.import_mapper[a].as_deref()},
-                        self.semantic,
-                        &privates,
+                        mapper.bud(),
                     )?)
                 }
                 ClassMember::Method(c) => {
                     let f = TFunc::try_from_with_mapper(
                         &(&*c.function).clone().try_into()?,
-                        static_map! {a => self.import_mapper[a].as_deref()},
-                        self.semantic,
-                        &privates,
+                        mapper.bud(),
                     )?;
                     members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1532,9 +1545,7 @@ impl Trans<'_> {
                 ClassMember::PrivateMethod(p) => {
                     let f = TFunc::try_from_with_mapper(
                         &(&*p.function).clone().try_into()?,
-                        static_map! {a => self.import_mapper[a].as_deref()},
-                        self.semantic,
-                        &privates,
+                        mapper.bud(),
                     )?;
                     let x = match &p.kind {
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
@@ -1633,6 +1644,7 @@ impl Trans<'_> {
                                     priv_ = Some(Private {
                                         sym: private_name.name.clone(),
                                         ctxt: self
+                                            .mapper
                                             .privates
                                             .get(&private_name.name)
                                             .context("in getting the private")?
@@ -1743,6 +1755,12 @@ impl Trans<'_> {
                 }),
                 s,
             ),
+        }
+    }
+    fn inlinable(&self, x: &Expr) -> bool {
+        match x {
+            Expr::Fn(_) | Expr::Arrow(_) => true,
+            _ => false,
         }
     }
     pub fn expr(
@@ -1932,7 +1950,15 @@ impl Trans<'_> {
                 };
                 return Ok((id, t));
             }
-            Expr::Ident(i) => Ok((i.clone().into(), t)),
+            Expr::Ident(id) => match self
+                .mapper
+                .consts
+                .as_deref()
+                .and_then(|c| c.map.get(&id.to_id()))
+            {
+                Some(e) if self.inlinable(e) => self.expr(i, o, b, t, &*e.clone()),
+                _ => Ok((id.clone().into(), t)),
+            },
             Expr::Assign(a) => {
                 let mut right;
                 (right, t) = self.expr(i, o, b, t, &a.right)?;
@@ -2076,9 +2102,7 @@ impl Trans<'_> {
                                         } else {
                                             Some((Atom::new("globalThis"), Default::default()))
                                         },
-                                        import_mapper: static_map! {a => self.import_mapper[a].as_deref()},
-                                        semantic: self.semantic,
-                                        privates: self.privates,
+                                        mapper: self.mapper.bud(),
                                     };
                                     let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
                                     o.blocks[t].post.term = TTerm::Jmp(t3);
@@ -2100,6 +2124,7 @@ impl Trans<'_> {
                     })
                     .collect::<anyhow::Result<_>>()?;
                 match self
+                    .mapper
                     .semantic
                     .flags
                     .contains(SemanticFlags::ASSUME_SES)
@@ -2170,6 +2195,7 @@ impl Trans<'_> {
                     let mem = Private {
                         sym: p.name.clone(),
                         ctxt: self
+                            .mapper
                             .privates
                             .get(&p.name)
                             .cloned()
@@ -2188,6 +2214,7 @@ impl Trans<'_> {
                 }
                 (Expr::Lit(Lit::Str(s)), obj, BinaryOp::In)
                     if self
+                        .mapper
                         .semantic
                         .flags
                         .contains(SemanticFlags::PLUGIN_AS_TILDE_PLUGIN)
@@ -2235,6 +2262,7 @@ impl Trans<'_> {
                     (right, t) = self.expr(i, o, b, t, r)?;
                     if left == right
                         && self
+                            .mapper
                             .semantic
                             .flags
                             .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
@@ -2475,12 +2503,7 @@ impl Trans<'_> {
                                                 .clone(),
                                             c.entry,
                                         )?;
-                                        TFunc::try_from_with_mapper(
-                                            &c,
-                                            static_map! {a => self.import_mapper[a].as_deref()},
-                                            self.semantic,
-                                            self.privates,
-                                        )?
+                                        TFunc::try_from_with_mapper(&c, self.mapper.bud())?
                                     });
                                     prop_name!(v => &getter_prop.key)
                                 }
@@ -2503,21 +2526,14 @@ impl Trans<'_> {
                                                 .clone(),
                                             c.entry,
                                         )?;
-                                        TFunc::try_from_with_mapper(
-                                            &c,
-                                            static_map! {a => self.import_mapper[a].as_deref()},
-                                            self.semantic,
-                                            self.privates,
-                                        )?
+                                        TFunc::try_from_with_mapper(&c, self.mapper.bud())?
                                     });
                                     prop_name!(v => &setter_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Method(method_prop) => {
                                     let v = PropVal::Method(TFunc::try_from_with_mapper(
                                         &(&*method_prop.function).clone().try_into()?,
-                                        static_map! {a => self.import_mapper[a].as_deref()},
-                                        self.semantic,
-                                        self.privates,
+                                        self.mapper.bud(),
                                     )?);
                                     prop_name!(v => &method_prop.key)
                                 }

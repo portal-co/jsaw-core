@@ -732,6 +732,7 @@ dependencies = [
  "portal-jsc-common",
  "portal-jsc-swc-cfg",
  "portal-jsc-swc-util",
+ "portal-solutions-proxy-signs",
  "portal-solutions-swibb",
  "relooper",
  "ssa-impls",
@@ -775,6 +776,12 @@ dependencies = [
  "itertools",
  "no-error-type",
 ]
+
+[[package]]
+name = "portal-solutions-proxy-signs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd561b504f0baa18b1b44c277bb216367ce6176900117aa0041d6a22f9c8f67a"
 
 [[package]]
 name = "portal-solutions-swibb"

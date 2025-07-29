@@ -1,5 +1,6 @@
 use std::mem::replace;
 
+use portal_solutions_proxy_signs::PROXY_SIGNS;
 use swc_ecma_ast::{
     AssignExpr, BinExpr, CallExpr, CondExpr, Decl, ExprOrSpread, ExprStmt, IdentName, ModuleItem,
     PrivateName, SeqExpr, ThisExpr, VarDecl, VarDeclarator,
@@ -243,14 +244,8 @@ impl VisitMut for Prepa<'_> {
                                             right: m.left,
                                         })),
                                         Box::new(
-                                            [
-                                                "pan_eval",
-                                                "$scramjet",
-                                                "$scram",
-                                                "__uv",
-                                                "__PortalEnterprise",
-                                            ]
-                                            .into_iter()
+                                            PROXY_SIGNS
+                                            .iter().cloned().chain(["chrome"])
                                             .fold(
                                                 Expr::Lit(Lit::Bool(Bool {
                                                     span: m.span,

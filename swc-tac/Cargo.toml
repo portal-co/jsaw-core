@@ -30,6 +30,7 @@ portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", path = "../po
 linearize = { workspace = true, features = ["derive"] }
 linearize-derive.workspace = true
 portal-solutions-swibb.workspace = true
+portal-solutions-proxy-signs.workspace = true
 
 [features]
 # simpl=["dep:portal-jsc-simpl-js"]
