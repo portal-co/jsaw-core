@@ -13,6 +13,11 @@ pub struct Prepa<'a> {
     pub semantics: &'a SemanticCfg,
     vars: BTreeSet<Ident>,
 }
+impl<'a> Prepa<'a>{
+    pub fn new(semantics: &'a SemanticCfg) -> Self{
+        Self { semantics, vars: Default::default() }
+    }
+}
 impl VisitMut for Prepa<'_> {
     fn visit_mut_stmts(&mut self, node: &mut Vec<Stmt>) {
         let vars = take(&mut self.vars);
