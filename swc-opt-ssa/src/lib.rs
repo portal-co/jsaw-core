@@ -2,12 +2,12 @@ use std::collections::BTreeSet;
 
 use id_arena::{Arena, Id};
 use swc_ecma_ast::Lit;
-use swc_ssa::{simplify::SValGetter, sval_item, SCatch, SPostcedent, STarget, STerm, SValue};
+use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, simplify::SValGetter, sval_item};
 use swc_tac::Item;
 pub mod impls;
 pub mod into;
 pub use portal_jsc_swc_util::r#type::{ObjType, OptType};
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum OptValue<I = Id<OptValueW>, B = Id<OptBlock>, F = OptFunc, D = ()> {
     Deopt {
@@ -74,9 +74,11 @@ impl<I, B, F, D> OptValue<I, B, F, D> {
         })
     }
 }
-#[derive(Clone, Debug,PartialEq,Eq)]
-pub struct OptValueW { pub value: OptValue }
-#[derive(Default, Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OptValueW {
+    pub value: OptValue,
+}
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct OptBlock {
     pub params: Vec<(Id<OptValueW>, Option<OptType>)>,
     pub insts: Vec<Id<OptValueW>>,
@@ -86,7 +88,7 @@ pub type OptPostcedent = SPostcedent<Id<OptValueW>, Id<OptBlock>>;
 pub type OptTarget = STarget<Id<OptValueW>, Id<OptBlock>>;
 pub type OptTerm = STerm<Id<OptValueW>, Id<OptBlock>>;
 pub type OptCatch = SCatch<Id<OptValueW>, Id<OptBlock>>;
-#[derive(Default, Clone, Debug,PartialEq,Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct OptCfg {
     pub values: Arena<OptValueW>,
     pub blocks: Arena<OptBlock>,
@@ -125,9 +127,24 @@ impl SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc> for OptCfg {
             OptValue::Emit { val, ty } => Some(val),
         }
     }
+    fn val_mut(
+        &mut self,
+        id: Id<OptValueW>,
+    ) -> Option<&mut SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
+        let v: *mut OptValue =  &mut self.values[id].value as *mut _;
+           //SAFETY: only borrowed once; values are moved before recursing
+        match unsafe{&mut *v} {
+            OptValue::Deopt { value: a, .. } => {
+                let a = *a;
+                return self.val_mut(a);
+            }
+            OptValue::Assert { val, ty } => self.val_mut(*val),
+            OptValue::Emit { val, ty } => Some(val),
+        }
+    }
 }
 sval_item!(OptCfg [block Id<OptBlock>]);
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptFunc {
     pub cfg: OptCfg,
     pub entry: Id<OptBlock>,
@@ -136,14 +153,16 @@ pub struct OptFunc {
 }
 impl OptCfg {
     pub fn add_blockparam(&mut self, k: Id<OptBlock>, ty: Option<OptType>) -> Id<OptValueW> {
-        let v = self.values.alloc(OptValueW { value: OptValue::Emit {
-            val: SValue::Param {
-                block: k,
-                idx: self.blocks[k].params.len(),
-                ty: (),
+        let v = self.values.alloc(OptValueW {
+            value: OptValue::Emit {
+                val: SValue::Param {
+                    block: k,
+                    idx: self.blocks[k].params.len(),
+                    ty: (),
+                },
+                ty: ty.clone(),
             },
-            ty: ty.clone(),
-        } });
+        });
         self.blocks[k].params.push((v, ty));
         return v;
     }

@@ -3,11 +3,12 @@ use std::convert::Infallible;
 
 use anyhow::Context;
 use id_arena::Id;
+use portal_jsc_common::Asm;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
-use swc_ecma_ast::{ArrayLit, CondExpr, NewExpr, Param, PrivateMethod, PrivateName};
+use swc_ecma_ast::{ArrayLit, CondExpr, NewExpr, Param, PrivateMethod, PrivateName, UnaryOp};
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
 use swc_ecma_ast::{AssignOp, ExprOrSpread};
@@ -191,20 +192,39 @@ impl Rew {
                 ) -> Box<Expr> {
                     let n = tcfg.refs().filter(|a| a == left).count();
                     match tcfg.def(crate::LId::Id { id: left.clone() }) {
-                        Some(Item::Asm { value }) => match value {
-                            portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
-                                span,
-                                op: BinaryOp::BitOr,
-                                left: _sr(a, tcfg, state, span),
-                                right: Box::new(Expr::Lit(Lit::Num(Number {
+                        Some(Item::Asm { value })
+                            if match value {
+                                Asm::OrZero(value) => {
+                                    tcfg.def(LId::Id { id: value.clone() }).is_some()
+                                }
+                                _ => todo!(),
+                            } =>
+                        {
+                            match value {
+                                portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
                                     span,
-                                    value: 0.0,
-                                    raw: None,
-                                }))),
-                            })),
-                            _ => todo!(),
-                        },
+                                    op: BinaryOp::BitOr,
+                                    left: _sr(a, tcfg, state, span),
+                                    right: Box::new(Expr::Lit(Lit::Num(Number {
+                                        span,
+                                        value: 0.0,
+                                        raw: None,
+                                    }))),
+                                })),
+                                _ => todo!(),
+                            }
+                        }
                         Some(Item::Lit { lit }) => Box::new(Expr::Lit(lit.clone())),
+                        Some(Item::Un { arg, op })
+                            if !matches!(op, UnaryOp::Delete)
+                                && tcfg.def(LId::Id { id: arg.clone() }).is_some() =>
+                        {
+                            Box::new(Expr::Unary(UnaryExpr {
+                                span,
+                                op: *op,
+                                arg: _sr(arg, tcfg, state, span),
+                            }))
+                        }
                         _ => match state.remove(left) {
                             None => Box::new(Expr::Ident(ident(left, span))),
                             Some(right) => match n {

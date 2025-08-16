@@ -369,6 +369,18 @@ impl TCfg {
             }
         })
     }
+    pub fn def_mut(&mut self, i: LId<Ident>) -> Option<&mut Item> {
+        self.blocks
+            .iter_mut()
+            .flat_map(|a| &mut a.1.stmts)
+            .find_map(|a| {
+                if a.left == i && a.flags.contains(ValFlags::SSA_LIKE) {
+                    Some(&mut a.right)
+                } else {
+                    None
+                }
+            })
+    }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
         let a = self.blocks.iter().flat_map(|k| {
             let i: Box<dyn Iterator<Item = Ident> + '_> = match &k.1.post.term {
@@ -606,10 +618,15 @@ impl<I> TCallee<I> {
 }
 pub trait ItemGetter<I = Ident, F = TFunc> {
     fn get_item(&self, i: I) -> Option<&Item<I, F>>;
+    fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I,F>>;
 }
 impl ItemGetter for TCfg {
     fn get_item(&self, i: (Atom, SyntaxContext)) -> Option<&Item<(Atom, SyntaxContext), TFunc>> {
         self.def(LId::Id { id: i })
+    }
+    
+    fn get_mut_item(&mut self, i: (Atom, SyntaxContext)) -> Option<&mut Item<(Atom, SyntaxContext),TFunc>> {
+        self.def_mut(LId::Id { id: i })
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

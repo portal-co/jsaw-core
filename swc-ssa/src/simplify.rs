@@ -33,6 +33,7 @@ impl SCfg {
 
 pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
     fn val(&self, id: I) -> Option<&SValue<I, B, F>>;
+    fn val_mut(&mut self, id: I) -> Option<&mut SValue<I, B, F>>;
 }
 #[doc(hidden)]
 pub fn _get_item<'a, I: Copy, B, F>(
@@ -56,19 +57,50 @@ pub fn _get_item<'a, I: Copy, B, F>(
         }
     }
 }
+#[doc(hidden)]
+pub fn _get_item_mut<'a, 'b: 'a, I: Copy, B, F>(
+    a: &'b mut (dyn SValGetter<I, B, F> + 'a),
+    mut i: I,
+) -> Option<&'a mut Item<I, F>> {
+    let a: *mut (dyn SValGetter<I, B, F> + 'a) = a as *mut _;
+    loop {
+        //SAFETY: only borrowed once; values are moved before continuing the loop
+        match unsafe { &mut *a }.val_mut(i)? {
+            SValue::Param { block, idx, ty } => return None,
+            SValue::Item { item, span } => return Some(item),
+            SValue::Assign { target, val } => {
+                i = *val;
+            }
+            SValue::LoadId(_) => return None,
+            SValue::StoreId { target, val } => {
+                i = *val;
+            }
+            SValue::EdgeBlocker { value, span } => {
+                i = *value;
+            }
+        }
+    }
+}
 #[macro_export]
 macro_rules! sval_item {
     ($(<$($a:tt)*>)? $ty:ty [block $block:ty]) => {
         impl<$($($a)*,)?I: Copy,F> $crate::simplify::ItemGetter<I,F> for $ty where Self: $crate::simplify::SValGetter<I,$block,F>{
-fn get_item(&self, i: I) -> Option<&$crate::simplify::Item<I, F>>{
-    $crate::simplify::_get_item(self,i)
-}
+            fn get_item(&self, i: I) -> Option<&$crate::simplify::Item<I, F>>{
+                $crate::simplify::_get_item(self,i)
+            }
+            fn get_mut_item(&mut self, i: I) -> Option<&mut $crate::simplify::Item<I, F>>{
+                $crate::simplify::_get_item_mut(self,i)
+            }
         }
     };
 }
 impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
     fn val(&self, id: Id<SValueW>) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
         Some(&self.values[id].value)
+    }
+
+    fn val_mut(&mut self, id: Id<SValueW>) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
+        Some(&mut self.values[id].value)
     }
 }
 sval_item!(SCfg [block Id<SBlock>]);
