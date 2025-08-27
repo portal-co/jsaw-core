@@ -9,11 +9,11 @@ resolver="3"
 version = "0.8.0-pre.8"
 
 [workspace.dependencies]
-swc-cfg =             { version = "^0.8.0-pre.8", path = "swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac =             { version = "^0.8.0-pre.8", path = "swc-tac", package = "portal-jsc-swc-tac" }
-swc-ssa =             { version = "^0.8.0-pre.8", path = "swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util = { version = "^0.8.0-pre.8", path = "swc-util", features = ["ty"] }
-portal-jsc-common =   { version = "^0.8.0-pre.8", path = "portal-jsc-common" }
+swc-cfg =             { version = "^0.8.0-pre.8", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
+swc-tac =             { version = "^0.8.0-pre.8", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
+swc-ssa =             { version = "^0.8.0-pre.8", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util = { version = "^0.8.0-pre.8", path = "crates/swc-util", features = ["ty"] }
+portal-jsc-common =   { version = "^0.8.0-pre.8", path = "crates/portal-jsc-common" }
 
 
 anyhow = "^1.0.87"
