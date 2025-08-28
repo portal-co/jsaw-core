@@ -618,15 +618,38 @@ impl<I> TCallee<I> {
 }
 pub trait ItemGetter<I = Ident, F = TFunc> {
     fn get_item(&self, i: I) -> Option<&Item<I, F>>;
-    fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I,F>>;
+    fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I, F>>;
 }
 impl ItemGetter for TCfg {
     fn get_item(&self, i: (Atom, SyntaxContext)) -> Option<&Item<(Atom, SyntaxContext), TFunc>> {
         self.def(LId::Id { id: i })
     }
-    
-    fn get_mut_item(&mut self, i: (Atom, SyntaxContext)) -> Option<&mut Item<(Atom, SyntaxContext),TFunc>> {
+
+    fn get_mut_item(
+        &mut self,
+        i: (Atom, SyntaxContext),
+    ) -> Option<&mut Item<(Atom, SyntaxContext), TFunc>> {
         self.def_mut(LId::Id { id: i })
+    }
+}
+pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
+    match d {
+        Item::Asm { value }
+            if match value {
+                Asm::OrZero(value) => tcfg.get_item(value.clone()).is_some(),
+                _ => todo!(),
+            } =>
+        {
+            true
+        }
+        Item::Lit { lit } => true,
+        Item::Un { arg, op }
+            if !matches!(op, UnaryOp::Delete)
+                && tcfg.get_item(arg.clone()).is_some() =>
+        {
+            true
+        }
+        _ => false,
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

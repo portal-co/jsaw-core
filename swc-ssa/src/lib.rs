@@ -8,16 +8,17 @@ use std::{
 use anyhow::Context;
 use cfg_traits::Term;
 use id_arena::{Arena, Id};
-use swc_tac::LId;
+use portal_jsc_common::Asm;
 use swc_common::Span;
-use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
+use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
+use swc_tac::{inlinable, LId};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};
 pub mod consts;
 // pub mod idw;
 pub mod impls;
+pub mod opt_stub;
 pub mod rew;
 pub mod simplify;
-pub mod opt_stub;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum EdgeKind {
     Forward,
@@ -118,7 +119,7 @@ impl SCfg {
         }
     }
 }
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SFunc {
     pub cfg: SCfg,
     pub entry: Id<SBlock>,
@@ -195,7 +196,7 @@ impl TryFrom<TFunc> for SFunc {
         TryFrom::try_from(&value)
     }
 }
-#[derive(Default, Clone, Debug,PartialEq,Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SCfg {
     pub blocks: Arena<SBlock>,
     pub values: Arena<SValueW>,
@@ -228,13 +229,13 @@ impl SCfg {
             .collect();
     }
 }
-#[derive(Default, Clone, Debug,PartialEq,Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SBlock {
     pub params: Vec<(Id<SValueW>, ())>,
     pub stmts: Vec<Id<SValueW>>,
     pub postcedent: SPostcedent,
 }
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SPostcedent<I = Id<SValueW>, B = Id<SBlock>> {
     pub term: STerm<I, B>,
     pub catch: SCatch<I, B>,
@@ -248,7 +249,7 @@ impl<I, B> Default for SPostcedent<I, B> {
     }
 }
 
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
     Param {
@@ -427,7 +428,7 @@ impl<I, B, F> SValue<I, B, F> {
     }
 }
 #[repr(transparent)]
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SValueW {
     pub value: SValue,
 }
@@ -441,7 +442,7 @@ impl From<SValueW> for SValue {
         value.value
     }
 }
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SCatch<I = Id<SValueW>, B = Id<SBlock>> {
     Throw,
@@ -457,7 +458,7 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     pub block: B,
     pub args: Vec<I>,
 }
-#[derive(Clone, Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
     Throw(I),
@@ -539,22 +540,45 @@ impl ToSSAConverter {
         t: Id<SBlock>,
         a: Ident,
         cache: &BTreeMap<Ident, Id<SValueW>>,
-    ) -> Id<SValueW> {
+    ) -> anyhow::Result<Id<SValueW>> {
         if let Some(k) = cache.get(&a) {
-            return *k;
+            return Ok(*k);
+        }
+        if let Some(d) = i.def(LId::Id { id: a.clone() }) {
+            if inlinable(d,i) {
+                let b = 'a: {
+                    let b = match d {
+                        Item::Undef => break 'a self.undef,
+                        b => b.clone().map2::<_, _, anyhow::Error, ()>(
+                            &mut (),
+                            &mut |_, a| self.load(&state, i, o, t, a.clone(), &cache),
+                            &mut |_, b| b.try_into(),
+                        )?,
+                    };
+                    o.values.alloc(
+                        SValue::Item {
+                            item: b,
+                            span: None,
+                        }
+                        .into(),
+                    )
+                };
+                o.blocks[t].stmts.push(b);
+                return Ok(b);
+            }
         }
         let x = match state.get(&a).cloned() {
             Some(b) => b.0,
             None => {
                 let v = o.values.alloc(SValue::LoadId(a).into());
                 o.blocks[t].stmts.push(v);
-                return v;
+                return Ok(v);
             }
         };
         if let Some(ty) = i.type_annotations.get(&a).cloned() {
             o.ts.insert(x, ty);
         };
-        x
+        Ok(x)
     }
     pub fn trans(
         &mut self,
@@ -614,9 +638,7 @@ impl ToSSAConverter {
                         .collect::<Vec<_>>();
                     let t = STerm::Jmp(STarget {
                         block: self.trans(
-                            i,
-                            o,
-                            *k,
+                            i, o, *k,
                             // &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
                         )?,
                         args: p,
@@ -670,7 +692,7 @@ impl ToSSAConverter {
                         Item::Undef => break 'a self.undef,
                         b => b.map2::<_, _, anyhow::Error, ()>(
                             &mut (),
-                            &mut |_, a| Ok(self.load(&state, i, o, t, a.clone(), &cache)),
+                            &mut |_, a| self.load(&state, i, o, t, a.clone(), &cache),
                             &mut |_, b| b.try_into(),
                         )?,
                     };
@@ -689,7 +711,7 @@ impl ToSSAConverter {
                             *f &= *flags;
                             let f = *f;
                             *a = b;
-                            if !f.contains(ValFlags::SSA_LIKE) && shim.is_some(){
+                            if !f.contains(ValFlags::SSA_LIKE) && shim.is_some() {
                                 let u = o.blocks.alloc(SBlock {
                                     params: vec![],
                                     stmts: vec![],
@@ -725,11 +747,9 @@ impl ToSSAConverter {
                     a => {
                         // let obj = self.load(&state, o, t, obj.clone());
                         // let mem = self.load(&state, o, t, mem.clone());
-                        let c = a
-                            .map::<_, Infallible>(
-                                &mut |a| Ok(self.load(&state, i, o, t, a, &cache)),
-                            )
-                            .unwrap();
+                        let c = a.map::<_, anyhow::Error>(&mut |a| {
+                            self.load(&state, i, o, t, a, &cache)
+                        })?;
                         let c = o.values.alloc(SValue::Assign { target: c, val: b }.into());
                         o.blocks[t].stmts.push(c);
                         None
@@ -774,10 +794,12 @@ impl ToSSAConverter {
             let term = match &i.blocks[k].post.term {
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {
                     None => STerm::Return(None),
-                    Some(a) => STerm::Return(Some(self.load(&state, i, o, t, a.clone(), &cache))),
+                    Some(a) => {
+                        STerm::Return(Some(self.load(&state, i, o, t, a.clone(), &cache)?))
+                    }
                 },
                 swc_tac::TTerm::Throw(ident) => {
-                    STerm::Throw(self.load(&state, i, o, t, ident.clone(), &cache))
+                    STerm::Throw(self.load(&state, i, o, t, ident.clone(), &cache)?)
                 }
                 swc_tac::TTerm::Jmp(id) => {
                     let id = self.trans(i, o, *id)?;
@@ -801,7 +823,7 @@ impl ToSSAConverter {
                         block: if_false,
                         args: params,
                     };
-                    let cond = self.load(&state, i, o, t, cond.clone(), &cache);
+                    let cond = self.load(&state, i, o, t, cond.clone(), &cache)?;
                     STerm::CondJmp {
                         cond,
                         if_true,
@@ -809,12 +831,12 @@ impl ToSSAConverter {
                     }
                 }
                 swc_tac::TTerm::Switch { x, blocks, default } => {
-                    let x = self.load(&state, i, o, t, x.clone(), &cache);
+                    let x = self.load(&state, i, o, t, x.clone(), &cache)?;
                     let blocks = blocks
                         .iter()
                         .map(|(a, b)| {
                             let c = self.trans(i, o, *b)?;
-                            let d = self.load(&state, i, o, t, a.clone(), &cache);
+                            let d = self.load(&state, i, o, t, a.clone(), &cache)?;
                             Ok((
                                 d,
                                 STarget {
