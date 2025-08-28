@@ -1,35 +1,43 @@
 [workspace]
-members=[  "portal-jsc-common","swc-cfg",  "swc-opt-ssa", "swc-ssa", "swc-tac", "swc-util"]
+members = [
+    "crates/portal-jsc-common",
+    "crates/swc-cfg",
+    "crates/swc-opt-ssa",
+    "crates/swc-ssa",
+    "crates/swc-tac",
+    "crates/swc-util",
+]
 
 # "js-runtime-lib","swc-emit-rust","swc-waffle"
 
-resolver="3"
+resolver = "3"
 
 [workspace.package]
 version = "0.8.0-pre.8"
 
 [workspace.dependencies]
-swc-cfg =             { version = "^0.8.0-pre.8", path = "swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac =             { version = "^0.8.0-pre.8", path = "swc-tac", package = "portal-jsc-swc-tac" }
-swc-ssa =             { version = "^0.8.0-pre.8", path = "swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util = { version = "^0.8.0-pre.8", path = "swc-util", features = ["ty"] }
-portal-jsc-common =   { version = "^0.8.0-pre.8", path = "portal-jsc-common" }
+swc-cfg = { version = "^0.8.0-pre.8", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
+swc-tac = { version = "^0.8.0-pre.8", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
+swc-ssa = { version = "^0.8.0-pre.8", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util = { version = "^0.8.0-pre.8", path = "crates/swc-util", features = [
+    "ty",
+] }
+portal-jsc-common = { version = "^0.8.0-pre.8", path = "crates/portal-jsc-common" }
 
 
 anyhow = "^1.0.87"
 bimap = "^0.6.3"
 id-arena = "^2.2.1"
-arena-traits = {version="^0.2.3",features=["id-arena"]}
+arena-traits = { version = "^0.2.3", features = ["id-arena"] }
 ssa-traits = "^0.2.3"
 cfg-traits = "^0.2.3"
-ssa-impls =  "^0.2.3"
+ssa-impls = "^0.2.3"
 ssa-reloop = "^0.2.3"
 
-ssa-traits-03 ={version="0.3.0-alpha.2",package="ssa-traits"}
-cfg-traits-03 ={version="0.3.0-alpha.2",package="cfg-traits"}
-ssa-impls-03 = {version="0.3.0-alpha.2",package="ssa-impls"} 
-ssa-reloop-03 ={version="0.3.0-alpha.2",package="ssa-reloop"}
-
+ssa-traits-03 = { version = "0.3.0-alpha.2", package = "ssa-traits" }
+cfg-traits-03 = { version = "0.3.0-alpha.2", package = "cfg-traits" }
+ssa-impls-03 = { version = "0.3.0-alpha.2", package = "ssa-impls" }
+ssa-reloop-03 = { version = "0.3.0-alpha.2", package = "ssa-reloop" }
 
 
 proc-macro2 = "^1.0.88"
@@ -42,9 +50,9 @@ bitflags = "^2.8.0"
 relooper = "^0.1.0"
 cityhasher = "^0.1.0"
 
-portal-pc-waffle="^0.5.4"
-px-llvm-codegen-utils-core="^0.1.4"
-px-llvm-codegen-utils-info="^0.1.4"
+portal-pc-waffle = "^0.5.4"
+px-llvm-codegen-utils-core = "^0.1.4"
+px-llvm-codegen-utils-info = "^0.1.4"
 portal-pc-asm-common = "^0.1.0"
 bitvec = "^1.0.1"
 instability = "^0.3.7"
@@ -66,5 +74,5 @@ swc_ecma_parser = "^22.0.0"
 swc_ecma_codegen = "^16"
 
 
-portal-solutions-swibb="^0.3.3"
+portal-solutions-swibb = "^0.3.3"
 portal-solutions-proxy-signs = "^0.1.0"
