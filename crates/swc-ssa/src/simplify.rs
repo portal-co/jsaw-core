@@ -4,7 +4,9 @@ use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
-pub use swc_tac::{Item, ItemGetter};
+use swc_tac::consts::ItemGetterExt;
+pub use swc_tac::{Item, consts::ItemGetter};
+pub type _Ident = Ident;
 
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -29,6 +31,41 @@ impl SCfg {
             }
         }
     }
+    pub fn simplify_loads(&mut self) {
+        for (k, kd) in self.blocks.iter() {
+            let mut m = BTreeMap::new();
+            for s in kd.stmts.iter().cloned() {
+                let x = &mut self.values[s];
+                if let SValueW {
+                    value: SValue::LoadId(i),
+                } = x
+                {
+                    if let Some(g) = m.get(&*i) {
+                        *x = SValueW {
+                            value: SValue::Item {
+                                item: Item::Just { id: *g },
+                                span: None,
+                            },
+                        }
+                    }
+                }
+                if let SValueW {
+                    value: SValue::StoreId { target, val },
+                } = x
+                {
+                    m.insert(target.clone(), *val);
+                }
+            }
+        }
+    }
+    pub fn simplify_justs(&mut self) {
+        let mut redo = true;
+        while take(&mut redo) {
+            for ref_ in self.values.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
+                redo = redo | self.simplify_just(ref_);
+            }
+        }
+    }
 }
 
 pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
@@ -49,6 +86,35 @@ pub fn _get_item<'a, I: Copy, B, F>(
             }
             SValue::LoadId(_) => return None,
             SValue::StoreId { target, val } => {
+                i = *val;
+            }
+            SValue::EdgeBlocker { value, span } => {
+                i = *value;
+            }
+        }
+    }
+}
+#[doc(hidden)]
+pub fn _get_ident<'a, I: Copy, B, F>(
+    a: &'a (dyn SValGetter<I, B, F> + 'a),
+    mut i: I,
+) -> Option<Ident> {
+    let mut bak = None;
+    loop {
+        match a.val(i)? {
+            SValue::Param { block, idx, ty } => return bak,
+            SValue::Item { item, span } => match item {
+                Item::Just { id } => {
+                    i = *id;
+                }
+                _ => return bak,
+            },
+            SValue::Assign { target, val } => {
+                i = *val;
+            }
+            SValue::LoadId(a) => return Some(a.clone()),
+            SValue::StoreId { target, val } => {
+                bak = Some(target.clone());
                 i = *val;
             }
             SValue::EdgeBlocker { value, span } => {
@@ -90,6 +156,9 @@ macro_rules! sval_item {
             }
             fn get_mut_item(&mut self, i: I) -> Option<&mut $crate::simplify::Item<I, F>>{
                 $crate::simplify::_get_item_mut(self,i)
+            }
+            fn get_ident(&self, i: I) -> Option<$crate::simplify::_Ident>{
+                $crate::simplify::_get_ident(self,i)
             }
         }
     };

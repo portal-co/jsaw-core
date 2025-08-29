@@ -26,9 +26,13 @@ use swc_ecma_ast::{
 
 use swc_ecma_ast::Id as Ident;
 
+use crate::consts::{ItemGetter, ItemGetterExt};
+
+pub mod consts;
 pub mod lam;
 pub mod prepa;
 pub mod rew;
+pub mod splat;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Private {
     pub sym: Atom,
@@ -415,6 +419,14 @@ impl TCfg {
         });
         return a;
     }
+    pub fn simplify_justs(&mut self) {
+        let mut redo = true;
+        while take(&mut redo) {
+            for ref_ in self.refs().collect::<BTreeSet<_>>() {
+                redo = redo | self.simplify_just(ref_);
+            }
+        }
+    }
     pub fn externs<'a>(&'a self) -> Box<dyn Iterator<Item = Ident> + 'a> {
         Box::new(self.refs().filter(|a| !self.decls.contains(a)))
     }
@@ -616,22 +628,7 @@ impl<I> TCallee<I> {
         })
     }
 }
-pub trait ItemGetter<I = Ident, F = TFunc> {
-    fn get_item(&self, i: I) -> Option<&Item<I, F>>;
-    fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I, F>>;
-}
-impl ItemGetter for TCfg {
-    fn get_item(&self, i: (Atom, SyntaxContext)) -> Option<&Item<(Atom, SyntaxContext), TFunc>> {
-        self.def(LId::Id { id: i })
-    }
 
-    fn get_mut_item(
-        &mut self,
-        i: (Atom, SyntaxContext),
-    ) -> Option<&mut Item<(Atom, SyntaxContext), TFunc>> {
-        self.def_mut(LId::Id { id: i })
-    }
-}
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
     match d {
         Item::Asm { value }
@@ -644,8 +641,7 @@ pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)
         }
         Item::Lit { lit } => true,
         Item::Un { arg, op }
-            if !matches!(op, UnaryOp::Delete)
-                && tcfg.get_item(arg.clone()).is_some() =>
+            if !matches!(op, UnaryOp::Delete) && tcfg.get_item(arg.clone()).is_some() =>
         {
             true
         }
@@ -2089,67 +2085,7 @@ impl Trans<'_> {
                             let r#fn;
                             (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
 
-                            match o.def(LId::Id { id: r#fn.clone() }).cloned() {
-                                Some(Item::Func { func, arrow }) => {
-                                    let u = Expr::undefined(call.span);
-                                    for (p, a) in
-                                        func.params.iter().map(Some).chain(once(None).cycle()).zip(
-                                            call.args.iter().map(Some).chain(once(None).cycle()),
-                                        )
-                                    {
-                                        if p.is_none() && a.is_none() {
-                                            break;
-                                        }
-                                        // let Pat::Ident(id) = &p.pat else {
-                                        //     anyhow::bail!("non-simple pattern")
-                                        // };
-                                        let arg;
-                                        (arg, t) = self.expr(
-                                            i,
-                                            o,
-                                            b,
-                                            t,
-                                            match a {
-                                                Some(a) => &a.expr,
-                                                None => &*u,
-                                            },
-                                        )?;
-                                        if let Some(p) = p {
-                                            o.blocks[t].stmts.push(TStmt {
-                                                left: LId::Id { id: p.clone() },
-                                                flags: Default::default(),
-                                                right: Item::Just { id: arg },
-                                                span: a.span(),
-                                            });
-                                        }
-                                    }
-                                    let tmp = o.regs.alloc(());
-                                    let t2 = o.blocks.alloc(TBlock {
-                                        stmts: vec![],
-                                        post: TPostecedent {
-                                            catch: o.blocks[t].post.catch.clone(),
-                                            term: Default::default(),
-                                            orig_span: Some(e.span()),
-                                        },
-                                    });
-                                    let cfg: swc_cfg::Func = func.clone().try_into()?;
-                                    let mut t4 = Trans {
-                                        map: Default::default(),
-                                        ret_to: Some((tmp.clone(), t2)),
-                                        recatch: o.blocks[t].post.catch.clone(),
-                                        this: if arrow || !func.cfg.has_this() {
-                                            self.this.clone()
-                                        } else {
-                                            Some((Atom::new("globalThis"), Default::default()))
-                                        },
-                                        mapper: self.mapper.bud(),
-                                    };
-                                    let t3 = t4.trans(&cfg.cfg, o, cfg.entry)?;
-                                    o.blocks[t].post.term = TTerm::Jmp(t3);
-                                    return Ok((tmp, t2));
-                                }
-                                _ => TCallee::Val(r#fn),
-                            }
+                            TCallee::Val(r#fn)
                         }
                     },
                     _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
