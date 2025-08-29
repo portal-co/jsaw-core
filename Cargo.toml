@@ -13,16 +13,16 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.8.0-pre.8"
+version = "0.8.0-pre.9"
 
 [workspace.dependencies]
-swc-cfg = { version = "^0.8.0-pre.8", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac = { version = "^0.8.0-pre.8", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
-swc-ssa = { version = "^0.8.0-pre.8", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util = { version = "^0.8.0-pre.8", path = "crates/swc-util", features = [
+swc-cfg = { version = "^0.8.0-pre.9", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
+swc-tac = { version = "^0.8.0-pre.9", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
+swc-ssa = { version = "^0.8.0-pre.9", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util = { version = "^0.8.0-pre.9", path = "crates/swc-util", features = [
     "ty",
 ] }
-portal-jsc-common = { version = "^0.8.0-pre.8", path = "crates/portal-jsc-common" }
+portal-jsc-common = { version = "^0.8.0-pre.9", path = "crates/portal-jsc-common" }
 
 
 anyhow = "^1.0.87"
@@ -61,18 +61,19 @@ linearize-derive = "^0.1.0"
 
 swc_atoms = "^7.0.0"
 swc_common = "^14.0.0"
-swc_ecma_ast = "^14.0.0"
-swc_ecma_compat_es2015 = "^24.0.0"
-swc_ecma_minifier = "^28.0.0"
-swc_ecma_transforms_base = "^23.0.0"
-swc_ecma_transforms_optimization = "^24.0.0"
-swc_ecma_utils = "^19.0.0"
-swc_ecma_visit = "^14.0.0"
-swc_bundler = "^27.0.0"
+swc_ecma_ast = "^15.0.0"
+swc_ecma_compat_es2015 = "^26.0.0"
+swc_ecma_minifier = "^30.0.0"
+swc_ecma_transforms_base = "^25.0.0"
+swc_ecma_transforms_optimization = "^26.0.0"
+swc_ecma_utils = "^21.0.0"
+swc_ecma_visit = "^15.0.0"
+swc_bundler = "^29.0.0"
 swc_ecma_loader = "^14.0.0"
-swc_ecma_parser = "^22.0.0"
-swc_ecma_codegen = "^16"
+swc_ecma_parser = "^23.0.0"
+swc_ecma_codegen = "^17"
 
 
-portal-solutions-swibb = "^0.3.3"
+
+portal-solutions-swibb = "^0.4.0"
 portal-solutions-proxy-signs = "^0.1.0"
