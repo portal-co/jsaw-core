@@ -1,3 +1,7 @@
+use std::cell::OnceCell;
+
+use swc_ecma_ast::{AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
+
 use crate::*;
 #[non_exhaustive]
 pub struct Trans<'a> {
@@ -153,26 +157,9 @@ impl Trans<'_> {
                 swc_ecma_ast::Decl::Var(var_decl) => {
                     for var_decl in var_decl.decls.iter() {
                         if let Some(e) = &var_decl.init {
-                            match &var_decl.name {
-                                Pat::Ident(i2) => {
-                                    let f;
-                                    (f, t) = self.expr(i, o, b, t, e)?;
-                                    o.blocks[t].stmts.push(TStmt {
-                                        left: LId::Id {
-                                            id: i2.id.clone().into(),
-                                        },
-                                        flags: Default::default(),
-                                        right: Item::Just { id: f },
-                                        span: e.span(),
-                                    });
-                                    o.decls.insert(i2.id.clone().into());
-                                    if let Some(a) = i2.type_ann.as_ref().cloned() {
-                                        o.type_annotations
-                                            .insert(i2.id.clone().into(), *a.type_ann);
-                                    }
-                                }
-                                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                            }
+                            let f;
+                            (f, t) = self.expr(i, o, b, t, e)?;
+                            t = self.bind(i, o, b, t, &var_decl.name, f, true)?;
                         }
                     }
                     return Ok(t);
@@ -185,6 +172,101 @@ impl Trans<'_> {
             },
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
+    }
+    pub fn bind(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        p: &Pat,
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
+        match p {
+            Pat::Ident(i2) => self.bind_ident(i, o, b, t, i2, f, decl),
+            Pat::Object(op) => self.bind_object(i, o, b, t, op, f, decl),
+            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+        }
+    }
+    pub fn bind_object(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        p: &ObjectPat,
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
+        let mut a = BTreeSet::new();
+        for prop in p.props.iter() {
+            match prop {
+                swc_ecma_ast::ObjectPatProp::KeyValue(key_value_pat_prop) => {
+                    let g;
+                    let h;
+                    (h, t) = self.expr(i, o, b, t, &imp(key_value_pat_prop.key.clone().into()))?;
+                    a.insert(h.clone());
+                    g = o.regs.alloc(());
+                    o.decls.insert(g.clone());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: g.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Mem {
+                            obj: f.clone(),
+                            mem: h,
+                        },
+                        span: prop.span(),
+                    });
+                    t = self.bind(i, o, b, t, &*key_value_pat_prop.value, g, decl)?;
+                }
+                swc_ecma_ast::ObjectPatProp::Assign(assign_pat_prop) => todo!(),
+                swc_ecma_ast::ObjectPatProp::Rest(rest_pat) => {}
+            }
+        }
+        for prop in p.props.iter() {
+            if let ObjectPatProp::Rest(rest) = prop {
+                let g = o.regs.alloc(());
+                o.decls.insert(g.clone());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: g.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::StaticSubObject {
+                        wrapped: f.clone(),
+                        keys: a.iter().cloned().map(|a| PropKey::Computed(a)).collect(),
+                    },
+                    span: prop.span(),
+                });
+                t = self.bind(i, o, b, t, &*rest.arg, g, decl)?;
+            }
+        }
+        Ok(t)
+    }
+    pub fn bind_ident(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        i2: &BindingIdent,
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id {
+                id: i2.id.clone().into(),
+            },
+            flags: Default::default(),
+            right: Item::Just { id: f },
+            span: i2.span,
+        });
+        if decl {
+            o.decls.insert(i2.id.clone().into());
+        }
+        if let Some(a) = i2.type_ann.as_ref().cloned() {
+            o.type_annotations.insert(i2.id.clone().into(), *a.type_ann);
+        }
+        return Ok(t);
     }
     pub fn member_expr(
         &mut self,
@@ -553,6 +635,9 @@ impl Trans<'_> {
                 _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
             },
             swc_ecma_ast::AssignTarget::Pat(assign_target_pat) => match &assign_target_pat {
+                AssignTargetPat::Object(p) => {
+                    t = self.bind_object(i, o, b, t, p, right.clone(), false)?;
+                }
                 _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
             },
         };
@@ -1379,28 +1464,40 @@ impl Trans<'_> {
 impl TFunc {
     pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
-        let entry = Trans {
+        let mut conv = Trans {
             map: BTreeMap::new(),
             ret_to: None,
             recatch: TCatch::Throw,
             this: None,
             mapper,
-        }
-        .trans(&value.cfg, &mut cfg, value.entry)?;
+        };
+        let mut entry = conv.trans(&value.cfg, &mut cfg, value.entry)?;
         cfg.ts_retty = value.cfg.ts_retty.clone();
         cfg.generics = value.cfg.generics.clone();
         let mut ts_params = vec![];
-        let params = value
+        let mut params = value
             .params
             .iter()
-            .filter_map(|x| match &x.pat {
-                Pat::Ident(i) => {
-                    ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
-                    Some(i.id.clone().into())
-                }
-                _ => None,
+            .rev()
+            .map(|x| {
+                Ok(match &x.pat {
+                    Pat::Ident(i) => {
+                        ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
+                        i.id.clone().into()
+                    }
+                    p => {
+                        let e2 = cfg.blocks.alloc(Default::default());
+                        let i = cfg.regs.alloc(());
+                        let k =
+                            conv.bind(&value.cfg, &mut cfg, value.entry, e2, p, i.clone(), true)?;
+                        cfg.blocks[k].post.term = TTerm::Jmp(entry);
+                        entry = e2;
+                        i
+                    }
+                })
             })
-            .collect::<Vec<Ident>>();
+            .collect::<anyhow::Result<Vec<Ident>>>()?;
+        params.reverse();
         Ok(Self {
             cfg,
             entry,
