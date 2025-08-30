@@ -44,23 +44,23 @@ impl Splatting {
                     k: self.translate(i, o, *k, semantic),
                 },
             };
-            for s in i.blocks[k].stmts.iter() {
-                let mut s = s.clone();
-                if let Item::Func { func, arrow } = &mut s.right {
+            for stmt in i.blocks[k].stmts.iter() {
+                let mut stmt = stmt.clone();
+                if let Item::Func { func, arrow } = &mut stmt.right {
                     *func = func.splatted(semantic);
                 }
-                if let Some(t) = self.this_val.as_ref() {
-                    if let Item::This = &mut s.right {
-                        s.right = Item::Just { id: t.clone() }
+                if let Some(thid) = self.this_val.as_ref() {
+                    if let Item::This = &mut stmt.right {
+                        stmt.right = Item::Just { id: thid.clone() }
                     }
                 }
                 if let Item::Call {
-                    callee: TCallee::Val(v),
+                    callee: TCallee::Val(value),
                     args,
-                } = &s.right
+                } = &stmt.right
                 {
-                    if let Some(Item::Func { func, arrow }) = i.def(LId::Id { id: v.clone() }) {
-                        for (p, a) in func
+                    if let Some(Item::Func { func, arrow }) = i.def(LId::Id { id: value.clone() }) {
+                        for (param, arg) in func
                             .params
                             .iter()
                             .cloned()
@@ -68,14 +68,14 @@ impl Splatting {
                             .chain(once(None).cycle())
                             .zip(args.iter().cloned().map(Some).chain(once(None).cycle()))
                         {
-                            if p.is_none() && a.is_none() {
+                            if param.is_none() && arg.is_none() {
                                 break;
                             }
-                            if let Some(p) = p {
+                            if let Some(param) = param {
                                 o.blocks[b].stmts.push(TStmt {
-                                    left: LId::Id { id: p },
+                                    left: LId::Id { id: param },
                                     flags: Default::default(),
-                                    right: match a {
+                                    right: match arg {
                                         None => Item::Undef,
                                         Some(a) => Item::Just { id: a },
                                     },
@@ -89,7 +89,7 @@ impl Splatting {
                         let mut new = Splatting {
                             cache: Default::default(),
                             catch: o.blocks[b].post.catch.clone(),
-                            ret: Some((s.left, d)),
+                            ret: Some((stmt.left, d)),
                             this_val: if *arrow || (!func.cfg.has_this()) {
                                 self.this_val.clone()
                             } else {
@@ -106,7 +106,7 @@ impl Splatting {
                     if let Item::Call {
                         callee: TCallee::Member { func, member },
                         args,
-                    } = &s.right
+                    } = &stmt.right
                     {
                         if let Some(Item::Lit {
                             lit: Lit::Str(method),
@@ -116,25 +116,25 @@ impl Splatting {
                                 i.def(LId::Id { id: func.clone() })
                             {
                                 if method.value.as_str() == "call" {
-                                    let mut a =
+                                    let mut args_itet =
                                         args.iter().cloned().map(Some).chain(once(None).cycle());
-                                    let ta = a.next().unwrap();
-                                    for (p, a) in func
+                                    let this_arg = args_itet.next().unwrap();
+                                    for (param, arg) in func
                                         .params
                                         .iter()
                                         .cloned()
                                         .map(Some)
                                         .chain(once(None).cycle())
-                                        .zip(a)
+                                        .zip(args_itet)
                                     {
-                                        if p.is_none() && a.is_none() {
+                                        if param.is_none() && arg.is_none() {
                                             break;
                                         }
-                                        if let Some(p) = p {
+                                        if let Some(param) = param {
                                             o.blocks[b].stmts.push(TStmt {
-                                                left: LId::Id { id: p },
+                                                left: LId::Id { id: param },
                                                 flags: Default::default(),
-                                                right: match a {
+                                                right: match arg {
                                                     None => Item::Undef,
                                                     Some(a) => Item::Just { id: a },
                                                 },
@@ -148,16 +148,16 @@ impl Splatting {
                                     let mut new = Splatting {
                                         cache: Default::default(),
                                         catch: o.blocks[b].post.catch.clone(),
-                                        ret: Some((s.left, d)),
+                                        ret: Some((stmt.left, d)),
                                         this_val: if *arrow || (!func.cfg.has_this()) {
                                             self.this_val.clone()
                                         } else {
-                                            match ta {
+                                            match this_arg {
                                                 None => Some((
                                                     Atom::new("globalThis"),
                                                     Default::default(),
                                                 )),
-                                                Some(a) => Some(a),
+                                                Some(arg) => Some(arg),
                                             }
                                         },
                                     };
@@ -170,7 +170,7 @@ impl Splatting {
                         }
                     }
                 }
-                o.blocks[b].stmts.push(s);
+                o.blocks[b].stmts.push(stmt);
             }
             o.blocks[b].post.orig_span = i.blocks[k].post.orig_span;
             o.blocks[b].post.term = match &i.blocks[k].post.term {
