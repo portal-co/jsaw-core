@@ -709,6 +709,7 @@ dependencies = [
  "portal-jsc-swc-cfg",
  "portal-jsc-swc-tac",
  "portal-jsc-swc-util",
+ "ssa-impls",
  "ssa-traits",
  "swc_atoms",
  "swc_common",
