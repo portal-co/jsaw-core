@@ -2,10 +2,10 @@ use std::mem::replace;
 
 use crate::*;
 impl TFunc {
-    pub fn splatted(&self) -> TFunc {
+    pub fn splatted(&self, semantic: &SemanticCfg) -> TFunc {
         let mut s = Splatting::default();
         let mut new = TCfg::default();
-        let ne = s.translate(&self.cfg, &mut new, self.entry);
+        let ne = s.translate(&self.cfg, &mut new, self.entry, semantic);
         TFunc {
             cfg: new,
             entry: ne,
@@ -21,9 +21,16 @@ pub struct Splatting {
     pub cache: BTreeMap<Id<TBlock>, Id<TBlock>>,
     pub catch: TCatch,
     pub ret: Option<(LId, Id<TBlock>)>,
+    pub this_val: Option<Ident>,
 }
 impl Splatting {
-    pub fn translate(&mut self, i: &TCfg, o: &mut TCfg, k: Id<TBlock>) -> Id<TBlock> {
+    pub fn translate(
+        &mut self,
+        i: &TCfg,
+        o: &mut TCfg,
+        k: Id<TBlock>,
+        semantic: &SemanticCfg,
+    ) -> Id<TBlock> {
         loop {
             if let Some(b) = self.cache.get(&k) {
                 return *b;
@@ -34,13 +41,18 @@ impl Splatting {
                 TCatch::Throw => self.catch.clone(),
                 TCatch::Jump { pat, k } => TCatch::Jump {
                     pat: pat.clone(),
-                    k: self.translate(i, o, *k),
+                    k: self.translate(i, o, *k, semantic),
                 },
             };
             for s in i.blocks[k].stmts.iter() {
                 let mut s = s.clone();
                 if let Item::Func { func, arrow } = &mut s.right {
-                    *func = func.splatted();
+                    *func = func.splatted(semantic);
+                }
+                if let Some(t) = self.this_val.as_ref() {
+                    if let Item::This = &mut s.right {
+                        s.right = Item::Just { id: t.clone() }
+                    }
                 }
                 if let Item::Call {
                     callee: TCallee::Val(v),
@@ -48,17 +60,113 @@ impl Splatting {
                 } = &s.right
                 {
                     if let Some(Item::Func { func, arrow }) = i.def(LId::Id { id: v.clone() }) {
-                        if *arrow || (!func.cfg.has_this()) {
-                            let mut d = o.blocks.alloc(Default::default());
-                            o.blocks[d].post.catch = o.blocks[b].post.catch.clone();
-                            let mut new = Splatting {
-                                cache: Default::default(),
-                                catch: o.blocks[b].post.catch.clone(),
-                                ret: Some((s.left, d)),
-                            };
-                            let c = new.translate(&func.cfg, o, func.entry);
-                            o.blocks[replace(&mut b, d)].post.term = TTerm::Jmp(c);
-                            continue;
+                        for (p, a) in func
+                            .params
+                            .iter()
+                            .cloned()
+                            .map(Some)
+                            .chain(once(None).cycle())
+                            .zip(args.iter().cloned().map(Some).chain(once(None).cycle()))
+                        {
+                            if p.is_none() && a.is_none() {
+                                break;
+                            }
+                            if let Some(p) = p {
+                                o.blocks[b].stmts.push(TStmt {
+                                    left: LId::Id { id: p },
+                                    flags: Default::default(),
+                                    right: match a {
+                                        None => Item::Undef,
+                                        Some(a) => Item::Just { id: a },
+                                    },
+                                    span: Span::dummy_with_cmt(),
+                                });
+                            }
+                        }
+                        // if {
+                        let mut d = o.blocks.alloc(Default::default());
+                        o.blocks[d].post.catch = o.blocks[b].post.catch.clone();
+                        let mut new = Splatting {
+                            cache: Default::default(),
+                            catch: o.blocks[b].post.catch.clone(),
+                            ret: Some((s.left, d)),
+                            this_val: if *arrow || (!func.cfg.has_this()) {
+                                self.this_val.clone()
+                            } else {
+                                Some((Atom::new("globalThis"), Default::default()))
+                            },
+                        };
+                        let c = new.translate(&func.cfg, o, func.entry, semantic);
+                        o.blocks[replace(&mut b, d)].post.term = TTerm::Jmp(c);
+                        continue;
+                        // }
+                    }
+                }
+                if semantic.flags.contains(SemanticFlags::ASSUME_SES) {
+                    if let Item::Call {
+                        callee: TCallee::Member { func, member },
+                        args,
+                    } = &s.right
+                    {
+                        if let Some(Item::Lit {
+                            lit: Lit::Str(method),
+                        }) = i.def(LId::Id { id: member.clone() })
+                        {
+                            if let Some(Item::Func { func, arrow }) =
+                                i.def(LId::Id { id: func.clone() })
+                            {
+                                if method.value.as_str() == "call" {
+                                    let mut a =
+                                        args.iter().cloned().map(Some).chain(once(None).cycle());
+                                    let ta = a.next().unwrap();
+                                    for (p, a) in func
+                                        .params
+                                        .iter()
+                                        .cloned()
+                                        .map(Some)
+                                        .chain(once(None).cycle())
+                                        .zip(a)
+                                    {
+                                        if p.is_none() && a.is_none() {
+                                            break;
+                                        }
+                                        if let Some(p) = p {
+                                            o.blocks[b].stmts.push(TStmt {
+                                                left: LId::Id { id: p },
+                                                flags: Default::default(),
+                                                right: match a {
+                                                    None => Item::Undef,
+                                                    Some(a) => Item::Just { id: a },
+                                                },
+                                                span: Span::dummy_with_cmt(),
+                                            });
+                                        }
+                                    }
+                                    // if {
+                                    let mut d = o.blocks.alloc(Default::default());
+                                    o.blocks[d].post.catch = o.blocks[b].post.catch.clone();
+                                    let mut new = Splatting {
+                                        cache: Default::default(),
+                                        catch: o.blocks[b].post.catch.clone(),
+                                        ret: Some((s.left, d)),
+                                        this_val: if *arrow || (!func.cfg.has_this()) {
+                                            self.this_val.clone()
+                                        } else {
+                                            match ta {
+                                                None => Some((
+                                                    Atom::new("globalThis"),
+                                                    Default::default(),
+                                                )),
+                                                Some(a) => Some(a),
+                                            }
+                                        },
+                                    };
+                                    let c = new.translate(&func.cfg, o, func.entry, semantic);
+                                    o.blocks[replace(&mut b, d)].post.term = TTerm::Jmp(c);
+                                    continue;
+                                }
+                                // }
+                            }
                         }
                     }
                 }
@@ -99,23 +207,23 @@ impl Splatting {
                         TTerm::Jmp(k2)
                     }
                 },
-                TTerm::Jmp(id) => TTerm::Jmp(self.translate(i, o, *id)),
+                TTerm::Jmp(id) => TTerm::Jmp(self.translate(i, o, *id, semantic)),
                 TTerm::CondJmp {
                     cond,
                     if_true,
                     if_false,
                 } => TTerm::CondJmp {
                     cond: cond.clone(),
-                    if_true: self.translate(i, o, *if_true),
-                    if_false: self.translate(i, o, *if_false),
+                    if_true: self.translate(i, o, *if_true, semantic),
+                    if_false: self.translate(i, o, *if_false, semantic),
                 },
                 TTerm::Switch { x, blocks, default } => TTerm::Switch {
                     x: x.clone(),
                     blocks: blocks
                         .iter()
-                        .map(|(a, k)| (a.clone(), self.translate(i, o, *k)))
+                        .map(|(a, k)| (a.clone(), self.translate(i, o, *k, semantic)))
                         .collect(),
-                    default: self.translate(i, o, *default),
+                    default: self.translate(i, o, *default, semantic),
                 },
                 TTerm::Default => TTerm::Default,
             };

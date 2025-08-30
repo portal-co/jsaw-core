@@ -29,11 +29,11 @@ use swc_ecma_ast::Id as Ident;
 use crate::consts::{ItemGetter, ItemGetterExt};
 
 pub mod consts;
+pub mod conv;
 pub mod lam;
 pub mod prepa;
 pub mod rew;
 pub mod splat;
-pub mod conv;
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Private {
     pub sym: Atom,
