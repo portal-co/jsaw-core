@@ -46,9 +46,12 @@ impl Splatting {
             };
             for stmt in input.blocks[in_block].stmts.iter() {
                 let mut stmt = stmt.clone();
-                if let Item::Func { func, arrow } = &mut stmt.right {
-                    *func = func.splatted(semantic);
-                }
+                stmt.right = stmt
+                    .right
+                    .map2(&mut (), &mut |_, i| Ok::<_, Infallible>(i), &mut |_, f| {
+                        Ok(f.splatted(semantic))
+                    })
+                    .unwrap();
                 if let Some(thid) = self.this_val.as_ref() {
                     if let Item::This = &mut stmt.right {
                         stmt.right = Item::Just { id: thid.clone() }
@@ -59,7 +62,9 @@ impl Splatting {
                     args,
                 } = &stmt.right
                 {
-                    if let Some(Item::Func { func, arrow }) = input.def(LId::Id { id: value.clone() }) {
+                    if let Some(Item::Func { func, arrow }) =
+                        input.def(LId::Id { id: value.clone() })
+                    {
                         for (param, arg) in func
                             .params
                             .iter()
@@ -144,7 +149,8 @@ impl Splatting {
                                     }
                                     // if {
                                     let mut d = output.blocks.alloc(Default::default());
-                                    output.blocks[d].post.catch = output.blocks[out_block].post.catch.clone();
+                                    output.blocks[d].post.catch =
+                                        output.blocks[out_block].post.catch.clone();
                                     let mut new = Splatting {
                                         cache: Default::default(),
                                         catch: output.blocks[out_block].post.catch.clone(),
@@ -162,7 +168,8 @@ impl Splatting {
                                         },
                                     };
                                     let c = new.translate(&func.cfg, output, func.entry, semantic);
-                                    output.blocks[replace(&mut out_block, d)].post.term = TTerm::Jmp(c);
+                                    output.blocks[replace(&mut out_block, d)].post.term =
+                                        TTerm::Jmp(c);
                                     continue;
                                 }
                                 // }
