@@ -1486,6 +1486,7 @@ impl TFunc {
                         i.id.clone().into()
                     }
                     p => {
+                        ts_params.push(None);
                         let e2 = cfg.blocks.alloc(Default::default());
                         let i = cfg.regs.alloc(());
                         let k =
@@ -1498,6 +1499,7 @@ impl TFunc {
             })
             .collect::<anyhow::Result<Vec<Ident>>>()?;
         params.reverse();
+        ts_params.reverse();
         Ok(Self {
             cfg,
             entry,
