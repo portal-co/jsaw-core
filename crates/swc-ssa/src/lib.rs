@@ -644,20 +644,14 @@ impl ToSSAConverter {
                         .filter_map(|x| v.get(x))
                         .cloned()
                         .collect::<Vec<_>>();
-                    let mut x;
-                    let mut y;
+                    // let mut x;
+                    // let mut y;
                     let t = STerm::Jmp(STarget {
                         block: self.trans(
                             i,
                             o,
                             *k,
-                            if d {
-                                x = app.iter().map(|(k, v)| (k.clone(), v.clone()));
-                                &mut x
-                            } else {
-                                y = empty();
-                                &mut y
-                            },
+                            &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
                         )?,
                         args: p,
                     });
@@ -681,9 +675,11 @@ impl ToSSAConverter {
                 //     })
                 // })
                 .map(|a| (a.clone(), (o.add_blockparam(t), ValFlags::all())))
-                .collect::<BTreeMap<_, _>>()
-                .into_iter()
-                .chain(app.into_iter().map(|(a, b)| (a, (b, ValFlags::all()))))
+                .chain(
+                    app.iter()
+                        .map(|(a, b)| (a.clone(), b.clone()))
+                        .map(|(a, b)| (a, (b, ValFlags::all()))),
+                )
                 .collect::<BTreeMap<_, _>>();
             self.apply_shim(o, &state, &shim, t);
             let mut cache = BTreeMap::new();
@@ -800,23 +796,27 @@ impl ToSSAConverter {
             let mut dtc = |this: &Self, k2: Id<TBlock>| {
                 let d = this.domtree.get(&Some(k2)).cloned() == Some(Some(k));
                 if d {
-                    this.all
-                        .iter()
-                        .filter(|a| {
-                            !i.blocks.iter().all(|k| {
-                                k.1.stmts.iter().all(|i| {
-                                    i.left
-                                        != LId::Id {
-                                            id: a.clone().clone(),
-                                        }
-                                        || !i.flags.contains(ValFlags::SSA_LIKE)
+                    app.clone()
+                        .into_iter()
+                        .chain(
+                            this.all
+                                .iter()
+                                .filter(|a| {
+                                    !i.blocks.iter().all(|k| {
+                                        k.1.stmts.iter().all(|i| {
+                                            i.left
+                                                != LId::Id {
+                                                    id: a.clone().clone(),
+                                                }
+                                                || !i.flags.contains(ValFlags::SSA_LIKE)
+                                        })
+                                    })
                                 })
-                            })
-                        })
-                        .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0)))
+                                .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0))),
+                        )
                         .collect::<BTreeMap<_, _>>()
                 } else {
-                    BTreeMap::default()
+                    app.clone()
                 }
             };
             // let mut dtc = dtc.iter().map(|(a, b)| (a.clone(), b.clone()));
