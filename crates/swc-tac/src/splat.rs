@@ -26,25 +26,25 @@ pub struct Splatting {
 impl Splatting {
     pub fn translate(
         &mut self,
-        i: &TCfg,
-        o: &mut TCfg,
-        k: Id<TBlock>,
+        input: &TCfg,
+        output: &mut TCfg,
+        in_block: Id<TBlock>,
         semantic: &SemanticCfg,
     ) -> Id<TBlock> {
         loop {
-            if let Some(b) = self.cache.get(&k) {
+            if let Some(b) = self.cache.get(&in_block) {
                 return *b;
             }
-            let mut b = o.blocks.alloc(Default::default());
-            self.cache.insert(k, b);
-            o.blocks[b].post.catch = match &i.blocks[k].post.catch {
+            let mut out_block = output.blocks.alloc(Default::default());
+            self.cache.insert(in_block, out_block);
+            output.blocks[out_block].post.catch = match &input.blocks[in_block].post.catch {
                 TCatch::Throw => self.catch.clone(),
                 TCatch::Jump { pat, k } => TCatch::Jump {
                     pat: pat.clone(),
-                    k: self.translate(i, o, *k, semantic),
+                    k: self.translate(input, output, *k, semantic),
                 },
             };
-            for stmt in i.blocks[k].stmts.iter() {
+            for stmt in input.blocks[in_block].stmts.iter() {
                 let mut stmt = stmt.clone();
                 if let Item::Func { func, arrow } = &mut stmt.right {
                     *func = func.splatted(semantic);
@@ -59,7 +59,7 @@ impl Splatting {
                     args,
                 } = &stmt.right
                 {
-                    if let Some(Item::Func { func, arrow }) = i.def(LId::Id { id: value.clone() }) {
+                    if let Some(Item::Func { func, arrow }) = input.def(LId::Id { id: value.clone() }) {
                         for (param, arg) in func
                             .params
                             .iter()
@@ -72,7 +72,7 @@ impl Splatting {
                                 break;
                             }
                             if let Some(param) = param {
-                                o.blocks[b].stmts.push(TStmt {
+                                output.blocks[out_block].stmts.push(TStmt {
                                     left: LId::Id { id: param },
                                     flags: Default::default(),
                                     right: match arg {
@@ -84,11 +84,11 @@ impl Splatting {
                             }
                         }
                         // if {
-                        let mut d = o.blocks.alloc(Default::default());
-                        o.blocks[d].post.catch = o.blocks[b].post.catch.clone();
+                        let mut d = output.blocks.alloc(Default::default());
+                        output.blocks[d].post.catch = output.blocks[out_block].post.catch.clone();
                         let mut new = Splatting {
                             cache: Default::default(),
-                            catch: o.blocks[b].post.catch.clone(),
+                            catch: output.blocks[out_block].post.catch.clone(),
                             ret: Some((stmt.left, d)),
                             this_val: if *arrow || (!func.cfg.has_this()) {
                                 self.this_val.clone()
@@ -96,8 +96,8 @@ impl Splatting {
                                 Some((Atom::new("globalThis"), Default::default()))
                             },
                         };
-                        let c = new.translate(&func.cfg, o, func.entry, semantic);
-                        o.blocks[replace(&mut b, d)].post.term = TTerm::Jmp(c);
+                        let c = new.translate(&func.cfg, output, func.entry, semantic);
+                        output.blocks[replace(&mut out_block, d)].post.term = TTerm::Jmp(c);
                         continue;
                         // }
                     }
@@ -110,10 +110,10 @@ impl Splatting {
                     {
                         if let Some(Item::Lit {
                             lit: Lit::Str(method),
-                        }) = i.def(LId::Id { id: member.clone() })
+                        }) = input.def(LId::Id { id: member.clone() })
                         {
                             if let Some(Item::Func { func, arrow }) =
-                                i.def(LId::Id { id: func.clone() })
+                                input.def(LId::Id { id: func.clone() })
                             {
                                 if method.value.as_str() == "call" {
                                     let mut args_itet =
@@ -131,7 +131,7 @@ impl Splatting {
                                             break;
                                         }
                                         if let Some(param) = param {
-                                            o.blocks[b].stmts.push(TStmt {
+                                            output.blocks[out_block].stmts.push(TStmt {
                                                 left: LId::Id { id: param },
                                                 flags: Default::default(),
                                                 right: match arg {
@@ -143,11 +143,11 @@ impl Splatting {
                                         }
                                     }
                                     // if {
-                                    let mut d = o.blocks.alloc(Default::default());
-                                    o.blocks[d].post.catch = o.blocks[b].post.catch.clone();
+                                    let mut d = output.blocks.alloc(Default::default());
+                                    output.blocks[d].post.catch = output.blocks[out_block].post.catch.clone();
                                     let mut new = Splatting {
                                         cache: Default::default(),
-                                        catch: o.blocks[b].post.catch.clone(),
+                                        catch: output.blocks[out_block].post.catch.clone(),
                                         ret: Some((stmt.left, d)),
                                         this_val: if *arrow || (!func.cfg.has_this()) {
                                             self.this_val.clone()
@@ -161,8 +161,8 @@ impl Splatting {
                                             }
                                         },
                                     };
-                                    let c = new.translate(&func.cfg, o, func.entry, semantic);
-                                    o.blocks[replace(&mut b, d)].post.term = TTerm::Jmp(c);
+                                    let c = new.translate(&func.cfg, output, func.entry, semantic);
+                                    output.blocks[replace(&mut out_block, d)].post.term = TTerm::Jmp(c);
                                     continue;
                                 }
                                 // }
@@ -170,21 +170,21 @@ impl Splatting {
                         }
                     }
                 }
-                o.blocks[b].stmts.push(stmt);
+                output.blocks[out_block].stmts.push(stmt);
             }
-            o.blocks[b].post.orig_span = i.blocks[k].post.orig_span;
-            o.blocks[b].post.term = match &i.blocks[k].post.term {
+            output.blocks[out_block].post.orig_span = input.blocks[in_block].post.orig_span;
+            output.blocks[out_block].post.term = match &input.blocks[in_block].post.term {
                 TTerm::Return(r) => match self.ret.as_ref() {
                     None => TTerm::Return(r.clone()),
                     Some((id, b2)) => {
-                        o.blocks[b].stmts.push(TStmt {
+                        output.blocks[out_block].stmts.push(TStmt {
                             left: id.clone(),
                             flags: Default::default(),
                             right: match r {
                                 None => Item::Undef,
                                 Some(x) => Item::Just { id: x.clone() },
                             },
-                            span: i.blocks[k]
+                            span: input.blocks[in_block]
                                 .post
                                 .orig_span
                                 .unwrap_or_else(|| Span::dummy_with_cmt()),
@@ -192,14 +192,14 @@ impl Splatting {
                         TTerm::Jmp(*b2)
                     }
                 },
-                TTerm::Throw(t) => match o.blocks[b].post.catch.clone() {
+                TTerm::Throw(t) => match output.blocks[out_block].post.catch.clone() {
                     TCatch::Throw => TTerm::Throw(t.clone()),
                     TCatch::Jump { pat, k: k2 } => {
-                        o.blocks[b].stmts.push(TStmt {
+                        output.blocks[out_block].stmts.push(TStmt {
                             left: LId::Id { id: pat.clone() },
                             flags: Default::default(),
                             right: Item::Just { id: t.clone() },
-                            span: i.blocks[k]
+                            span: input.blocks[in_block]
                                 .post
                                 .orig_span
                                 .unwrap_or_else(|| Span::dummy_with_cmt()),
@@ -207,23 +207,23 @@ impl Splatting {
                         TTerm::Jmp(k2)
                     }
                 },
-                TTerm::Jmp(id) => TTerm::Jmp(self.translate(i, o, *id, semantic)),
+                TTerm::Jmp(id) => TTerm::Jmp(self.translate(input, output, *id, semantic)),
                 TTerm::CondJmp {
                     cond,
                     if_true,
                     if_false,
                 } => TTerm::CondJmp {
                     cond: cond.clone(),
-                    if_true: self.translate(i, o, *if_true, semantic),
-                    if_false: self.translate(i, o, *if_false, semantic),
+                    if_true: self.translate(input, output, *if_true, semantic),
+                    if_false: self.translate(input, output, *if_false, semantic),
                 },
                 TTerm::Switch { x, blocks, default } => TTerm::Switch {
                     x: x.clone(),
                     blocks: blocks
                         .iter()
-                        .map(|(a, k)| (a.clone(), self.translate(i, o, *k, semantic)))
+                        .map(|(a, k)| (a.clone(), self.translate(input, output, *k, semantic)))
                         .collect(),
-                    default: self.translate(i, o, *default, semantic),
+                    default: self.translate(input, output, *default, semantic),
                 },
                 TTerm::Default => TTerm::Default,
             };
