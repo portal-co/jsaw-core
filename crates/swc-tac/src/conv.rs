@@ -381,8 +381,8 @@ impl Trans<'_> {
                         .mapper
                         .privates
                         .get(&p.name)
-                        .context("in getting the private")?
-                        .clone(),
+                        .cloned()
+                        .unwrap_or_default(),
                     span: p.span,
                 },
             },
@@ -526,10 +526,7 @@ impl Trans<'_> {
                         } | MemberFlags::PRIVATE,
                         PropKey::Lit((
                             p.key.name.clone(),
-                            privates
-                                .get(&p.key.name)
-                                .context("in getting the private")?
-                                .clone(),
+                            privates.get(&p.key.name).cloned().unwrap_or_default(),
                         )),
                         PropVal::Item(match p.value.as_ref() {
                             None => None,
@@ -559,10 +556,7 @@ impl Trans<'_> {
                         } | MemberFlags::PRIVATE,
                         PropKey::Lit((
                             p.key.name.clone(),
-                            privates
-                                .get(&p.key.name)
-                                .context("in getting the private")?
-                                .clone(),
+                            privates.get(&p.key.name).cloned().unwrap_or_default(),
                         )),
                         x,
                     ));
@@ -646,8 +640,8 @@ impl Trans<'_> {
                                             .mapper
                                             .privates
                                             .get(&private_name.name)
-                                            .context("in getting the private")?
-                                            .clone(),
+                                            .cloned()
+                                            .unwrap_or_default(),
                                         span: private_name.span,
                                     });
                                     mem = match priv_.clone().unwrap() {
@@ -1141,7 +1135,7 @@ impl Trans<'_> {
                             .privates
                             .get(&p.name)
                             .cloned()
-                            .context("in getting the private")?,
+                            .unwrap_or_default(),
                         span: p.span,
                     };
                     let tmp = o.regs.alloc(());
@@ -1547,6 +1541,7 @@ impl Trans<'_> {
 impl TFunc {
     pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
+        cfg.regs = LAM::new(mapper.vars.clone());
         let mut conv = Trans {
             map: BTreeMap::new(),
             ret_to: None,

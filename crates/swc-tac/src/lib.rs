@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::iter::{empty, once};
 use std::mem::take;
+use std::sync::Arc;
 
 use anyhow::Context;
 use arena_traits::IndexAlloc;
@@ -27,6 +28,7 @@ use swc_ecma_ast::{
 use swc_ecma_ast::Id as Ident;
 
 use crate::consts::{ItemGetter, ItemGetterExt};
+use crate::lam::{AtomResolver, DefaultAtomResolver};
 
 pub mod consts;
 pub mod conv;
@@ -165,6 +167,7 @@ pub struct Mapper<'a> {
     pub semantic: &'a SemanticCfg,
     pub privates: &'a BTreeMap<Atom, SyntaxContext>,
     pub consts: Option<&'a ConstCollector>,
+    pub vars: Arc<dyn AtomResolver>,
 }
 pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
     return a(Mapper {
@@ -172,6 +175,7 @@ pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
         semantic: &SemanticCfg::default(),
         privates: &BTreeMap::new(),
         consts: None,
+        vars: Arc::new(DefaultAtomResolver{})
     });
 }
 impl<'a> Mapper<'a> {
@@ -181,6 +185,7 @@ impl<'a> Mapper<'a> {
             semantic: self.semantic,
             privates: self.privates,
             consts: self.consts.as_deref(),
+            vars: self.vars.clone(),
         }
     }
 }

@@ -12,6 +12,11 @@ use swc_ecma_ast::Id;
 pub trait AtomResolver: Debug {
     fn resolve(&self, len: usize) -> Atom;
 }
+impl<T: AtomResolver + ?Sized> AtomResolver for Arc<T> {
+    fn resolve(&self, len: usize) -> Atom {
+        (&**self).resolve(len)
+    }
+}
 #[derive(Debug, Default)]
 pub struct DefaultAtomResolver {}
 impl AtomResolver for DefaultAtomResolver {
