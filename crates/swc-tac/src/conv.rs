@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::{cell::OnceCell, mem::replace};
 
 use swc_ecma_ast::{AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
 
@@ -220,7 +220,90 @@ impl Trans<'_> {
                     });
                     t = self.bind(i, o, b, t, &*key_value_pat_prop.value, g, decl)?;
                 }
-                swc_ecma_ast::ObjectPatProp::Assign(assign_pat_prop) => todo!(),
+                swc_ecma_ast::ObjectPatProp::Assign(assign_pat_prop) => {
+                    let g;
+                    let h = o.regs.alloc(());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: h.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Lit {
+                            lit: Lit::Str(Str {
+                                span: assign_pat_prop.span,
+                                value: assign_pat_prop.key.sym.clone(),
+                                raw: None,
+                            }),
+                        },
+                        span: prop.span(),
+                    });
+                    a.insert(h.clone());
+                    g = o.regs.alloc(());
+                    o.decls.insert(g.clone());
+                    match assign_pat_prop.value.as_ref() {
+                        None => {
+                            o.blocks[t].stmts.push(TStmt {
+                                left: LId::Id { id: g.clone() },
+                                flags: ValFlags::SSA_LIKE,
+                                right: Item::Mem {
+                                    obj: f.clone(),
+                                    mem: h,
+                                },
+                                span: prop.span(),
+                            });
+                        }
+                        Some(e) => {
+                            o.blocks[t].stmts.push(TStmt {
+                                left: LId::Id { id: g.clone() },
+                                flags: ValFlags::empty(),
+                                right: Item::Bin {
+                                    left: h.clone(),
+                                    right: f.clone(),
+                                    op: BinaryOp::In,
+                                },
+                                span: prop.span(),
+                            });
+                            let pp = o.blocks[t].post.clone();
+                            let gb = o.blocks.alloc(TBlock {
+                                stmts: Default::default(),
+                                post: pp.clone(),
+                            });
+                            o.blocks[gb].stmts.push(TStmt {
+                                left: LId::Id { id: g.clone() },
+                                flags: ValFlags::empty(),
+                                right: Item::Mem {
+                                    obj: f.clone(),
+                                    mem: h,
+                                },
+                                span: prop.span(),
+                            });
+                            let eb = o.blocks.alloc(TBlock {
+                                stmts: Default::default(),
+                                post: pp.clone(),
+                            });
+                            let h2;
+                            let ex;
+                            (h2, ex) = self.expr(i, o, b, eb, &**e)?;
+                            o.blocks[ex].stmts.push(TStmt {
+                                left: LId::Id { id: g.clone() },
+                                flags: ValFlags::empty(),
+                                right: Item::Just { id: h2 },
+                                span: prop.span(),
+                            });
+                            let nb = o.blocks.alloc(TBlock {
+                                stmts: Default::default(),
+                                post: pp,
+                            });
+                            for x in [gb, ex] {
+                                o.blocks[x].post.term = TTerm::Jmp(nb)
+                            }
+                            o.blocks[replace(&mut t, nb)].post.term = TTerm::CondJmp {
+                                cond: g.clone(),
+                                if_true: gb,
+                                if_false: eb,
+                            };
+                        }
+                    }
+                    t = self.bind_ident(i, o, b, t, &assign_pat_prop.key, g, decl)?;
+                }
                 swc_ecma_ast::ObjectPatProp::Rest(rest_pat) => {}
             }
         }

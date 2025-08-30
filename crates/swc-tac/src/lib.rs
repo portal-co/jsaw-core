@@ -439,39 +439,55 @@ pub struct TBlock {
     pub stmts: Vec<TStmt>,
     pub post: TPostecedent,
 }
-#[derive(Clone, Default, Debug)]
-pub struct TPostecedent {
-    pub catch: TCatch,
-    pub term: TTerm,
+#[derive(Clone, Debug)]
+pub struct TPostecedent<B = Id<TBlock>> {
+    pub catch: TCatch<B>,
+    pub term: TTerm<B>,
     pub orig_span: Option<Span>,
 }
-pub mod impls;
-#[derive(Clone, Default, Debug)]
-pub enum TCatch {
-    #[default]
-    Throw,
-    Jump {
-        pat: Ident,
-        k: Id<TBlock>,
-    },
+impl<B> Default for TPostecedent<B> {
+    fn default() -> Self {
+        Self {
+            catch: Default::default(),
+            term: Default::default(),
+            orig_span: Default::default(),
+        }
+    }
 }
-#[derive(Clone, Default, Debug)]
-pub enum TTerm {
+pub mod impls;
+#[derive(Clone, Debug)]
+pub enum TCatch<B = Id<TBlock>> {
+    // #[default]
+    Throw,
+    Jump { pat: Ident, k: B },
+}
+impl<B> Default for TCatch<B> {
+    fn default() -> Self {
+        Self::Throw
+    }
+}
+#[derive(Clone, Debug)]
+pub enum TTerm<B = Id<TBlock>> {
     Return(Option<Ident>),
     Throw(Ident),
-    Jmp(Id<TBlock>),
+    Jmp(B),
     CondJmp {
         cond: Ident,
-        if_true: Id<TBlock>,
-        if_false: Id<TBlock>,
+        if_true: B,
+        if_false: B,
     },
     Switch {
         x: Ident,
-        blocks: HashMap<Ident, Id<TBlock>>,
-        default: Id<TBlock>,
+        blocks: HashMap<Ident, B>,
+        default: B,
     },
-    #[default]
+    // #[default]
     Default,
+}
+impl<B> Default for TTerm<B> {
+    fn default() -> Self {
+        TTerm::Default
+    }
 }
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
