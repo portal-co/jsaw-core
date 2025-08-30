@@ -668,6 +668,15 @@ pub enum Item<I = Ident, F = TFunc> {
     Arr {
         members: Vec<I>,
     },
+    StaticSubArray {
+        begin: usize,
+        end: usize,
+        wrapped: I,
+    },
+    StaticSubObject {
+        wrapped: I,
+        keys: Vec<PropKey<I>>,
+    },
     Yield {
         value: Option<I>,
         delegate: bool,
@@ -778,6 +787,19 @@ impl<I, F> Item<I, F> {
                 then,
                 otherwise,
             },
+            Item::StaticSubArray {
+                begin,
+                end,
+                wrapped,
+            } => Item::StaticSubArray {
+                begin: *begin,
+                end: *end,
+                wrapped,
+            },
+            Item::StaticSubObject { wrapped, keys } => Item::StaticSubObject {
+                wrapped,
+                keys: keys.iter().map(|a| a.as_ref()).collect(),
+            },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
@@ -863,9 +885,21 @@ impl<I, F> Item<I, F> {
                     })
                     .collect(),
             },
-            // Item::Intrinsic { value } => Item::Intrinsic {
-            //     value: value.as_mut(),
-            // },
+            Item::StaticSubArray {
+                begin,
+                end,
+                wrapped,
+            } => Item::StaticSubArray {
+                begin: *begin,
+                end: *end,
+                wrapped,
+            },
+            Item::StaticSubObject { wrapped, keys } => Item::StaticSubObject {
+                wrapped,
+                keys: keys.iter_mut().map(|a| a.as_mut()).collect(),
+            }, // Item::Intrinsic { value } => Item::Intrinsic {
+               //     value: value.as_mut(),
+               // },
         }
     }
     pub fn map2<J: Ord, G, E, C: ?Sized>(
@@ -985,9 +1019,24 @@ impl<I, F> Item<I, F> {
                     })
                     .collect::<Result<_, E>>()?,
             },
-            // Item::Intrinsic { value } => Item::Intrinsic {
-            //     value: value.map(&mut |a| f(cx, a))?,
-            // },
+            Item::StaticSubArray {
+                begin,
+                end,
+                wrapped,
+            } => Item::StaticSubArray {
+                begin,
+                end,
+                wrapped: f(cx, wrapped)?,
+            },
+            Item::StaticSubObject { wrapped, keys } => Item::StaticSubObject {
+                wrapped: f(cx, wrapped)?,
+                keys: keys
+                    .into_iter()
+                    .map(|k| k.map(&mut |i| f(cx, i)))
+                    .collect::<Result<_, E>>()?,
+            }, // Item::Intrinsic { value } => Item::Intrinsic {
+               //     value: value.map(&mut |a| f(cx, a))?,
+               // },
         })
     }
     pub fn funcs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a F> + 'a> {
@@ -1075,14 +1124,24 @@ impl<I, F> Item<I, F> {
                 then,
                 otherwise,
             } => Box::new([cond, then, otherwise].into_iter()),
-            // Item::Intrinsic { value } => {
-            //     let mut v = Vec::default();
-            //     value
-            //         .as_ref()
-            //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
-            //         .unwrap();
-            //     Box::new(v.into_iter())
-            // }
+            Item::StaticSubArray {
+                begin,
+                end,
+                wrapped,
+            } => Box::new(once(wrapped)),
+            Item::StaticSubObject { wrapped, keys } => {
+                Box::new(once(wrapped).chain(keys.iter().filter_map(|a| match a {
+                    PropKey::Computed(a) => Some(a),
+                    _ => None,
+                })))
+            } // Item::Intrinsic { value } => {
+              //     let mut v = Vec::default();
+              //     value
+              //         .as_ref()
+              //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
+              //         .unwrap();
+              //     Box::new(v.into_iter())
+              // }
         }
     }
     pub fn refs_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
@@ -1151,14 +1210,24 @@ impl<I, F> Item<I, F> {
                         v.chain(w)
                     })),
             ),
-            // Item::Intrinsic { value } => {
-            //     let mut v = Vec::default();
-            //     value
-            //         .as_mut()
-            //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
-            //         .unwrap();
-            //     Box::new(v.into_iter())
-            // }
+            Item::StaticSubArray {
+                begin,
+                end,
+                wrapped,
+            } => Box::new(once(wrapped)),
+            Item::StaticSubObject { wrapped, keys } => {
+                Box::new(once(wrapped).chain(keys.iter_mut().filter_map(|a| match a {
+                    PropKey::Computed(a) => Some(a),
+                    _ => None,
+                })))
+            } // Item::Intrinsic { value } => {
+              //     let mut v = Vec::default();
+              //     value
+              //         .as_mut()
+              //         .map(&mut |a| Ok::<_, Infallible>(v.push(a)))
+              //         .unwrap();
+              //     Box::new(v.into_iter())
+              // }
         }
     }
 }

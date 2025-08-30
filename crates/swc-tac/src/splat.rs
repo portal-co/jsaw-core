@@ -37,6 +37,12 @@ impl Splatting {
             }
             let mut out_block = output.blocks.alloc(Default::default());
             self.cache.insert(in_block, out_block);
+            for d in input.decls.iter() {
+                if output.decls.contains(d) {
+                    continue;
+                };
+                output.decls.insert(d.clone());
+            }
             output.blocks[out_block].post.catch = match &input.blocks[in_block].post.catch {
                 TCatch::Throw => self.catch.clone(),
                 TCatch::Jump { pat, k } => TCatch::Jump {
