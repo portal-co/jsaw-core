@@ -48,6 +48,7 @@ pub enum LId<I = Ident, M = [I; 1]> {
     Id { id: I },
     Member { obj: I, mem: M },
     Private { obj: I, id: Private },
+    // SplitOff { head: I, tail: I },
 }
 impl<I> LId<I> {
     pub fn map<J, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<LId<J>, E> {
@@ -66,6 +67,7 @@ where
                 obj,
                 id: id.clone(),
             },
+            // LId::SplitOff { head, tail } => LId::SplitOff { head, tail },
         }
     }
     pub fn as_mut<'a>(&'a mut self) -> LId<&'a mut I, &'a mut M>
@@ -79,6 +81,7 @@ where
                 obj,
                 id: id.clone(),
             },
+            // LId::SplitOff { head, tail } => LId::SplitOff { head, tail },
         }
     }
     pub fn refs(self) -> impl Iterator<Item = I>
@@ -89,6 +92,7 @@ where
             LId::Id { id } => Either::Left(once(id)),
             LId::Member { obj, mem } => Either::Right(once(obj).chain(mem)),
             LId::Private { id, obj } => Either::Left(once(obj)),
+            // LId::SplitOff { head, tail } => Either::Right(Either::Right([head, tail].into_iter())),
         }
     }
     pub fn map2<Cx, J, N, E>(
@@ -107,6 +111,10 @@ where
                 id,
                 obj: f(cx, obj)?,
             },
+            // LId::SplitOff { head, tail } => LId::SplitOff {
+            //     head: f(cx, head)?,
+            //     tail: f(cx, tail)?,
+            // },
         })
     }
 }
@@ -175,7 +183,7 @@ pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
         semantic: &SemanticCfg::default(),
         privates: &BTreeMap::new(),
         consts: None,
-        vars: Arc::new(DefaultAtomResolver{})
+        vars: Arc::new(DefaultAtomResolver {}),
     });
 }
 impl<'a> Mapper<'a> {
@@ -445,12 +453,12 @@ pub struct TBlock {
     pub post: TPostecedent,
 }
 #[derive(Clone, Debug)]
-pub struct TPostecedent<B = Id<TBlock>,I=Ident> {
-    pub catch: TCatch<B,I>,
-    pub term: TTerm<B,I>,
+pub struct TPostecedent<B = Id<TBlock>, I = Ident> {
+    pub catch: TCatch<B, I>,
+    pub term: TTerm<B, I>,
     pub orig_span: Option<Span>,
 }
-impl<B,I> Default for TPostecedent<B,I> {
+impl<B, I> Default for TPostecedent<B, I> {
     fn default() -> Self {
         Self {
             catch: Default::default(),
@@ -461,18 +469,18 @@ impl<B,I> Default for TPostecedent<B,I> {
 }
 pub mod impls;
 #[derive(Clone, Debug)]
-pub enum TCatch<B = Id<TBlock>,I = Ident> {
+pub enum TCatch<B = Id<TBlock>, I = Ident> {
     // #[default]
     Throw,
     Jump { pat: I, k: B },
 }
-impl<B,I> Default for TCatch<B,I> {
+impl<B, I> Default for TCatch<B, I> {
     fn default() -> Self {
         Self::Throw
     }
 }
 #[derive(Clone, Debug)]
-pub enum TTerm<B = Id<TBlock>,I = Ident> {
+pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
     Throw(I),
     Jmp(B),
@@ -489,7 +497,7 @@ pub enum TTerm<B = Id<TBlock>,I = Ident> {
     // #[default]
     Default,
 }
-impl<B,I> Default for TTerm<B,I> {
+impl<B, I> Default for TTerm<B, I> {
     fn default() -> Self {
         TTerm::Default
     }

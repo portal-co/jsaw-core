@@ -121,14 +121,27 @@ impl TryFrom<TFunc> for Function {
         TryFrom::try_from(&value)
     }
 }
-impl<I, F> Item<I, F> {
-    pub fn render<Cx, E>(
+pub trait Render<I, F> {
+    type Result;
+    fn render<Cx, E>(
         &self,
         mark: &mut bool,
         span: Span,
         cx: &mut Cx,
         sr: &mut (dyn FnMut(&mut Cx, &I) -> Result<Box<Expr>, E> + '_),
-        si: &mut (dyn FnMut(&mut Cx, &I) -> Result<Box<Expr>, E> + '_),
+        si: &mut (dyn FnMut(&mut Cx, &I) -> Result<swc_ecma_ast::Ident, E> + '_),
+        sf: &mut (dyn FnMut(&mut Cx, &F) -> Result<Function, E> + '_),
+    ) -> Result<Self::Result, E>;
+}
+impl<I, F> Render<I, F> for Item<I, F> {
+    type Result = Box<Expr>;
+    fn render<Cx, E>(
+        &self,
+        mark: &mut bool,
+        span: Span,
+        cx: &mut Cx,
+        sr: &mut (dyn FnMut(&mut Cx, &I) -> Result<Box<Expr>, E> + '_),
+        si: &mut (dyn FnMut(&mut Cx, &I) -> Result<swc_ecma_ast::Ident, E> + '_),
         sf: &mut (dyn FnMut(&mut Cx, &F) -> Result<Function, E> + '_),
     ) -> Result<Box<Expr>, E> {
         let right = Box::new(match self {
@@ -182,7 +195,7 @@ impl<I, F> Item<I, F> {
                     }),
                 }
             }
-            crate::Item::Just { id } => return si(cx, id),
+            crate::Item::Just { id } => return si(cx, id).map(|a| a.into()),
             crate::Item::Bin { left, right, op } => Expr::Bin(BinExpr {
                 span: span,
                 op: *op,
@@ -791,6 +804,70 @@ impl<I, F> Item<I, F> {
         return Ok(right);
     }
 }
+impl<I, F> Render<I, F> for LId<I> {
+    type Result = AssignTarget;
+
+    fn render<Cx, E>(
+        &self,
+        mark: &mut bool,
+        span: Span,
+        cx: &mut Cx,
+        sr: &mut (dyn FnMut(&mut Cx, &I) -> Result<Box<Expr>, E> + '_),
+        si: &mut (dyn FnMut(&mut Cx, &I) -> Result<swc_ecma_ast::Ident, E> + '_),
+        sf: &mut (dyn FnMut(&mut Cx, &F) -> Result<Function, E> + '_),
+    ) -> Result<Self::Result, E> {
+        Ok(match self {
+            crate::LId::Id { id } => swc_ecma_ast::AssignTarget::Simple(
+                swc_ecma_ast::SimpleAssignTarget::Ident(swc_ecma_ast::BindingIdent {
+                    id: si(cx, id)?,
+                    type_ann: None,
+                }),
+            ),
+            crate::LId::Member { obj, mem } => {
+                *mark = true;
+                // let obj = ident(obj, span);
+                // let mem = ident(&mem[0], span);
+                AssignTarget::Simple(swc_ecma_ast::SimpleAssignTarget::Member(MemberExpr {
+                    span: span,
+                    obj: sr(cx, obj)?,
+                    prop: swc_ecma_ast::MemberProp::Computed(swc_ecma_ast::ComputedPropName {
+                        span: span,
+                        expr: sr(cx, &mem[0])?,
+                    }),
+                }))
+            }
+            LId::Private { obj, id } => {
+                AssignTarget::Simple(swc_ecma_ast::SimpleAssignTarget::Member(MemberExpr {
+                    span: span,
+                    obj: sr(cx, obj)?,
+                    prop: swc_ecma_ast::MemberProp::PrivateName(PrivateName {
+                        span: id.span,
+                        name: id.sym.clone(),
+                    }),
+                }))
+            }
+            // LId::SplitOff { head, tail } => {
+            //     AssignTarget::Pat(swc_ecma_ast::AssignTargetPat::Array(ArrayPat {
+            //         span,
+            //         elems: [
+            //             Some(Pat::Rest(RestPat {
+            //                 span,
+            //                 dot3_token: span,
+            //                 arg: ident(head, span).into(),
+            //                 type_ann: None,
+            //             })),
+            //             Some(ident(tail, span).into()),
+            //         ]
+            //         .into_iter()
+            //         .collect(),
+            //         optional: false,
+            //         type_ann: None,
+            //     }))
+            // }
+            _ => todo!(),
+        })
+    }
+}
 #[derive(Default)]
 #[non_exhaustive]
 pub struct Rew {
@@ -919,47 +996,20 @@ impl Rew {
                     }
                 }
                 let mut sr = |left: &Ident| _sr(left, tcfg, &mut state, span);
-                let left = match &statement_data.left {
-                    crate::LId::Id { id } => swc_ecma_ast::AssignTarget::Simple(
-                        swc_ecma_ast::SimpleAssignTarget::Ident(swc_ecma_ast::BindingIdent {
-                            id: ident(id, span),
-                            type_ann: None,
-                        }),
-                    ),
-                    crate::LId::Member { obj, mem } => {
-                        mark = true;
-                        // let obj = ident(obj, span);
-                        // let mem = ident(&mem[0], span);
-                        AssignTarget::Simple(swc_ecma_ast::SimpleAssignTarget::Member(MemberExpr {
-                            span: span,
-                            obj: sr(obj),
-                            prop: swc_ecma_ast::MemberProp::Computed(
-                                swc_ecma_ast::ComputedPropName {
-                                    span: span,
-                                    expr: sr(&mem[0]),
-                                },
-                            ),
-                        }))
-                    }
-                    LId::Private { obj, id } => {
-                        AssignTarget::Simple(swc_ecma_ast::SimpleAssignTarget::Member(MemberExpr {
-                            span: span,
-                            obj: sr(obj),
-                            prop: swc_ecma_ast::MemberProp::PrivateName(PrivateName {
-                                span: id.span,
-                                name: id.sym.clone(),
-                            }),
-                        }))
-                    }
-                    _ => todo!(),
-                };
-
+                let left = statement_data.left.render(
+                    &mut mark,
+                    span,
+                    &mut (),
+                    &mut |_, a| Ok(sr(a)),
+                    &mut |_, a| Ok(ident(a, span)),
+                    &mut |_, f: &TFunc| f.try_into(),
+                )?;
                 let right = statement_data.right.render(
                     &mut mark,
                     span,
                     &mut (),
                     &mut |_, a| Ok(sr(a)),
-                    &mut |_, a| Ok(Expr::Ident(ident(a, span)).into()),
+                    &mut |_, a| Ok(ident(a, span)),
                     &mut |_, f| f.try_into(),
                 )?;
                 if !mark {
