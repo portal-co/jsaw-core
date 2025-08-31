@@ -4,14 +4,14 @@ use swc_ecma_ast::{AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
 
 use crate::*;
 #[non_exhaustive]
-pub struct Trans<'a> {
+pub struct ToTACConverter<'a> {
     pub map: BTreeMap<Id<Block>, Id<TBlock>>,
     pub ret_to: Option<(Ident, Id<TBlock>)>,
     pub recatch: TCatch,
     pub this: Option<Ident>,
     pub mapper: Mapper<'a>,
 }
-impl Trans<'_> {
+impl ToTACConverter<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
         loop {
             if let Some(a) = self.map.get(&b) {
@@ -1542,7 +1542,7 @@ impl TFunc {
     pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
         let mut cfg = TCfg::default();
         cfg.regs = LAM::new(mapper.vars.clone());
-        let mut conv = Trans {
+        let mut conv = ToTACConverter {
             map: BTreeMap::new(),
             ret_to: None,
             recatch: TCatch::Throw,

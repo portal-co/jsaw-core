@@ -445,12 +445,12 @@ pub struct TBlock {
     pub post: TPostecedent,
 }
 #[derive(Clone, Debug)]
-pub struct TPostecedent<B = Id<TBlock>> {
-    pub catch: TCatch<B>,
-    pub term: TTerm<B>,
+pub struct TPostecedent<B = Id<TBlock>,I=Ident> {
+    pub catch: TCatch<B,I>,
+    pub term: TTerm<B,I>,
     pub orig_span: Option<Span>,
 }
-impl<B> Default for TPostecedent<B> {
+impl<B,I> Default for TPostecedent<B,I> {
     fn default() -> Self {
         Self {
             catch: Default::default(),
@@ -461,20 +461,20 @@ impl<B> Default for TPostecedent<B> {
 }
 pub mod impls;
 #[derive(Clone, Debug)]
-pub enum TCatch<B = Id<TBlock>> {
+pub enum TCatch<B = Id<TBlock>,I = Ident> {
     // #[default]
     Throw,
-    Jump { pat: Ident, k: B },
+    Jump { pat: I, k: B },
 }
-impl<B> Default for TCatch<B> {
+impl<B,I> Default for TCatch<B,I> {
     fn default() -> Self {
         Self::Throw
     }
 }
 #[derive(Clone, Debug)]
-pub enum TTerm<B = Id<TBlock>> {
-    Return(Option<Ident>),
-    Throw(Ident),
+pub enum TTerm<B = Id<TBlock>,I = Ident> {
+    Return(Option<I>),
+    Throw(I),
     Jmp(B),
     CondJmp {
         cond: Ident,
@@ -489,7 +489,7 @@ pub enum TTerm<B = Id<TBlock>> {
     // #[default]
     Default,
 }
-impl<B> Default for TTerm<B> {
+impl<B,I> Default for TTerm<B,I> {
     fn default() -> Self {
         TTerm::Default
     }
