@@ -1,6 +1,6 @@
 use std::{cell::OnceCell, mem::replace};
 
-use swc_ecma_ast::{AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
+use swc_ecma_ast::{AssignPat, AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
 
 use crate::*;
 #[non_exhaustive]
@@ -186,8 +186,77 @@ impl ToTACConverter<'_> {
         match p {
             Pat::Ident(i2) => self.bind_ident(i, o, b, t, i2, f, decl),
             Pat::Object(op) => self.bind_object(i, o, b, t, op, f, decl),
+            Pat::Assign(ass) => self.bind_assign(i, o, b, t, ass, f, decl),
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
+    }
+    pub fn bind_assign(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        assign_pat: &AssignPat,
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
+        let g;
+        g = o.regs.alloc(());
+        o.decls.insert(g.clone());
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id { id: g.clone() },
+            flags: ValFlags::empty(),
+            right: Item::Undef,
+            span: assign_pat.span(),
+        });
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id { id: g.clone() },
+            flags: ValFlags::empty(),
+            right: Item::Bin {
+                left: f.clone(),
+                right: g.clone(),
+                op: BinaryOp::EqEqEq,
+            },
+            span: assign_pat.span(),
+        });
+        let pp = o.blocks[t].post.clone();
+        let gb = o.blocks.alloc(TBlock {
+            stmts: Default::default(),
+            post: pp.clone(),
+        });
+        o.blocks[gb].stmts.push(TStmt {
+            left: LId::Id { id: g.clone() },
+            flags: ValFlags::empty(),
+            right: Item::Just { id: f.clone() },
+            span: assign_pat.span(),
+        });
+
+        let eb = o.blocks.alloc(TBlock {
+            stmts: Default::default(),
+            post: pp.clone(),
+        });
+        let h2;
+        let ex;
+        (h2, ex) = self.expr(i, o, b, eb, &*assign_pat.right)?;
+        o.blocks[ex].stmts.push(TStmt {
+            left: LId::Id { id: g.clone() },
+            flags: ValFlags::empty(),
+            right: Item::Just { id: h2 },
+            span: assign_pat.span(),
+        });
+        let nb = o.blocks.alloc(TBlock {
+            stmts: Default::default(),
+            post: pp,
+        });
+        for x in [gb, ex] {
+            o.blocks[x].post.term = TTerm::Jmp(nb)
+        }
+        o.blocks[replace(&mut t, nb)].post.term = TTerm::CondJmp {
+            cond: g.clone(),
+            if_true: eb,
+            if_false: gb,
+        };
+        return self.bind(i, o, b, t, &assign_pat.left, g, decl);
     }
     pub fn bind_object(
         &mut self,
