@@ -5,6 +5,7 @@ use std::mem::take;
 use anyhow::Context;
 use id_arena::Id;
 use portal_jsc_common::Asm;
+use portal_jsc_swc_util::SemanticCfg;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
@@ -33,14 +34,25 @@ use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
 
 use crate::{Item, LId, MemberFlags, PropKey, TBlock, TCallee, TCfg, TFunc};
-
-impl<'a> TryFrom<&'a TFunc> for Func {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
+#[non_exhaustive]
+#[derive(Clone)]
+pub struct Options<'a> {
+    pub semantic: &'a SemanticCfg,
+}
+impl Options<'static> {
+    pub fn bud<T>(func: impl FnOnce(&Options<'_>) -> T) -> T {
+        return func(&Options {
+            semantic: &SemanticCfg::default(),
+        });
+    }
+}
+impl TFunc {
+    pub fn to_func_with_options(&self, options: &Options<'_>) -> anyhow::Result<Func> {
+        let value = self;
         let mut cfg = Cfg::default();
         let entry = Rew {
             all: BTreeMap::new(),
+            options,
         }
         .trans(&mut cfg, &value.cfg, value.entry)?;
         let span = Span::dummy_with_cmt();
@@ -97,6 +109,13 @@ impl<'a> TryFrom<&'a TFunc> for Func {
             is_generator: value.is_generator,
             is_async: value.is_async,
         })
+    }
+}
+impl<'a> TryFrom<&'a TFunc> for Func {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
+        Options::bud(|opts| value.to_func_with_options(opts))
     }
 }
 impl TryFrom<TFunc> for Func {
@@ -868,12 +887,13 @@ impl<I, F> Render<I, F> for LId<I> {
         })
     }
 }
-#[derive(Default)]
+// #[derive(Default)]
 #[non_exhaustive]
-pub struct Rew {
+pub struct Rew<'a> {
     pub all: BTreeMap<Id<TBlock>, Id<Block>>,
+    pub options: &'a Options<'a>,
 }
-impl Rew {
+impl Rew<'_> {
     pub fn trans(
         &mut self,
         cfg: &mut Cfg,
@@ -1002,7 +1022,10 @@ impl Rew {
                     &mut (),
                     &mut |_, a| Ok(sr(a)),
                     &mut |_, a| Ok(ident(a, span)),
-                    &mut |_, f: &TFunc| f.try_into(),
+                    &mut |_, f: &TFunc| {
+                        f.to_func_with_options(self.options)
+                            .and_then(|a| a.try_into().map_err(|e| match e {}))
+                    },
                 )?;
                 let right = statement_data.right.render(
                     &mut mark,
@@ -1010,7 +1033,10 @@ impl Rew {
                     &mut (),
                     &mut |_, a| Ok(sr(a)),
                     &mut |_, a| Ok(ident(a, span)),
-                    &mut |_, f| f.try_into(),
+                    &mut |_, f| {
+                        f.to_func_with_options(self.options)
+                            .and_then(|a| a.try_into().map_err(|e| match e {}))
+                    },
                 )?;
                 if !mark {
                     if let AssignTarget::Simple(SimpleAssignTarget::Ident(i)) = &left {
