@@ -555,7 +555,7 @@ impl ToTACConverter<'_> {
                 }
                 ClassMember::Constructor(c) => {
                     constructor = Some(TFunc::try_from_with_mapper(
-                        &Function {
+                        &(self.mapper.to_cfg)(&Function {
                             body: c.body.clone(),
                             params: c
                                 .params
@@ -570,16 +570,13 @@ impl ToTACConverter<'_> {
                             ctxt: Default::default(),
                             type_params: None,
                             return_type: None,
-                        }
-                        .try_into()?,
+                        })?,
                         mapper.bud(),
                     )?)
                 }
                 ClassMember::Method(c) => {
-                    let f = TFunc::try_from_with_mapper(
-                        &(&*c.function).clone().try_into()?,
-                        mapper.bud(),
-                    )?;
+                    let f =
+                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&*c.function)?, mapper.bud())?;
                     members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
                         swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
@@ -608,10 +605,8 @@ impl ToTACConverter<'_> {
                     ));
                 }
                 ClassMember::PrivateMethod(p) => {
-                    let f = TFunc::try_from_with_mapper(
-                        &(&*p.function).clone().try_into()?,
-                        mapper.bud(),
-                    )?;
+                    let f =
+                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&*p.function)?, mapper.bud())?;
                     let x = match &p.kind {
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
                         swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
@@ -1369,7 +1364,7 @@ impl ToTACConverter<'_> {
                     left: LId::Id { id: tmp.clone() },
                     flags: Default::default(),
                     right: Item::Func {
-                        func: f.function.as_ref().clone().try_into()?,
+                        func: TFunc::try_from_with_mapper(&(self.mapper.to_cfg)(&f.function)?, self.mapper.bud())?,
                         arrow: false,
                     },
                     span: f.span(),
@@ -1409,7 +1404,7 @@ impl ToTACConverter<'_> {
                     left: LId::Id { id: tmp.clone() },
                     flags: Default::default(),
                     right: Item::Func {
-                        func: c.try_into()?,
+                        func:  TFunc::try_from_with_mapper(&c, self.mapper.bud())?,
                         arrow: true,
                     },
                     span: a.span(),
@@ -1537,7 +1532,7 @@ impl ToTACConverter<'_> {
                                 }
                                 swc_ecma_ast::Prop::Method(method_prop) => {
                                     let v = PropVal::Method(TFunc::try_from_with_mapper(
-                                        &(&*method_prop.function).clone().try_into()?,
+                                        &(self.mapper.to_cfg)(&method_prop.function)?,
                                         self.mapper.bud(),
                                     )?);
                                     prop_name!(v => &method_prop.key)

@@ -176,6 +176,7 @@ pub struct Mapper<'a> {
     pub privates: &'a BTreeMap<Atom, SyntaxContext>,
     pub consts: Option<&'a ConstCollector>,
     pub vars: Arc<dyn AtomResolver>,
+    pub to_cfg: &'a (dyn Fn(&Function) -> anyhow::Result<Func> + 'a),
 }
 pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
     return a(Mapper {
@@ -184,6 +185,7 @@ pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
         privates: &BTreeMap::new(),
         consts: None,
         vars: Arc::new(DefaultAtomResolver {}),
+        to_cfg: &|a|a.clone().try_into()
     });
 }
 impl<'a> Mapper<'a> {
@@ -194,6 +196,7 @@ impl<'a> Mapper<'a> {
             privates: self.privates,
             consts: self.consts.as_deref(),
             vars: self.vars.clone(),
+            to_cfg: self.to_cfg,
         }
     }
 }

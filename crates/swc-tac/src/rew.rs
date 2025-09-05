@@ -38,11 +38,13 @@ use crate::{Item, LId, MemberFlags, PropKey, TBlock, TCallee, TCfg, TFunc};
 #[derive(Clone)]
 pub struct Options<'a> {
     pub semantic: &'a SemanticCfg,
+    pub conf: &'a (dyn Fn(Func) -> anyhow::Result<Function> + 'a),
 }
 impl Options<'static> {
     pub fn bud<T>(func: impl FnOnce(&Options<'_>) -> T) -> T {
         return func(&Options {
             semantic: &SemanticCfg::default(),
+            conf: &|f| Ok(f.into()),
         });
     }
 }
@@ -1024,7 +1026,7 @@ impl Rew<'_> {
                     &mut |_, a| Ok(ident(a, span)),
                     &mut |_, f: &TFunc| {
                         f.to_func_with_options(self.options)
-                            .and_then(|a| a.try_into().map_err(|e| match e {}))
+                            .and_then(|a| (self.options.conf)(a))
                     },
                 )?;
                 let right = statement_data.right.render(
@@ -1035,7 +1037,7 @@ impl Rew<'_> {
                     &mut |_, a| Ok(ident(a, span)),
                     &mut |_, f| {
                         f.to_func_with_options(self.options)
-                            .and_then(|a| a.try_into().map_err(|e| match e {}))
+                            .and_then(|a| (self.options.conf)(a))
                     },
                 )?;
                 if !mark {
