@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    iter::once,
-};
+use std::{collections::HashMap, iter::once};
 
 use anyhow::Context;
 use id_arena::{Arena, Id};
@@ -10,8 +7,8 @@ use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     ArrayLit, AssignExpr, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr, CatchClause,
-    ContinueStmt, Decl, DoWhileStmt, Expr, ExprOrSpread, ExprStmt, Function, Ident, IdentName,
-    IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
+    ContinueStmt, Decl, DoWhileStmt, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
+    IdentName, IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
     SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl, WhileStmt,
 };
 pub mod recfg;
@@ -24,11 +21,17 @@ pub struct Func {
     pub is_generator: bool,
     pub is_async: bool,
 }
-impl Default for Func{
+impl Default for Func {
     fn default() -> Self {
         let mut cfg = Cfg::default();
-        let entry = cfg.blocks.alloc( Default::default());
-        Self { cfg, entry, params: Default::default(), is_generator: Default::default(), is_async: Default::default() }
+        let entry = cfg.blocks.alloc(Default::default());
+        Self {
+            cfg,
+            entry,
+            params: Default::default(),
+            is_generator: Default::default(),
+            is_async: Default::default(),
+        }
     }
 }
 impl TryFrom<Function> for Func {
@@ -292,12 +295,11 @@ impl Cfg {
             ShapedBlock::Loop(loop_block) => once(Stmt::Labeled(LabeledStmt {
                 span,
                 label: Ident::new(Atom::new(format!("${}", loop_block.loop_id)), span, ctxt),
-                body: Box::new(Stmt::While(WhileStmt {
-                    span: span,
-                    test: Box::new(Expr::Lit(Lit::Bool(Bool {
-                        span: span,
-                        value: true,
-                    }))),
+                body: Box::new(Stmt::For(ForStmt {
+                    span,
+                    init: None,
+                    test: None,
+                    update: None,
                     body: Box::new(Stmt::Block(BlockStmt {
                         span,
                         ctxt,
@@ -597,11 +599,16 @@ impl ToCfgConversionCtx {
                 None => None,
                 Some(catch_clause) => Some({
                     let catch_block_id = self.new_block(cfg);
-                    let catch_end_id = self.transform_all(cfg, catch_clause.body.stmts, catch_block_id)?;
+                    let catch_end_id =
+                        self.transform_all(cfg, catch_clause.body.stmts, catch_block_id)?;
                     cfg.blocks[catch_end_id].end.term = Term::Jmp(next);
                     (
                         catch_clause.param.unwrap_or(Pat::Ident(BindingIdent {
-                            id: Ident::new(Atom::new("_error"), catch_clause.span, SyntaxContext::default()),
+                            id: Ident::new(
+                                Atom::new("_error"),
+                                catch_clause.span,
+                                SyntaxContext::default(),
+                            ),
                             type_ann: None,
                         })),
                         catch_block_id,
@@ -610,7 +617,10 @@ impl ToCfgConversionCtx {
             };
             let mut new = self.clone();
             if let Some((catch_param, catch_block_id)) = catch {
-                new.catch = Catch::Jump { pat: catch_param, k: catch_block_id };
+                new.catch = Catch::Jump {
+                    pat: catch_param,
+                    k: catch_block_id,
+                };
             };
             let try_end_id = new.transform_all(cfg, try_stmt.block.stmts, current)?;
             cfg.blocks[try_end_id].end.term = Term::Jmp(next);
@@ -798,7 +808,8 @@ impl ToCfgConversionCtx {
                         stmts: vec![for_stmt.body]
                             .into_iter()
                             .chain(
-                                for_stmt.update
+                                for_stmt
+                                    .update
                                     .map(|a| {
                                         Box::new(Stmt::Expr(ExprStmt {
                                             span: a.span(),
