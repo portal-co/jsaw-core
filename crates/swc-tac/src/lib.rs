@@ -185,7 +185,7 @@ pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
         privates: &BTreeMap::new(),
         consts: None,
         vars: Arc::new(DefaultAtomResolver {}),
-        to_cfg: &|a|a.clone().try_into()
+        to_cfg: &|a| a.clone().try_into(),
     });
 }
 impl<'a> Mapper<'a> {
@@ -629,23 +629,7 @@ impl<I> TCallee<I> {
 }
 
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
-    match d {
-        Item::Asm { value }
-            if match value {
-                Asm::OrZero(value) => tcfg.get_item(value.clone()).is_some(),
-                _ => todo!(),
-            } =>
-        {
-            true
-        }
-        Item::Lit { lit } => true,
-        Item::Un { arg, op }
-            if !matches!(op, UnaryOp::Delete) && tcfg.get_item(arg.clone()).is_some() =>
-        {
-            true
-        }
-        _ => false,
-    }
+    tcfg.inlinable(d)
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]

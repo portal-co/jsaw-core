@@ -75,5 +75,5 @@ swc_ecma_codegen = "^17"
 
 
 
-portal-solutions-swibb = "^0.4.0"
+portal-solutions-swibb = {version="^0.4.0",git="https://github.com/portal-co/swibb.git"}
 portal-solutions-proxy-signs = "^0.1.0"

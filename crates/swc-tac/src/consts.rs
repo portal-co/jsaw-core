@@ -21,6 +21,30 @@ impl ItemGetter for TCfg {
     }
 }
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
+    fn inlinable(&self, d: &Item<I, F>) -> bool
+    where
+        I: Clone,
+    {
+        let tcfg = self;
+        match d {
+            Item::Just { id } => tcfg.get_item(id.clone()).is_some(),
+            Item::Asm { value }
+                if match value {
+                    Asm::OrZero(value) => tcfg.get_item(value.clone()).is_some(),
+                    _ => todo!(),
+                } =>
+            {
+                true
+            }
+            Item::Lit { lit } => true,
+            Item::Un { arg, op }
+                if !matches!(op, UnaryOp::Delete) && tcfg.get_item(arg.clone()).is_some() =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
     fn simplify_just(&mut self, i: I) -> bool
     where
         Item<I, F>: Clone,
@@ -30,13 +54,15 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
             Item::Just { id } => self.get_item(id.clone()),
             _ => None,
         }) {
-            let g = g.clone();
-            if let Some(h) = self.get_mut_item(i) {
-                *h = g;
-                return true;
+            if self.inlinable(g) {
+                let g = g.clone();
+                if let Some(h) = self.get_mut_item(i) {
+                    *h = g;
+                    return true;
+                }
             }
         }
         return false;
     }
 }
-impl<T: ItemGetter<I, F>, I, F> ItemGetterExt<I, F> for T {}
+impl<T: ItemGetter<I, F> + ?Sized, I, F> ItemGetterExt<I, F> for T {}

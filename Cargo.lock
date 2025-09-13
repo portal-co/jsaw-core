@@ -786,9 +786,8 @@ checksum = "bd561b504f0baa18b1b44c277bb216367ce6176900117aa0041d6a22f9c8f67a"
 
 [[package]]
 name = "portal-solutions-swibb"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1406c1a8bbb006b42799a6607ec2e08a13f945999de90bcc3bee5a400ff59c6"
+version = "0.4.1"
+source = "git+https://github.com/portal-co/swibb.git#43fb455649fe27a1574e9fab8470c1b663796855"
 dependencies = [
  "swc_atoms",
  "swc_common",
