@@ -131,8 +131,7 @@ checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 [[package]]
 name = "cfg-traits"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9f95265d334a1e11d81cd67d1c6b2f4ac4cea57374e319ed8eb9ba80c2d7172"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#e783d476bc2f47aeb1b206b1bf0c8007ddbcd4fa"
 dependencies = [
  "arena-traits",
  "either",
@@ -995,8 +994,7 @@ dependencies = [
 [[package]]
 name = "ssa-impls"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "209fe6ed83c9e6cd0906f5838e53ae779cc6b0455a8b22d2443c67ed60d58a90"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#e783d476bc2f47aeb1b206b1bf0c8007ddbcd4fa"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1006,8 +1004,7 @@ dependencies = [
 [[package]]
 name = "ssa-reloop"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48d1fc4b32ca7142d52213e3206cc24f4b56ddeedd868480f4334ff1ef040e6f"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#e783d476bc2f47aeb1b206b1bf0c8007ddbcd4fa"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1019,8 +1016,7 @@ dependencies = [
 [[package]]
 name = "ssa-traits"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55bc0c32091cf7d6e108a9a425aa55b1123be8a183e2413d9330cc7ff0db7389"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#e783d476bc2f47aeb1b206b1bf0c8007ddbcd4fa"
 dependencies = [
  "anyhow",
  "arena-traits",
