@@ -38,9 +38,9 @@ impl<'a, T> RefOrMut<'a, T> {
 #[macro_export]
 macro_rules! ref_or_mut_sub {
     ($a:expr => |$b:pat_param|$c:expr) => {
-        match $a{
+        match $a {
             $crate::RefOrMut::Ref($b) => $crate::RefOrMut::Ref(&$c),
-            $crate::RefOrMut::Mut($b) => $crate::RefOrMut::Mut(&mut $c)
+            $crate::RefOrMut::Mut($b) => $crate::RefOrMut::Mut(&mut $c),
         }
     };
 }
@@ -58,7 +58,7 @@ pub enum Native<E> {
     FastSub { lhs: E, rhs: E },
     FastMul { lhs: E, rhs: E, imul: bool },
     FastShl { lhs: E, rhs: E },
-    InlineMe,
+    InlineMe { n: Option<E> },
 }
 impl Native<()> {
     pub fn all() -> impl Iterator<Item = Self> {
@@ -72,6 +72,7 @@ impl Native<()> {
             "fast_mul",
             "fast_imul",
             "inlineme",
+            "inlineme_n",
         ]
         .into_iter()
         .filter_map(|a| Self::of(a))
@@ -134,7 +135,8 @@ impl Native<()> {
                 rhs: (),
                 imul: true,
             },
-            "inlineme" => Self::InlineMe,
+            "inlineme" => Self::InlineMe { n: None },
+            "inlineme_n" => Self::InlineMe { n: Some(()) },
             _ => return None,
         })
     }
@@ -176,7 +178,10 @@ impl<E> Native<E> {
                 }
             }
             Native::FastShl { lhs, rhs } => "fast_shl",
-            Native::InlineMe => "inlineme",
+            Native::InlineMe { n } => match n {
+                None => "inlineme",
+                Some(_) => "inlineme_n",
+            },
         }
     }
     pub fn as_ref<'a>(&'a self) -> Native<&'a E> {
@@ -204,7 +209,7 @@ impl<E> Native<E> {
                 imul: *imul,
             },
             Native::FastShl { lhs, rhs } => Native::FastShl { lhs, rhs },
-            Native::InlineMe => Native::InlineMe,
+            Native::InlineMe { n } => Native::InlineMe { n: n.as_ref() },
         }
     }
     pub fn as_mut<'a>(&'a mut self) -> Native<&'a mut E> {
@@ -232,7 +237,7 @@ impl<E> Native<E> {
                 imul: *imul,
             },
             Native::FastShl { lhs, rhs } => Native::FastShl { lhs, rhs },
-            Native::InlineMe => Native::InlineMe,
+            Native::InlineMe { n } => Native::InlineMe { n: n.as_mut() },
         }
     }
     pub fn map<E2, Er>(
@@ -281,7 +286,12 @@ impl<E> Native<E> {
                 lhs: f(lhs)?,
                 rhs: f(rhs)?,
             },
-            Native::InlineMe => Native::InlineMe,
+            Native::InlineMe { n } => Native::InlineMe {
+                n: match n {
+                    None => None,
+                    Some(n) => Some(f(n)?),
+                },
+            },
         })
     }
 }
