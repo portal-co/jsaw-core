@@ -1,0 +1,16 @@
+export const fast_add = globalThis['~Natives_fast_add'] ?? ((a, b) => a + b);
+export const fast_and = globalThis['~Natives_fast_and'] ?? ((a, b) => a & b);
+export const fast_or = globalThis['~Natives_fast_or'] ?? ((a, b) => a | b);
+export const fast_eq = globalThis['~Natives_fast_eq'] ?? ((a, b) => a === b);
+export const fast_sub = globalThis['~Natives_fast_sub'] ?? ((a, b) => a - b);
+export const fast_shl = globalThis['~Natives_fast_shl'] ?? ((a, b) => a << b);
+export const fast_mul = globalThis['~Natives_fast_mul'] ?? ((a, b) => a * b);
+export const fast_imul = globalThis['~Natives_fast_imul'] ?? ((a, b) => Math.imul(a, b));
+export const assert_string = globalThis['~Natives_assert_string'] ?? ((a) => a);
+export const assert_number = globalThis['~Natives_assert_number'] ?? ((a) => a);
+export const assert_static_fn = globalThis['~Natives_assert_static_fn'] ?? ((a) => a);
+export const comptime_string = globalThis['~Natives_comptime_string'] ?? ((a) => a);
+export const comptime_number = globalThis['~Natives_comptime_number'] ?? ((a) => a);
+export const comptime_static_fn = globalThis['~Natives_comptime_static_fn'] ?? ((a) => a);
+export const inlineme = globalThis['~Natives_inlineme'] ?? (() => { });
+export const inlineme_n = globalThis['~Natives_inlineme_n'] ?? ((n) => { });

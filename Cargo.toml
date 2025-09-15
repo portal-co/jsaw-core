@@ -6,6 +6,7 @@ members = [
     "crates/swc-ssa",
     "crates/swc-tac",
     "crates/swc-util",
+    "crates/portal-jsc-generator",
 ]
 
 # "js-runtime-lib","swc-emit-rust","swc-waffle"

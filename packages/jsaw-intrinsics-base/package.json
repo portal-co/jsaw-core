@@ -1,0 +1,26 @@
+{
+  "name": "@portal-solutions/jsaw-intrinsics-base",
+  "version": "0.0.0",
+  "description": "",
+  "main": "./dist/index.cjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "types": "./dist/index.d.cts",
+  "zshy": "index.ts",
+  "files": [
+    "dist"
+  ],
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.cts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  }
+}

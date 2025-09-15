@@ -1,0 +1,9 @@
+{
+  "name": "@ortal-solutions/jsaw-core",
+  "workspaces": [
+    "packages/jsaw-intrinsics-base"
+  ],
+  "devDependencies": {
+    "zshy": "^0.4.1"
+  }
+}

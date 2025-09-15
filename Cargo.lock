@@ -656,6 +656,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-jsc-generator"
+version = "0.1.0"
+dependencies = [
+ "itertools",
+ "portal-jsc-common",
+]
+
+[[package]]
 name = "portal-jsc-swc-cfg"
 version = "0.8.0-pre.9"
 dependencies = [

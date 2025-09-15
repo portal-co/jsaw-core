@@ -1,0 +1,16 @@
+export declare const fast_add: (a: number, b: number) => number;
+export declare const fast_and: (a: number, b: number) => number;
+export declare const fast_or: (a: number, b: number) => number;
+export declare const fast_eq: (a: number, b: number) => boolean;
+export declare const fast_sub: (a: number, b: number) => number;
+export declare const fast_shl: (a: number, b: number) => number;
+export declare const fast_mul: (a: number, b: number) => number;
+export declare const fast_imul: (a: number, b: number) => number;
+export declare const assert_string: (a: string) => string;
+export declare const assert_number: (a: number) => number;
+export declare const assert_static_fn: (a: Function) => Function;
+export declare const comptime_string: (a: string) => string;
+export declare const comptime_number: (a: number) => number;
+export declare const comptime_static_fn: (a: Function) => Function;
+export declare const inlineme: () => void;
+export declare const inlineme_n: (n: number) => void;
