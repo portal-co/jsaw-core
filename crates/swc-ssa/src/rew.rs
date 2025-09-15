@@ -7,16 +7,15 @@ use swc_ecma_ast::Id as Ident;
 use swc_tac::{Item, LId, TBlock, TCatch, TCfg, TFunc, TStmt, TTerm, ValFlags};
 
 use crate::{SBlock, SFunc, STarget, SValue, SValueW};
-
-impl<'a> TryFrom<&'a SFunc> for TFunc {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
+impl SFunc {
+    pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
+        let value = self;
         let mut cfg = TCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());
         let mut rew = Rew {
             blocks: Default::default(),
             ctxt: Default::default(),
+            prefix: prefix.clone(),
         };
         let entry = rew.trans(&value, &mut cfg, BlockEntry::Block(value.entry))?;
         let ctxt = rew
@@ -26,16 +25,18 @@ impl<'a> TryFrom<&'a SFunc> for TFunc {
         let params = value.cfg.blocks[value.entry]
             .params
             .iter()
-            .map(|v| mangle_value(ctxt, &value, v.0))
+            .map(|v| mangle_value(prefix.clone(), ctxt, &value, v.0))
             .collect();
         for (value_id, ts_type) in value.cfg.ts.clone().into_iter() {
-            cfg.type_annotations
-                .insert(mangle_value(ctxt, &value, value_id), ts_type);
+            cfg.type_annotations.insert(
+                mangle_value(prefix.clone(), ctxt, &value, value_id),
+                ts_type,
+            );
         }
         cfg.ts_retty = value.cfg.ts_retty.clone();
         cfg.generics = value.cfg.generics.clone();
 
-        Ok(Self {
+        Ok(TFunc {
             cfg,
             entry,
             params,
@@ -43,6 +44,13 @@ impl<'a> TryFrom<&'a SFunc> for TFunc {
             is_async: value.is_async,
             ts_params: value.ts_params.clone(),
         })
+    }
+}
+impl<'a> TryFrom<&'a SFunc> for TFunc {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
+        value.try_into_with_prefix(Default::default())
     }
 }
 impl TryFrom<SFunc> for TFunc {
@@ -56,6 +64,7 @@ impl TryFrom<SFunc> for TFunc {
 pub struct Rew {
     pub blocks: BTreeMap<BlockEntry, Id<TBlock>>,
     pub ctxt: OnceLock<SyntaxContext>,
+    pub prefix: Atom,
 }
 
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq)]
@@ -85,7 +94,10 @@ impl Rew {
                     let catch_clause = match &func.cfg.blocks[*block_id].postcedent.catch {
                         crate::SCatch::Throw => TCatch::Throw,
                         crate::SCatch::Just { target } => {
-                            let error = (Atom::new("$error"), Default::default());
+                            let error = (
+                                Atom::new(format!("{}$error", self.prefix)),
+                                Default::default(),
+                            );
                             cfg.decls.insert(error.clone());
                             TCatch::Jump {
                                 pat: error.clone(),
@@ -107,13 +119,25 @@ impl Rew {
                                     let item_id = item.as_ref().map2(
                                         &mut (),
                                         &mut |_, value| {
-                                            anyhow::Ok(mangle_value(ctxt, func, *value))
+                                            anyhow::Ok(mangle_value(
+                                                self.prefix.clone(),
+                                                ctxt,
+                                                func,
+                                                *value,
+                                            ))
                                         },
-                                        &mut |_, field| field.try_into(),
+                                        &mut |_, field| {
+                                            field.try_into_with_prefix(self.prefix.clone())
+                                        },
                                     )?;
                                     cfg.blocks[new_block_id].stmts.push(TStmt {
                                         left: LId::Id {
-                                            id: mangle_value(ctxt, func, *statement),
+                                            id: mangle_value(
+                                                self.prefix.clone(),
+                                                ctxt,
+                                                func,
+                                                *statement,
+                                            ),
                                         },
                                         flags: ValFlags::SSA_LIKE,
                                         right: item_id,
@@ -121,12 +145,18 @@ impl Rew {
                                             .clone()
                                             .unwrap_or_else(|| Span::dummy_with_cmt()),
                                     });
-                                    cfg.decls.insert(mangle_value(ctxt, func, *statement));
+                                    cfg.decls.insert(mangle_value(
+                                        self.prefix.clone(),
+                                        ctxt,
+                                        func,
+                                        *statement,
+                                    ));
                                 }
                             },
                             SValue::Assign { target, val } => {
                                 let target_id = target.clone().map(&mut |value| {
-                                    let mangled = mangle_value(ctxt, func, value);
+                                    let mangled =
+                                        mangle_value(self.prefix.clone(), ctxt, func, value);
                                     cfg.decls.insert(mangled.clone());
                                     return anyhow::Ok(mangled);
                                 })?;
@@ -134,7 +164,7 @@ impl Rew {
                                     left: target_id,
                                     flags: Default::default(),
                                     right: Item::Just {
-                                        id: mangle_value(ctxt, func, *val),
+                                        id: mangle_value(self.prefix.clone(), ctxt, func, *val),
                                     },
                                     span: Span::dummy_with_cmt(),
                                 });
@@ -142,20 +172,30 @@ impl Rew {
                             SValue::LoadId(i) => {
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: LId::Id {
-                                        id: mangle_value(ctxt, func, *statement),
+                                        id: mangle_value(
+                                            self.prefix.clone(),
+                                            ctxt,
+                                            func,
+                                            *statement,
+                                        ),
                                     },
                                     flags: ValFlags::SSA_LIKE,
                                     right: Item::Just { id: i.clone() },
                                     span: Span::dummy_with_cmt(),
                                 });
-                                cfg.decls.insert(mangle_value(ctxt, func, *statement));
+                                cfg.decls.insert(mangle_value(
+                                    self.prefix.clone(),
+                                    ctxt,
+                                    func,
+                                    *statement,
+                                ));
                             }
                             SValue::StoreId { target, val } => {
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: LId::Id { id: target.clone() },
                                     flags: Default::default(),
                                     right: Item::Just {
-                                        id: mangle_value(ctxt, func, *val),
+                                        id: mangle_value(self.prefix.clone(), ctxt, func, *val),
                                     },
                                     span: Span::dummy_with_cmt(),
                                 });
@@ -178,11 +218,15 @@ impl Rew {
                         }
                     }
                     let term = match &func.cfg.blocks[*block_id].postcedent.term {
-                        crate::STerm::Throw(id) => {
-                            swc_tac::TTerm::Throw(mangle_value(ctxt, func, *id))
-                        }
+                        crate::STerm::Throw(id) => swc_tac::TTerm::Throw(mangle_value(
+                            self.prefix.clone(),
+                            ctxt,
+                            func,
+                            *id,
+                        )),
                         crate::STerm::Return(id) => swc_tac::TTerm::Return(
-                            id.clone().map(|value| mangle_value(ctxt, func, value)),
+                            id.clone()
+                                .map(|value| mangle_value(self.prefix.clone(), ctxt, func, value)),
                         ),
                         crate::STerm::Jmp(starget) => TTerm::Jmp(self.trans(
                             func,
@@ -199,7 +243,7 @@ impl Rew {
                             let if_false =
                                 self.trans(func, cfg, BlockEntry::Target(if_false.clone(), None))?;
                             TTerm::CondJmp {
-                                cond: mangle_value(ctxt, func, *cond),
+                                cond: mangle_value(self.prefix.clone(), ctxt, func, *cond),
                                 if_true,
                                 if_false,
                             }
@@ -211,7 +255,7 @@ impl Rew {
                                 .iter()
                                 .map(|(a2, b2)| {
                                     anyhow::Ok((
-                                        mangle_value(ctxt, func, *a2),
+                                        mangle_value(self.prefix.clone(), ctxt, func, *a2),
                                         self.trans(
                                             func,
                                             cfg,
@@ -221,7 +265,7 @@ impl Rew {
                                 })
                                 .collect::<anyhow::Result<_>>()?;
                             TTerm::Switch {
-                                x: mangle_value(ctxt, func, *x),
+                                x: mangle_value(self.prefix.clone(), ctxt, func, *x),
                                 blocks,
                                 default,
                             }
@@ -234,11 +278,21 @@ impl Rew {
                     let stmts = val
                         .iter()
                         .cloned()
-                        .chain(starget.args.iter().map(|b| mangle_value(ctxt, func, *b)))
+                        .chain(
+                            starget
+                                .args
+                                .iter()
+                                .map(|b| mangle_value(self.prefix.clone(), ctxt, func, *b)),
+                        )
                         .enumerate()
                         .map(|(arg_index, arg_value)| TStmt {
                             left: LId::Id {
-                                id: mangle_param(ctxt, starget.block, arg_index),
+                                id: mangle_param(
+                                    self.prefix.clone(),
+                                    ctxt,
+                                    starget.block,
+                                    arg_index,
+                                ),
                             },
                             flags: Default::default(),
                             right: Item::Just { id: arg_value },
@@ -256,21 +310,34 @@ impl Rew {
         }
     }
 }
-pub fn mangle_param(ctxt: SyntaxContext, block_id: Id<SBlock>, index: usize) -> Ident {
-    (Atom::new(format!("k{}p{}", block_id.index(), index)), ctxt)
+pub fn mangle_param(
+    prefix: Atom,
+    ctxt: SyntaxContext,
+    block_id: Id<SBlock>,
+    index: usize,
+) -> Ident {
+    (
+        Atom::new(format!("{prefix}$k{}p{}", block_id.index(), index)),
+        ctxt,
+    )
 }
-pub fn mangle_value(ctxt: SyntaxContext, func: &SFunc, value_id: Id<SValueW>) -> Ident {
+pub fn mangle_value(
+    prefix: Atom,
+    ctxt: SyntaxContext,
+    func: &SFunc,
+    value_id: Id<SValueW>,
+) -> Ident {
     match &func.cfg.values[value_id].value {
         SValue::Param { block, idx, ty } => {
-            return mangle_param(ctxt, *block, *idx);
+            return mangle_param(prefix, ctxt, *block, *idx);
         }
         SValue::Item {
             item: Item::Just { id },
             span,
-        } => mangle_value(ctxt, func, *id),
-        SValue::EdgeBlocker { value, span } => mangle_value(ctxt, func, *value),
+        } => mangle_value(prefix, ctxt, func, *id),
+        SValue::EdgeBlocker { value, span } => mangle_value(prefix, ctxt, func, *value),
         _ => {
-            return (Atom::new(format!("v{}", value_id.index())), ctxt);
+            return (Atom::new(format!("{prefix}$v{}", value_id.index())), ctxt);
         }
     }
 }
