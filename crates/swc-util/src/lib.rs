@@ -2,8 +2,8 @@ use std::{collections::BTreeMap, mem::take};
 
 use bitflags::bitflags;
 pub use portal_jsc_common as common;
-pub use portal_jsc_common::{ImportMap,SemanticFlags};
 use portal_jsc_common::Native;
+pub use portal_jsc_common::{ImportMap, SemanticFlags};
 use portal_solutions_swibb::ConstCollector;
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned};
@@ -37,28 +37,40 @@ pub struct SemanticCfg {
     pub target: SemanticTarget,
 }
 pub trait ResolveNatives {
-    fn resolve_natives(&self, import_map: &(dyn ImportMapper + '_)) -> Option<Native<&Expr>>;
+    fn resolve_natives(
+        &self,
+        cfg: &SemanticCfg,
+        import_map: &(dyn ImportMapper + '_),
+    ) -> Option<Native<&Expr>>;
 }
 impl ResolveNatives for Expr {
-    fn resolve_natives(&self, import_map: &(dyn ImportMapper + '_)) -> Option<Native<&Expr>> {
+    fn resolve_natives(
+        &self,
+        cfg: &SemanticCfg,
+        import_map: &(dyn ImportMapper + '_),
+    ) -> Option<Native<&Expr>> {
+        fn prop<'a>(c: &'a CallExpr, p: &'a Expr) -> Option<Native<&'a Expr>> {
+            match p {
+                Expr::Lit(Lit::Str(s)) => {
+                    let s = s.value.strip_prefix("~Natives_")?;
+                    let n = Native::of(s)?;
+                    let mut a = c.args.iter();
+                    n.map(&mut |_| {
+                        let Some(v) = a.next() else {
+                            return Err(());
+                        };
+                        Ok(&*v.expr)
+                    })
+                    .ok()
+                }
+                Expr::Assign(a) => prop(c, &a.right),
+                _ => None,
+            }
+        }
         fn member<'a>(c: &'a CallExpr, m: &'a MemberExpr) -> Option<Native<&'a Expr>> {
             match &*m.obj {
                 Expr::Ident(i) if i.sym == "globalThis" => match &m.prop {
-                    MemberProp::Computed(cp) => match &*cp.expr {
-                        Expr::Lit(Lit::Str(s)) => {
-                            let s = s.value.strip_prefix("~Natives_")?;
-                            let n = Native::of(s)?;
-                            let mut a = c.args.iter();
-                            n.map(&mut |_| {
-                                let Some(v) = a.next() else {
-                                    return Err(());
-                                };
-                                Ok(&*v.expr)
-                            })
-                            .ok()
-                        }
-                        _ => None,
-                    },
+                    MemberProp::Computed(cp) => prop(c, &cp.expr),
                     _ => None,
                 },
                 _ => None,
