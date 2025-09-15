@@ -21,51 +21,57 @@ impl ItemGetter for TCfg {
     }
 }
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
-    fn native_of(&self, i: I) -> Option<Native<I>>
+    fn native_of(&self, mut i: I) -> Option<Native<I>>
     where
         I: Clone,
     {
-        let g = self.get_item(i)?;
-        let (mut func, mut member, args) = match g {
-            Item::Just { id } => return self.native_of(id.clone()),
-            Item::Call {
-                callee: TCallee::Member { func, member },
-                args,
-            } => (func, member, args),
-            _ => return None,
-        };
         loop {
-            if let Some(i) = self.get_ident(func.clone()) {
-                if i.0 == "globalThis" {
-                    break;
+            let g = self.get_item(i)?;
+            let (mut func, mut member, args) = match g {
+                Item::Just { id } => {
+                    i = id.clone();
+                    continue;
                 }
-            }
-            let Item::Just { id } = self.get_item(func.clone())? else {
-                return None;
-            };
-            func = id;
-        }
-        let n = loop {
-            let id = match self.get_item(member.clone())? {
-                Item::Lit { lit: Lit::Str(s) } => {
-                    if let Some(m) = s.value.strip_prefix("~Natives_") {
-                        if let Some(m) = Native::of(m) {
-                            break m;
-                        }
-                    }
-                    return None;
-                }
-                Item::Just { id } => id,
+                Item::Call {
+                    callee: TCallee::Member { func, member },
+                    args,
+                } => (func, member, args),
                 _ => return None,
             };
-            member = id;
-        };
-        let mut args = args.iter().cloned();
-        n.map::<I, ()>(&mut |_| match args.next() {
-            Some(a) => Ok(a),
-            None => Err(()),
-        })
-        .ok()
+            loop {
+                if let Some(i) = self.get_ident(func.clone()) {
+                    if i.0 == "globalThis" {
+                        break;
+                    }
+                }
+                let Item::Just { id } = self.get_item(func.clone())? else {
+                    return None;
+                };
+                func = id;
+            }
+            let n = loop {
+                let id = match self.get_item(member.clone())? {
+                    Item::Lit { lit: Lit::Str(s) } => {
+                        if let Some(m) = s.value.strip_prefix("~Natives_") {
+                            if let Some(m) = Native::of(m) {
+                                break m;
+                            }
+                        }
+                        return None;
+                    }
+                    Item::Just { id } => id,
+                    _ => return None,
+                };
+                member = id;
+            };
+            let mut args = args.iter().cloned();
+            return n
+                .map::<I, ()>(&mut |_| match args.next() {
+                    Some(a) => Ok(a),
+                    None => Err(()),
+                })
+                .ok();
+        }
     }
     fn inlinable(&self, d: &Item<I, F>) -> bool
     where
