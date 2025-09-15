@@ -46,7 +46,7 @@ quote = "^1.0.37"
 syn = "^2.0.82"
 
 typenum = "^1.18.0"
-bitflags = "^2.8.0"
+bitflags = {version="^2.8.0",default-features=false}
 relooper = "^0.1.0"
 cityhasher = "^0.1.0"
 

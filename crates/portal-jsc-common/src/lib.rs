@@ -3,6 +3,17 @@ use core::{iter::once, mem::take, ops::Deref};
 pub use portal_pc_asm_common as asm;
 
 use either::Either;
+bitflags::bitflags! {
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+    pub struct SemanticFlags: u64{
+        const ASSUME_SES = 0x1;
+        const ASSUME_AOT = 0x2;
+        const BITWISE_OR_ABSENT_NAN = 0x4;
+        const PLUGIN_AS_TILDE_PLUGIN = 0x8;
+        const ASSUME_NORMAL = 0x10;
+    }
+}
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum RefOrMut<'a, T: ?Sized> {
     Ref(&'a T),

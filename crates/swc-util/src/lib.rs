@@ -2,24 +2,14 @@ use std::{collections::BTreeMap, mem::take};
 
 use bitflags::bitflags;
 pub use portal_jsc_common as common;
-pub use portal_jsc_common::ImportMap;
+pub use portal_jsc_common::{ImportMap,SemanticFlags};
 use portal_jsc_common::Native;
 use portal_solutions_swibb::ConstCollector;
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Bool, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp, ModuleItem};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
-bitflags! {
-    #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-    pub struct SemanticFlags: u64{
-        const ASSUME_SES = 0x1;
-        const ASSUME_AOT = 0x2;
-        const BITWISE_OR_ABSENT_NAN = 0x4;
-        const PLUGIN_AS_TILDE_PLUGIN = 0x8;
-        const ASSUME_NORMAL = 0x10;
-    }
-}
+
 pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) -> Option<Lit> {
     match b {
         "startsWith" if a.is_str() => {
