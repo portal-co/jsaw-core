@@ -12,6 +12,7 @@ bitflags::bitflags! {
         const BITWISE_OR_ABSENT_NAN = 0x4;
         const PLUGIN_AS_TILDE_PLUGIN = 0x8;
         const ASSUME_NORMAL = 0x10;
+        const NATIVES = 0x20;
     }
 }
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
