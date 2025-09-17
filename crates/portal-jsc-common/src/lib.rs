@@ -15,6 +15,12 @@ bitflags::bitflags! {
         const NATIVES = 0x20;
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[non_exhaustive]
+pub enum SemanticTarget {
+    #[default]
+    ECMAScript,
+}
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum RefOrMut<'a, T: ?Sized> {
     Ref(&'a T),

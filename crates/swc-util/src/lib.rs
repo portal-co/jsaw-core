@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, mem::take};
 use bitflags::bitflags;
 pub use portal_jsc_common as common;
 use portal_jsc_common::Native;
-pub use portal_jsc_common::{ImportMap, SemanticFlags};
+pub use portal_jsc_common::{ImportMap, SemanticFlags, SemanticTarget};
 use portal_solutions_swibb::ConstCollector;
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned};
@@ -24,12 +24,7 @@ pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) 
         _ => None,
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-#[non_exhaustive]
-pub enum SemanticTarget {
-    #[default]
-    ECMAScript,
-}
+
 #[derive(Default, Clone)]
 #[non_exhaustive]
 pub struct SemanticCfg {
