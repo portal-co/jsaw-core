@@ -522,7 +522,7 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
     },
     Switch {
         x: I,
-        blocks: HashMap<I, B>,
+        blocks: Vec<(I,B)>,
         default: B,
     },
     // #[default]
@@ -531,7 +531,7 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
 impl<B, I> TTerm<B, I> {
     pub fn as_ref<'a>(&'a self) -> TTerm<&'a B, &'a I>
     where
-        I: Eq + std::hash::Hash,
+        // I: Eq + std::hash::Hash,
     {
         match self {
             TTerm::Return(a) => TTerm::Return(a.as_ref()),
@@ -548,7 +548,7 @@ impl<B, I> TTerm<B, I> {
             },
             TTerm::Switch { x, blocks, default } => TTerm::Switch {
                 x,
-                blocks: blocks.iter().collect(),
+                blocks: blocks.iter().map(|(a,b)|(a,b)).collect(),
                 default,
             },
             TTerm::Default => TTerm::Default,
@@ -561,7 +561,7 @@ impl<B, I> TTerm<B, I> {
         i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
     ) -> Result<TTerm<B2, I2>, E>
     where
-        I2: Eq + std::hash::Hash,
+        // I2: Eq + std::hash::Hash,
     {
         Ok(match self {
             TTerm::Return(a) => TTerm::Return(match a {

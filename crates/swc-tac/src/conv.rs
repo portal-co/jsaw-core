@@ -101,7 +101,7 @@ impl ToTACConverter<'_> {
                     }
                     TTerm::Switch {
                         x: y,
-                        blocks: m2,
+                        blocks: m2.into_iter().collect(),
                         default: self.trans(i, o, *default)?,
                     }
                 }

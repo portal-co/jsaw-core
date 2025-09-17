@@ -51,7 +51,7 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                     if_true,
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
-                TTerm::Switch { x, blocks, default } => Box::new(blocks.values().chain([default])),
+                TTerm::Switch { x, blocks, default } => Box::new(blocks.iter().map(|a|&a.1).chain([default])),
                 TTerm::Default => Box::new(empty()),
             }),
         )
@@ -79,7 +79,7 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
                 TTerm::Switch { x, blocks, default } => {
-                    Box::new(blocks.values_mut().chain([default]))
+                    Box::new(blocks.iter_mut().map(|a|&mut a.1).chain([default]))
                 }
                 TTerm::Default => Box::new(empty()),
             }),

@@ -1116,14 +1116,14 @@ impl Rew<'_> {
                         .map(|a| {
                             anyhow::Ok((
                                 Expr::Ident(ident(
-                                    a.0,
+                                    &a.0,
                                     tcfg.blocks[block_id]
                                         .post
                                         .orig_span
                                         .clone()
                                         .unwrap_or(Span::dummy_with_cmt()),
                                 )),
-                                self.trans(cfg, tcfg, *a.1)?,
+                                self.trans(cfg, tcfg, a.1)?,
                             ))
                         })
                         .collect::<anyhow::Result<_>>()?,
