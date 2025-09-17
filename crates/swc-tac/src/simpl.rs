@@ -9,7 +9,7 @@ use swc_cfg::Loop;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
 
-use crate::{lam::LAM, ValFlags};
+use crate::{ValFlags, lam::LAM};
 
 pub mod impls;
 pub mod reloop;
@@ -93,7 +93,7 @@ pub enum SimplItem<D: TacDialect, P = SimplPathId> {
         lit: Lit,
     },
     CallStatic {
-        r#fn: FuncId<Expr, (P, D::Mark<()>)> ,
+        r#fn: FuncId<Expr, (P, D::Mark<()>)>,
         args: Vec<(P, D::Mark<()>)>,
     },
     CallTag {
@@ -254,7 +254,9 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     i.clone(),
                     Default::default(),
                     ValFlags::SSA_LIKE,
-                    SimplItem::Lit { lit: literal.clone() },
+                    SimplItem::Lit {
+                        lit: literal.clone(),
+                    },
                     literal.span(),
                 ));
                 ((i, Default::default()), start_block)
@@ -266,7 +268,8 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                 start_block,
             ),
             SimplExpr::Assign(make_spanned) => {
-                let (value, start_block) = make_spanned.value.body.bake(labels, ret, cfg, start_block);
+                let (value, start_block) =
+                    make_spanned.value.body.bake(labels, ret, cfg, start_block);
                 let o = make_spanned.value.target.clone();
                 let (mark, o) = D::despan(o);
                 let o = o.to_id();
@@ -456,31 +459,30 @@ impl<D: TacDialect> Bake<D> for SimplStmt<D> {
                 SimplStmt::Switch(switch_stmt) => {
                     let after = cfg.blocks.alloc(Default::default());
                     let (scrutinee, mut start_block) =
-                        switch_stmt.value.scrutinee.bake(labels, ret, cfg, start_block);
-                    let mut cases = vec![];
-                    let start =
                         switch_stmt
                             .value
-                            .cases
-                            .iter()
-                            .enumerate()
-                            .rev()
-                            .fold(after, |previous_block, (i, case)| {
-                                let value;
-                                (value, start_block) = case.0.bake(labels, ret, cfg, start_block);
-                                let new_block = cfg.blocks.alloc(Default::default());
-                                let (_, next_flow) = case.1.bake(labels, ret, cfg, new_block);
-                                cfg.blocks[next_flow].term = TSimplTerm::Jmp(previous_block);
-                                cases.push((value, new_block));
-                                if i == switch_stmt.value.cases.len() - 1 {
-                                    after
-                                } else {
-                                    match &switch_stmt.value.cases[i + 1].2 {
-                                        portal_jsc_swc_util::BreakKind::BreakAfter => after,
-                                        portal_jsc_swc_util::BreakKind::DoNotBreakAfter => new_block,
-                                    }
+                            .scrutinee
+                            .bake(labels, ret, cfg, start_block);
+                    let mut cases = vec![];
+                    let start = switch_stmt.value.cases.iter().enumerate().rev().fold(
+                        after,
+                        |previous_block, (i, case)| {
+                            let value;
+                            (value, start_block) = case.0.bake(labels, ret, cfg, start_block);
+                            let new_block = cfg.blocks.alloc(Default::default());
+                            let (_, next_flow) = case.1.bake(labels, ret, cfg, new_block);
+                            cfg.blocks[next_flow].term = TSimplTerm::Jmp(previous_block);
+                            cases.push((value, new_block));
+                            if i == switch_stmt.value.cases.len() - 1 {
+                                after
+                            } else {
+                                match &switch_stmt.value.cases[i + 1].2 {
+                                    portal_jsc_swc_util::BreakKind::BreakAfter => after,
+                                    portal_jsc_swc_util::BreakKind::DoNotBreakAfter => new_block,
                                 }
-                            });
+                            }
+                        },
+                    );
                     cfg.blocks[start_block].orig_span = Some(switch_stmt.span);
                     cfg.blocks[start_block].term = TSimplTerm::Switch { scrutinee, cases };
                     cfg.blocks.alloc(Default::default())
@@ -536,7 +538,8 @@ impl<D: TacDialect> Bake<D> for SimplStmt<D> {
                     }
                 },
                 SimplStmt::Return(make_spanned) => {
-                    let (value, start_block) = make_spanned.value.bake(labels, ret, cfg, start_block);
+                    let (value, start_block) =
+                        make_spanned.value.bake(labels, ret, cfg, start_block);
                     match ret.map(|a| a.clone()) {
                         None => cfg.blocks[start_block].term = TSimplTerm::Return(value),
                         Some((k, v)) => {

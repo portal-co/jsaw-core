@@ -156,9 +156,12 @@ impl ConstantInstantiator {
                     }
                 };
                 let v = match v.const_in(semantic, out) {
-                    None => match v.array_in(semantic, out){
+                    None => match v.array_in(semantic, out) {
                         None => v,
-                        Some(a) => SValue::Item { item: Item::Arr { members: a }, span: None }
+                        Some(a) => SValue::Item {
+                            item: Item::Arr { members: a },
+                            span: None,
+                        },
                     },
                     Some(a) => SValue::Item {
                         item: Item::Lit { lit: a.clone() },

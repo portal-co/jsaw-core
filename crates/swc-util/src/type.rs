@@ -10,13 +10,13 @@ bitflags! {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash,Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum ObjType {
     Array,
     Object(Vec<String>),
 }
-#[derive(Clone, PartialEq, Eq, Hash,Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 #[non_exhaustive]
 pub enum OptType {
     Number,
@@ -85,7 +85,8 @@ impl OptType {
                         ObjType::Array => {
                             let mut elem_tys = elem_tys.clone();
                             if elem_tys.len() != 0 {
-                                let Some(first_type) = elem_tys.iter().find_map(|a| a.clone()) else {
+                                let Some(first_type) = elem_tys.iter().find_map(|a| a.clone())
+                                else {
                                     return Some(OptType::Array {
                                         elem_ty: Box::new(None),
                                     });

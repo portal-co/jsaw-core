@@ -51,7 +51,9 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                     if_true,
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
-                TTerm::Switch { x, blocks, default } => Box::new(blocks.iter().map(|a|&a.1).chain([default])),
+                TTerm::Switch { x, blocks, default } => {
+                    Box::new(blocks.iter().map(|a| &a.1).chain([default]))
+                }
                 TTerm::Default => Box::new(empty()),
             }),
         )
@@ -79,14 +81,14 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
                 TTerm::Switch { x, blocks, default } => {
-                    Box::new(blocks.iter_mut().map(|a|&mut a.1).chain([default]))
+                    Box::new(blocks.iter_mut().map(|a| &mut a.1).chain([default]))
                 }
                 TTerm::Default => Box::new(empty()),
             }),
         )
     }
 }
-impl cfg_traits::Target<TFunc> for Id<TBlock>{
+impl cfg_traits::Target<TFunc> for Id<TBlock> {
     fn block(&self) -> <TFunc as cfg_traits::Func>::Block {
         *self
     }
@@ -95,18 +97,20 @@ impl cfg_traits::Target<TFunc> for Id<TBlock>{
         self
     }
 }
-impl cfg_traits::Term<TFunc> for Id<TBlock>{
+impl cfg_traits::Term<TFunc> for Id<TBlock> {
     type Target = Id<TBlock>;
 
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
-        TFunc: 'a {
+        TFunc: 'a,
+    {
         Box::new(once(self))
     }
 
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
-        TFunc: 'a {
-          Box::new(once(self))
+        TFunc: 'a,
+    {
+        Box::new(once(self))
     }
 }

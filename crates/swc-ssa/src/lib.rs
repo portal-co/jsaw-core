@@ -15,11 +15,11 @@ use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags};
 use swc_tac::{LId, inlinable};
 pub mod consts;
 // pub mod idw;
+pub mod conv;
 pub mod impls;
 pub mod opt_stub;
 pub mod rew;
 pub mod simplify;
-pub mod conv;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum EdgeKind {
     Forward,
@@ -398,7 +398,7 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     pub block: B,
     pub args: Vec<I>,
 }
-pub type STerm<I = Id<SValueW>,B = Id<SBlock>> = TTerm<STarget<I,B>,I>;
+pub type STerm<I = Id<SValueW>, B = Id<SBlock>> = TTerm<STarget<I, B>, I>;
 // #[derive(Clone, Debug, PartialEq, Eq)]
 // #[non_exhaustive]
 // pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {

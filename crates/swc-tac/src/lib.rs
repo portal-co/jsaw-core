@@ -510,7 +510,7 @@ impl<B, I> TCatch<B, I> {
         })
     }
 }
-#[derive(Clone, Debug,PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
     Throw(I),
@@ -522,7 +522,7 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
     },
     Switch {
         x: I,
-        blocks: Vec<(I,B)>,
+        blocks: Vec<(I, B)>,
         default: B,
     },
     // #[default]
@@ -530,7 +530,7 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
 }
 impl<B, I> TTerm<B, I> {
     pub fn as_ref<'a>(&'a self) -> TTerm<&'a B, &'a I>
-    where
+where
         // I: Eq + std::hash::Hash,
     {
         match self {
@@ -548,14 +548,14 @@ impl<B, I> TTerm<B, I> {
             },
             TTerm::Switch { x, blocks, default } => TTerm::Switch {
                 x,
-                blocks: blocks.iter().map(|(a,b)|(a,b)).collect(),
+                blocks: blocks.iter().map(|(a, b)| (a, b)).collect(),
                 default,
             },
             TTerm::Default => TTerm::Default,
         }
     }
-        pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B, &'a mut I>
-    where
+    pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B, &'a mut I>
+where
         // I: Eq + std::hash::Hash,
     {
         match self {
@@ -573,7 +573,7 @@ impl<B, I> TTerm<B, I> {
             },
             TTerm::Switch { x, blocks, default } => TTerm::Switch {
                 x,
-                blocks: blocks.iter_mut().map(|(a,b)|(a,b)).collect(),
+                blocks: blocks.iter_mut().map(|(a, b)| (a, b)).collect(),
                 default,
             },
             TTerm::Default => TTerm::Default,
@@ -585,7 +585,7 @@ impl<B, I> TTerm<B, I> {
         b: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
         i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
     ) -> Result<TTerm<B2, I2>, E>
-    where
+where
         // I2: Eq + std::hash::Hash,
     {
         Ok(match self {

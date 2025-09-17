@@ -43,7 +43,6 @@ impl OptStub {
             for ins in i.blocks[k].stmts.iter().cloned() {
                 for (a, mut b) in take(&mut variants) {
                     match &i.values[ins].value {
-                        
                         v => {
                             let v = v.as_ref().map(
                                 self,

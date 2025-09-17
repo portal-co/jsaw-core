@@ -10,7 +10,11 @@ impl Cfg {
             } = &mut block_data.end.term
             {
                 if let Expr::Lit(Lit::Bool(boolean_literal)) = cond {
-                    block_data.end.term = Term::Jmp(if boolean_literal.value { *if_true } else { *if_false })
+                    block_data.end.term = Term::Jmp(if boolean_literal.value {
+                        *if_true
+                    } else {
+                        *if_false
+                    })
                 }
             };
         }

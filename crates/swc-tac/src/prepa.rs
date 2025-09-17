@@ -13,9 +13,12 @@ pub struct Prepa<'a> {
     pub semantics: &'a SemanticCfg,
     vars: BTreeSet<Ident>,
 }
-impl<'a> Prepa<'a>{
-    pub fn new(semantics: &'a SemanticCfg) -> Self{
-        Self { semantics, vars: Default::default() }
+impl<'a> Prepa<'a> {
+    pub fn new(semantics: &'a SemanticCfg) -> Self {
+        Self {
+            semantics,
+            vars: Default::default(),
+        }
     }
 }
 impl VisitMut for Prepa<'_> {

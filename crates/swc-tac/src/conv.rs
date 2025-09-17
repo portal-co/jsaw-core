@@ -1364,7 +1364,10 @@ impl ToTACConverter<'_> {
                     left: LId::Id { id: tmp.clone() },
                     flags: Default::default(),
                     right: Item::Func {
-                        func: TFunc::try_from_with_mapper(&(self.mapper.to_cfg)(&f.function)?, self.mapper.bud())?,
+                        func: TFunc::try_from_with_mapper(
+                            &(self.mapper.to_cfg)(&f.function)?,
+                            self.mapper.bud(),
+                        )?,
                         arrow: false,
                     },
                     span: f.span(),
@@ -1404,7 +1407,7 @@ impl ToTACConverter<'_> {
                     left: LId::Id { id: tmp.clone() },
                     flags: Default::default(),
                     right: Item::Func {
-                        func:  TFunc::try_from_with_mapper(&c, self.mapper.bud())?,
+                        func: TFunc::try_from_with_mapper(&c, self.mapper.bud())?,
                         arrow: true,
                     },
                     span: a.span(),

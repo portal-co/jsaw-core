@@ -131,9 +131,9 @@ impl SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc> for OptCfg {
         &mut self,
         id: Id<OptValueW>,
     ) -> Option<&mut SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
-        let v: *mut OptValue =  &mut self.values[id].value as *mut _;
-           //SAFETY: only borrowed once; values are moved before recursing
-        match unsafe{&mut *v} {
+        let v: *mut OptValue = &mut self.values[id].value as *mut _;
+        //SAFETY: only borrowed once; values are moved before recursing
+        match unsafe { &mut *v } {
             OptValue::Deopt { value: a, .. } => {
                 let a = *a;
                 return self.val_mut(a);
