@@ -11,7 +11,7 @@ use id_arena::{Arena, Id};
 use portal_jsc_common::Asm;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
-use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, ValFlags};
+use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags};
 use swc_tac::{LId, inlinable};
 pub mod consts;
 // pub mod idw;
@@ -398,29 +398,30 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     pub block: B,
     pub args: Vec<I>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
-    Throw(I),
-    Return(Option<I>),
-    Jmp(STarget<I, B>),
-    CondJmp {
-        cond: I,
-        if_true: STarget<I, B>,
-        if_false: STarget<I, B>,
-    },
-    Switch {
-        x: I,
-        blocks: Vec<(I, STarget<I, B>)>,
-        default: STarget<I, B>,
-    },
-    Default,
-}
-impl<I, B> Default for STerm<I, B> {
-    fn default() -> Self {
-        Self::Default
-    }
-}
+pub type STerm<I = Id<SValueW>,B = Id<SBlock>> = TTerm<STarget<I,B>,I>;
+// #[derive(Clone, Debug, PartialEq, Eq)]
+// #[non_exhaustive]
+// pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
+//     Throw(I),
+//     Return(Option<I>),
+//     Jmp(STarget<I, B>),
+//     CondJmp {
+//         cond: I,
+//         if_true: STarget<I, B>,
+//         if_false: STarget<I, B>,
+//     },
+//     Switch {
+//         x: I,
+//         blocks: Vec<(I, STarget<I, B>)>,
+//         default: STarget<I, B>,
+//     },
+//     Default,
+// }
+// impl<I, B> Default for STerm<I, B> {
+//     fn default() -> Self {
+//         Self::Default
+//     }
+// }
 impl SCfg {
     pub fn add_blockparam(&mut self, k: Id<SBlock>) -> Id<SValueW> {
         let val = SValue::Param {

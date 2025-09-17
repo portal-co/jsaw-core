@@ -510,7 +510,7 @@ impl<B, I> TCatch<B, I> {
         })
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq, Eq, PartialOrd, Ord)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
     Throw(I),
@@ -549,6 +549,31 @@ impl<B, I> TTerm<B, I> {
             TTerm::Switch { x, blocks, default } => TTerm::Switch {
                 x,
                 blocks: blocks.iter().map(|(a,b)|(a,b)).collect(),
+                default,
+            },
+            TTerm::Default => TTerm::Default,
+        }
+    }
+        pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B, &'a mut I>
+    where
+        // I: Eq + std::hash::Hash,
+    {
+        match self {
+            TTerm::Return(a) => TTerm::Return(a.as_mut()),
+            TTerm::Throw(t) => TTerm::Throw(t),
+            TTerm::Jmp(j) => TTerm::Jmp(j),
+            TTerm::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            } => TTerm::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            },
+            TTerm::Switch { x, blocks, default } => TTerm::Switch {
+                x,
+                blocks: blocks.iter_mut().map(|(a,b)|(a,b)).collect(),
                 default,
             },
             TTerm::Default => TTerm::Default,
