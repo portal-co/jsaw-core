@@ -482,23 +482,124 @@ impl<B, I> Default for TCatch<B, I> {
         Self::Throw
     }
 }
+impl<B, I> TCatch<B, I> {
+    pub fn as_ref<'a>(&'a self) -> TCatch<&'a B, &'a I> {
+        match self {
+            Self::Throw => TCatch::Throw,
+            Self::Jump { pat, k } => TCatch::Jump { pat, k },
+        }
+    }
+    pub fn as_mut<'a>(&'a mut self) -> TCatch<&'a mut B, &'a mut I> {
+        match self {
+            Self::Throw => TCatch::Throw,
+            Self::Jump { pat, k } => TCatch::Jump { pat, k },
+        }
+    }
+    pub fn map<Cx, E, B2, I2>(
+        self,
+        cx: &mut Cx,
+        b: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
+        i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
+    ) -> Result<TCatch<B2, I2>, E> {
+        Ok(match self {
+            TCatch::Throw => TCatch::Throw,
+            TCatch::Jump { pat, k } => TCatch::Jump {
+                pat: i(cx, pat)?,
+                k: b(cx, k)?,
+            },
+        })
+    }
+}
 #[derive(Clone, Debug)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
     Throw(I),
     Jmp(B),
     CondJmp {
-        cond: Ident,
+        cond: I,
         if_true: B,
         if_false: B,
     },
     Switch {
-        x: Ident,
-        blocks: HashMap<Ident, B>,
+        x: I,
+        blocks: HashMap<I, B>,
         default: B,
     },
     // #[default]
     Default,
+}
+impl<B, I> TTerm<B, I> {
+    pub fn as_ref<'a>(&'a self) -> TTerm<&'a B, &'a I>
+    where
+        I: Eq + std::hash::Hash,
+    {
+        match self {
+            TTerm::Return(a) => TTerm::Return(a.as_ref()),
+            TTerm::Throw(t) => TTerm::Throw(t),
+            TTerm::Jmp(j) => TTerm::Jmp(j),
+            TTerm::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            } => TTerm::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            },
+            TTerm::Switch { x, blocks, default } => TTerm::Switch {
+                x,
+                blocks: blocks.iter().collect(),
+                default,
+            },
+            TTerm::Default => TTerm::Default,
+        }
+    }
+    pub fn map<Cx, E, B2, I2>(
+        self,
+        cx: &mut Cx,
+        b: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
+        i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
+    ) -> Result<TTerm<B2, I2>, E>
+    where
+        I2: Eq + std::hash::Hash,
+    {
+        Ok(match self {
+            TTerm::Return(a) => TTerm::Return(match a {
+                None => None,
+                Some(a) => Some(i(cx, a)?),
+            }),
+            TTerm::Throw(v) => TTerm::Throw(i(cx, v)?),
+            TTerm::Jmp(v) => TTerm::Jmp(b(cx, v)?),
+            TTerm::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            } => TTerm::CondJmp {
+                cond: i(cx, cond)?,
+                if_true: b(cx, if_true)?,
+                if_false: b(cx, if_false)?,
+            },
+            TTerm::Switch { x, blocks, default } => TTerm::Switch {
+                x: i(cx, x)?,
+                blocks: blocks
+                    .into_iter()
+                    .map(|(a, c)| Ok::<_, E>((i(cx, a)?, b(cx, c)?)))
+                    .collect::<Result<_, E>>()?,
+                default: b(cx, default)?,
+            },
+            TTerm::Default => TTerm::Default,
+        })
+    }
+    //    pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B,&'a mut I> where I: Eq + std::hash::Hash{
+    //     match self{
+    //         TTerm::Return(a) => TTerm::Return(a.as_mut()),
+    //         TTerm::Throw(t) => TTerm::Throw(t),
+    //         TTerm::Jmp(j) => TTerm::Jmp(j),
+    //         TTerm::CondJmp { cond, if_true, if_false } => TTerm::CondJmp { cond, if_true, if_false },
+    //         TTerm::Switch { x, blocks, default } => TTerm::Switch { x, blocks: blocks.iter_mut().collect(), default },
+    //         TTerm::Default => TTerm::Default,
+    //     }
+    // }
 }
 impl<B, I> Default for TTerm<B, I> {
     fn default() -> Self {
