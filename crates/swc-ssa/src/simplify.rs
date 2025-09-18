@@ -4,8 +4,8 @@ use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
-use swc_tac::consts::ItemGetterExt;
 pub use swc_tac::{Item, consts::ItemGetter};
+use swc_tac::{PropKey, PropVal, consts::ItemGetterExt};
 pub type _Ident = Ident;
 
 impl SCfg {
@@ -224,13 +224,14 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
         &self,
         semantics: &SemanticCfg,
         k: &(dyn SValGetter<I, B, F> + '_),
+        pierce: bool,
     ) -> Option<Vec<I>> {
         match self {
-            SValue::Param { block, idx, ty } => {
+            SValue::Param { block, idx, ty } if pierce => {
                 let mut i = k
                     .inputs(block.clone(), *idx)
                     .filter_map(|i| k.val(i))
-                    .filter_map(|t| t.array_in(semantics, k));
+                    .filter_map(|t| t.array_in(semantics, k, pierce));
                 let mut n = i.next()?;
                 for j in i {
                     if j != n {
@@ -242,17 +243,17 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
             SValue::Item { item, span } => match item {
                 Item::Arr { members } => Some(members.clone()),
                 Item::Mem { obj, mem } => {
-                    match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
+                    match k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce)) {
                         Some(Lit::Num(n)) => match k.val(*obj) {
                             Some(i)
                                 if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
                             {
-                                match i.array_in(semantics, k) {
+                                match i.array_in(semantics, k, pierce) {
                                     None => None,
                                     Some(a) => a
                                         .get((n.value.round() as usize))
                                         .and_then(|a| k.val(*a))
-                                        .and_then(|a| a.array_in(semantics, k)),
+                                        .and_then(|a| a.array_in(semantics, k, pierce)),
                                 }
                             }
                             _ => None,
@@ -265,18 +266,18 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                 {
                     match callee {
                         TCallee::Member { func, member } => {
-                            let member = k.val(*member)?.const_in(semantics, k)?;
+                            let member = k.val(*member)?.const_in(semantics, k, pierce)?;
                             let Lit::Str(s) = member else {
                                 return None;
                             };
                             let func = k.val(*func)?;
-                            match func.array_in(semantics, k) {
+                            match func.array_in(semantics, k, pierce) {
                                 Some(members) => match s.value.as_str() {
                                     "concat" => {
                                         let mut members: Vec<I> = members;
                                         for a in args.iter().cloned() {
                                             let a = k.val(a)?;
-                                            let i = a.array_in(semantics, k)?;
+                                            let i = a.array_in(semantics, k, pierce)?;
                                             members.extend(i);
                                         }
                                         Some(members)
@@ -286,13 +287,13 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                             .get(0)
                                             .cloned()
                                             .and_then(|a| k.val(a))
-                                            .and_then(|v| v.const_in(semantics, k))
+                                            .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let end: Option<usize> = args
                                             .get(1)
                                             .cloned()
                                             .and_then(|a| k.val(a))
-                                            .and_then(|v| v.const_in(semantics, k))
+                                            .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let mut members: Vec<I> = members;
                                         members = match (begin, end) {
@@ -320,13 +321,14 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
         &self,
         semantics: &SemanticCfg,
         k: &(dyn SValGetter<I, B, F> + '_),
+        pierce: bool,
     ) -> Option<Lit> {
         match self {
-            SValue::Param { block, idx, ty } => {
+            SValue::Param { block, idx, ty } if pierce => {
                 let mut i = k.inputs(block.clone(), *idx).filter_map(|i| k.val(i));
-                let mut n = i.next()?.const_in(semantics, k)?;
+                let mut n = i.next()?.const_in(semantics, k, pierce)?;
                 for j in i {
-                    let j = j.const_in(semantics, k)?;
+                    let j = j.const_in(semantics, k, pierce)?;
                     if j != n {
                         return None;
                     }
@@ -335,8 +337,12 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
             }
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
-                Item::Bin { left, right, op } => {
-                    if left == right
+                Item::Bin {
+                    left: l2,
+                    right: r2,
+                    op,
+                } => {
+                    if l2 == r2
                         && semantics
                             .flags
                             .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
@@ -363,8 +369,8 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             _ => {}
                         }
                     }
-                    let left = k.val(*left)?;
-                    let right = k.val(*right)?;
+                    let left = k.val(*l2)?;
+                    let right = k.val(*r2)?;
                     let (left, right) = match (left, right) {
                         (
                             SValue::Item {
@@ -395,15 +401,15 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 }));
                             }
                             _ => {
-                                let left = left.const_in(semantics, k)?;
-                                let right = right.const_in(semantics, k)?;
+                                let left = left.const_in(semantics, k, pierce)?;
+                                let right = right.const_in(semantics, k, pierce)?;
                                 (left, right)
                             }
                         },
 
                         (left_val, right_val) => {
-                            let left = left_val.const_in(semantics, k);
-                            let right = right_val.const_in(semantics, k);
+                            let left = left_val.const_in(semantics, k, pierce);
+                            let right = right_val.const_in(semantics, k, pierce);
                             match (left_val, right_val, &left, &right) {
                                 (
                                     SValue::Item {
@@ -447,6 +453,62 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                         (left?, right?)
                                     }
                                 },
+                                (_, r, Some(l), _)
+                                    if *op == op!("in")
+                                        && pierce
+                                        && (!k.taints_object(*r2)
+                                            || semantics
+                                                .flags
+                                                .contains(SemanticFlags::ALL_OBJECTS_FROZEN)) =>
+                                {
+                                    match r {
+                                        SValue::Item {
+                                            item: Item::Obj { members },
+                                            span,
+                                        } => match {
+                                            // let l = k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce))?;
+                                            let mut i = members.iter();
+                                            loop {
+                                                let Some(i) = i.next() else {
+                                                    break Some(false);
+                                                };
+                                                let l2 = match &i.0 {
+                                                    PropKey::Lit(l) => Lit::Str(Str {
+                                                        span: span
+                                                            .clone()
+                                                            .unwrap_or(Span::dummy_with_cmt()),
+                                                        value: l.0.clone(),
+                                                        raw: None,
+                                                    }),
+                                                    PropKey::Computed(c) => {
+                                                        match k.val(*c).and_then(|w| {
+                                                            w.const_in(semantics, k, pierce)
+                                                        }) {
+                                                            None => return None,
+                                                            Some(l) => l,
+                                                        }
+                                                    }
+                                                    _ => break None,
+                                                };
+                                                if l2 != *l {
+                                                    continue;
+                                                };
+                                                break Some(true);
+                                            }
+                                        } {
+                                            Some(v) => {
+                                                return Some(Lit::Bool(Bool {
+                                                    span: span
+                                                        .clone()
+                                                        .unwrap_or(Span::dummy_with_cmt()),
+                                                    value: v,
+                                                }));
+                                            }
+                                            None => (left?, right?),
+                                        },
+                                        _ => (left?, right?),
+                                    }
+                                }
                                 (_, _, Some(v), Some(v2)) => (left?, right?),
                                 _ => return None,
                             }
@@ -618,7 +680,6 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             span: left.span(),
                             value: !left.eq_ignore_span(&right),
                         })),
-
                         _ => None,
                     }
                 }
@@ -630,7 +691,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             raw: None,
                         }));
                     }
-                    let l = k.val(*arg)?.const_in(semantics, k)?;
+                    let l = k.val(*arg)?.const_in(semantics, k, pierce)?;
                     match op {
                         swc_ecma_ast::UnaryOp::Minus => match l {
                             Lit::Num(n) => Some(Lit::Num(Number {
@@ -687,7 +748,51 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                     }
                 }
                 Item::Mem { obj, mem } => {
-                    match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
+                    match k.val(*obj) {
+                        Some(SValue::Item {
+                            item: Item::Obj { members },
+                            span,
+                        }) => match {
+                            let l = k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce))?;
+                            let mut i = members.iter();
+                            loop {
+                                let Some(i) = i.next() else {
+                                    break None;
+                                };
+                                let l2 = match &i.0 {
+                                    PropKey::Lit(l) => Lit::Str(Str {
+                                        span: span.clone().unwrap_or(Span::dummy_with_cmt()),
+                                        value: l.0.clone(),
+                                        raw: None,
+                                    }),
+                                    PropKey::Computed(c) => {
+                                        match k
+                                            .val(*c)
+                                            .and_then(|w| w.const_in(semantics, k, pierce))
+                                        {
+                                            None => return None,
+                                            Some(l) => l,
+                                        }
+                                    }
+                                    _ => break None,
+                                };
+                                if l2 != l {
+                                    continue;
+                                };
+                                let PropVal::Item(i) = &i.1 else {
+                                    break None;
+                                };
+                                break Some(*i);
+                            }
+                        } {
+                            Some(v) => {
+                                return k.val(v).and_then(|w| w.const_in(semantics, k, pierce));
+                            }
+                            None => {}
+                        },
+                        _ => {}
+                    }
+                    match k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce)) {
                         Some(Lit::Str(s)) => match &*s.value {
                             "length" => match k.val(*obj) {
                                 Some(i)
@@ -695,9 +800,9 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                         .flags
                                         .contains(SemanticFlags::NO_MONKEYPATCHING) =>
                                 {
-                                    match i.array_in(semantics, k) {
+                                    match i.array_in(semantics, k, pierce) {
                                         None => {
-                                            let l = i.const_in(semantics, k)?;
+                                            let l = i.const_in(semantics, k, pierce)?;
                                             let Lit::Str(s) = l else {
                                                 return None;
                                             };
@@ -725,12 +830,12 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             Some(i)
                                 if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
                             {
-                                match i.array_in(semantics, k) {
+                                match i.array_in(semantics, k, pierce) {
                                     None => None,
                                     Some(a) => a
                                         .get((n.value.round() as usize))
                                         .and_then(|a| k.val(*a))
-                                        .and_then(|a| a.const_in(semantics, k)),
+                                        .and_then(|a| a.const_in(semantics, k, pierce)),
                                 }
                             }
                             _ => None,
@@ -743,14 +848,14 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                 {
                     match callee {
                         TCallee::Member { func, member } => {
-                            let member = k.val(*member)?.const_in(semantics, k)?;
+                            let member = k.val(*member)?.const_in(semantics, k, pierce)?;
                             let Lit::Str(s) = member else {
                                 return None;
                             };
                             let func = k.val(*func)?;
                             match func {
                                 _ => {
-                                    let func = func.const_in(semantics, k)?;
+                                    let func = func.const_in(semantics, k, pierce)?;
                                     let mut i;
                                     let ses = ses_method(
                                         &func,
@@ -760,7 +865,9 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                                 i = i2;
                                                 std::iter::from_fn(|| {
                                                     let n = i.next()?;
-                                                    let i = k.val(*n)?.const_in(semantics, k)?;
+                                                    let i = k
+                                                        .val(*n)?
+                                                        .const_in(semantics, k, pierce)?;
                                                     Some(i)
                                                 })
                                                 .fuse()
