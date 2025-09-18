@@ -47,131 +47,122 @@ impl ToTACConverter<'_> {
             for s in i.blocks[b].stmts.iter() {
                 t = self.stmt(i, o, b, t, s)?;
             }
-            let term = match &i.blocks[b].end.term {
-                swc_cfg::Term::Return(expr) => match self.ret_to.clone() {
-                    None => match expr {
-                        None => TTerm::Return(None),
-                        Some(a) => match a {
-                            Expr::Call(call) => {
-                                let callee = match &call.callee {
-                                    Callee::Import(i) => TCallee::Import,
-                                    Callee::Super(s) => TCallee::Super,
-                                    Callee::Expr(e) => match e.as_ref() {
-                                        Expr::Ident(i) if i.sym == "eval" && !i.optional => {
-                                            TCallee::Eval
-                                        }
-                                        Expr::Member(m) => {
-                                            let r#fn;
-                                            (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
-                                            match &m.prop {
-                                                MemberProp::PrivateName(p) => {
-                                                    TCallee::PrivateMember {
-                                                        func: r#fn,
-                                                        member: Private {
-                                                            sym: p.name.clone(),
-                                                            ctxt: Default::default(),
-                                                            span: p.span,
-                                                        },
-                                                    }
-                                                }
-                                                _ => {
-                                                    let member;
-                                                    (member, t) = self.expr(
-                                                        i,
-                                                        o,
-                                                        b,
-                                                        t,
-                                                        &imp(m.prop.clone()),
-                                                    )?;
-                                                    TCallee::Member { func: r#fn, member }
-                                                }
+            let term = self.convert_terminator(i, o, b, t)?;
+            o.blocks[t].post.term = term;}
+    }
+
+    // Private helper for terminator conversion
+    fn convert_terminator(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>, mut t: Id<TBlock>) -> anyhow::Result<TTerm> {
+        match &i.blocks[b].end.term {
+            swc_cfg::Term::Return(expr) => match self.ret_to.clone() {
+                None => match expr {
+                    None => Ok(TTerm::Return(None)),
+                    Some(a) => match a {
+                        Expr::Call(call) => {
+                            let callee = match &call.callee {
+                                Callee::Import(_) => TCallee::Import,
+                                Callee::Super(_) => TCallee::Super,
+                                Callee::Expr(e) => match e.as_ref() {
+                                    Expr::Ident(i) if i.sym == "eval" && !i.optional => TCallee::Eval,
+                                    Expr::Member(m) => {
+                                        let r#fn;
+                                        (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
+                                        match &m.prop {
+                                            MemberProp::PrivateName(p) => TCallee::PrivateMember {
+                                                func: r#fn,
+                                                member: Private {
+                                                    sym: p.name.clone(),
+                                                    ctxt: Default::default(),
+                                                    span: p.span,
+                                                },
+                                            },
+                                            _ => {
+                                                let member;
+                                                (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
+                                                TCallee::Member { func: r#fn, member }
                                             }
                                         }
-                                        _ => {
-                                            let r#fn;
-                                            (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
-
-                                            TCallee::Val(r#fn)
-                                        }
-                                    },
-                                    _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                                };
-                                let args: Vec<(Atom, SyntaxContext)> = call
-                                    .args
-                                    .iter()
-                                    .map(|a| {
-                                        let arg;
-                                        (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                                        anyhow::Ok(arg)
-                                    })
-                                    .collect::<anyhow::Result<_>>()?;
-                                TTerm::Tail { callee, args }
-                            }
-                            a => {
-                                let c;
-                                (c, t) = self.expr(i, o, b, t, a)?;
-                                TTerm::Return(Some(c))
-                            }
-                        },
-                    },
-                    Some((i2, b2)) => {
-                        if let Some(a) = expr {
+                                    }
+                                    _ => {
+                                        let r#fn;
+                                        (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
+                                        TCallee::Val(r#fn)
+                                    }
+                                },
+                                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                            };
+                            let args: Vec<(Atom, SyntaxContext)> = call
+                                .args
+                                .iter()
+                                .map(|a| {
+                                    let arg;
+                                    (arg, t) = self.expr(i, o, b, t, &a.expr)?;
+                                    anyhow::Ok(arg)
+                                })
+                                .collect::<anyhow::Result<_>>()?;
+                            Ok(TTerm::Tail { callee, args })
+                        }
+                        a => {
                             let c;
                             (c, t) = self.expr(i, o, b, t, a)?;
-                            o.blocks[t].stmts.push(TStmt {
-                                left: LId::Id { id: i2.clone() },
-                                flags: Default::default(),
-                                right: Item::Just { id: c },
-                                span: i.blocks[b]
-                                    .end
-                                    .orig_span
-                                    .clone()
-                                    .unwrap_or_else(|| Span::dummy_with_cmt()),
-                            });
+                            Ok(TTerm::Return(Some(c)))
                         }
-                        TTerm::Jmp(b2)
-                    }
+                    },
                 },
-                swc_cfg::Term::Throw(expr) => {
-                    let c;
-                    (c, t) = self.expr(i, o, b, t, expr)?;
-                    TTerm::Throw(c)
-                }
-                swc_cfg::Term::Jmp(id) => TTerm::Jmp(self.trans(i, o, *id)?),
-                swc_cfg::Term::CondJmp {
-                    cond,
-                    if_true,
-                    if_false,
-                } => {
-                    let c;
-                    (c, t) = self.expr(i, o, b, t, cond)?;
-                    TTerm::CondJmp {
-                        cond: c,
-                        if_true: self.trans(i, o, *if_true)?,
-                        if_false: self.trans(i, o, *if_false)?,
-                    }
-                }
-                swc_cfg::Term::Switch { x, blocks, default } => {
-                    let y;
-                    (y, t) = self.expr(i, o, b, t, x)?;
-                    let mut m2 = HashMap::new();
-                    for (a, b2) in blocks.iter() {
-                        let b2 = self.trans(i, o, *b2)?;
+                Some((i2, b2)) => {
+                    if let Some(a) = expr {
                         let c;
                         (c, t) = self.expr(i, o, b, t, a)?;
-                        m2.insert(c, b2);
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: i2.clone() },
+                            flags: Default::default(),
+                            right: Item::Just { id: c },
+                            span: i.blocks[b]
+                                .end
+                                .orig_span
+                                .clone()
+                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                        });
                     }
-                    TTerm::Switch {
-                        x: y,
-                        blocks: m2.into_iter().collect(),
-                        default: self.trans(i, o, *default)?,
-                    }
+                    Ok(TTerm::Jmp(b2))
                 }
-                swc_cfg::Term::Default => TTerm::Default,
-            };
-            o.blocks[t].post.term = term;
-        }
+            },
+            swc_cfg::Term::Throw(expr) => {
+                let c;
+                (c, t) = self.expr(i, o, b, t, expr)?;
+                Ok(TTerm::Throw(c))
+            }
+            swc_cfg::Term::Jmp(id) => Ok(TTerm::Jmp(self.trans(i, o, *id)?)),
+            swc_cfg::Term::CondJmp { cond, if_true, if_false } => {
+                let c;
+                (c, t) = self.expr(i, o, b, t, cond)?;
+                Ok(TTerm::CondJmp {
+                    cond: c,
+                    if_true: self.trans(i, o, *if_true)?,
+                    if_false: self.trans(i, o, *if_false)?,
+                })
+            }
+            swc_cfg::Term::Switch { x, blocks, default } => {
+                let y;
+                (y, t) = self.expr(i, o, b, t, x)?;
+                let mut m2 = HashMap::new();
+                for (a, b2) in blocks.iter() {
+                    let b2 = self.trans(i, o, *b2)?;
+                    let c;
+                    (c, t) = self.expr(i, o, b, t, a)?;
+                    m2.insert(c, b2);
+                }
+                Ok(TTerm::Switch {
+                    x: y,
+                    blocks: m2.into_iter().collect(),
+                    default: self.trans(i, o, *default)?,
+                })
+            }
+            swc_cfg::Term::Default => Ok(TTerm::Default),
     }
+        
+    }
+
     pub fn stmt(
         &mut self,
         i: &Cfg,
