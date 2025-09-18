@@ -1,4 +1,3 @@
-
 use std::{cell::OnceCell, mem::replace};
 
 use swc_ecma_ast::{AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp};
@@ -16,10 +15,51 @@ impl ToTACConverter<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
         self.convert_block(i, o, b)
     }
+    // Converts a MemberProp to an Expr or literal, as needed
+    fn member_prop_expr(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        t: Id<TBlock>,
+        prop: &MemberProp,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match prop {
+            MemberProp::Ident(ident_name) => {
+                let lit = Lit::Str(Str {
+                    span: ident_name.span,
+                    value: ident_name.sym.clone(),
+                    raw: None,
+                });
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Lit { lit },
+                    span: ident_name.span,
+                });
+                o.decls.insert(tmp.clone());
+                Ok((tmp, t))
+            }
+            MemberProp::PrivateName(private_name) => {
+                // TODO: handle private names if needed
+                anyhow::bail!("PrivateName not supported in member_prop_expr")
+            }
+            MemberProp::Computed(computed_prop_name) => {
+                self.expr(i, o, b, t, &*computed_prop_name.expr)
+            }
+        }
+    }
 
-
-        // Private helper for tail call conversion
-    fn convert_call_expr(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>, mut t: Id<TBlock>, call: &CallExpr) -> anyhow::Result<(TCallee, Vec<(Atom, SyntaxContext)>, Id<TBlock>)> {
+    // Private helper for tail call conversion
+    fn convert_call_expr(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        call: &CallExpr,
+    ) -> anyhow::Result<(TCallee, Vec<(Atom, SyntaxContext)>, Id<TBlock>)> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -95,11 +135,18 @@ impl ToTACConverter<'_> {
                 t = self.stmt(i, o, b, t, s)?;
             }
             let term = self.convert_terminator(i, o, b, t)?;
-            o.blocks[t].post.term = term;}
+            o.blocks[t].post.term = term;
+        }
     }
 
     // Private helper for terminator conversion
-    fn convert_terminator(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>, mut t: Id<TBlock>) -> anyhow::Result<TTerm> {
+    fn convert_terminator(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+    ) -> anyhow::Result<TTerm> {
         match &i.blocks[b].end.term {
             swc_cfg::Term::Return(expr) => match self.ret_to.clone() {
                 None => match expr {
@@ -141,7 +188,11 @@ impl ToTACConverter<'_> {
                 Ok(TTerm::Throw(c))
             }
             swc_cfg::Term::Jmp(id) => Ok(TTerm::Jmp(self.trans(i, o, *id)?)),
-            swc_cfg::Term::CondJmp { cond, if_true, if_false } => {
+            swc_cfg::Term::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            } => {
                 let c;
                 (c, t) = self.expr(i, o, b, t, cond)?;
                 Ok(TTerm::CondJmp {
@@ -167,8 +218,7 @@ impl ToTACConverter<'_> {
                 })
             }
             swc_cfg::Term::Default => Ok(TTerm::Default),
-    }
-        
+        }
     }
 
     pub fn stmt(
@@ -335,7 +385,8 @@ impl ToTACConverter<'_> {
                 swc_ecma_ast::ObjectPatProp::KeyValue(key_value_pat_prop) => {
                     let g;
                     let h;
-                    (h, t) = self.expr(i, o, b, t, &imp(key_value_pat_prop.key.clone().into()))?;
+                    (h, t) =
+                        self.member_prop_expr(i, o, b, t, &key_value_pat_prop.key.clone().into())?;
                     a.insert(h.clone());
                     g = o.regs.alloc(());
                     o.decls.insert(g.clone());
@@ -519,7 +570,7 @@ impl ToTACConverter<'_> {
             _ => {
                 let mem;
                 // let e;
-                (mem, t) = self.expr(i, o, b, t, &imp(s.clone()))?;
+                (mem, t) = self.member_prop_expr(i, o, b, t, s)?;
                 Item::Mem { obj, mem }
             }
         };
