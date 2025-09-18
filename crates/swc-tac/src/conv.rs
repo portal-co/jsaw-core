@@ -37,6 +37,64 @@ impl ToTACConverter<'_> {
             }
             _ => {}
         }
+        fn px<'a, 'b: 'a>(
+            a: &'a Expr,
+            b: &'b Expr,
+        ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
+            if a.is_pure() && b.is_pure() {
+                Some((vec![], a, b))
+            } else {
+                match (a, b) {
+                    (Expr::Assign(a), Expr::Assign(b))
+                        if a.left.eq_ignore_span(&b.left)
+                            && a.left.as_simple().is_some_and(|s| s.is_ident())
+                            && a.op == b.op =>
+                    {
+                        let (mut e, a2, b) = px(&a.right, &b.right)?;
+                        e.push(Frame::Assign(&a.left, a.op));
+                        Some((e, a2, b))
+                    }
+                    (Expr::Member(a), Expr::Member(b)) if a.prop.eq_ignore_span(&b.prop) => {
+                        let (mut e, a2, b) = px(&a.obj, &b.obj)?;
+                        e.push(Frame::Member(&a.prop));
+                        Some((e, a2, b))
+                    }
+                    (Expr::Member(a), Expr::Member(b))
+                        if a.prop.is_computed() && b.prop.is_computed() =>
+                    {
+                        let (mut e, a2, b2) = px(&a.obj, &b.obj)?;
+                        e.push(Frame::Member2(
+                            &a.prop.as_computed().unwrap().expr,
+                            &b.prop.as_computed().unwrap().expr,
+                        ));
+                        Some((e, a2, b2))
+                    }
+                    _ => None,
+                }
+            }
+        }
+        if let Some((frames, c2, a2)) = px(&cons, &alt) {
+            let cons;
+            let alt;
+            (cons, t) = self.expr(i, o, b, t, &c2)?;
+            (alt, t) = self.expr(i, o, b, t, &a2)?;
+            let mut tmp = o.regs.alloc(());
+            o.blocks[t].stmts.push(TStmt {
+                left: LId::Id { id: tmp.clone() },
+                flags: ValFlags::SSA_LIKE,
+                right: Item::Select {
+                    cond: v.clone(),
+                    then: cons,
+                    otherwise: alt,
+                },
+                span,
+            });
+            o.decls.insert(tmp.clone());
+            for f in frames.into_iter() {
+                (tmp, t) = self.frame(i, o, b, t, f, tmp, v.clone())?;
+            }
+            return Ok((tmp, t));
+        };
         let then = o.blocks.alloc(TBlock {
             stmts: vec![],
             post: TPostecedent {
