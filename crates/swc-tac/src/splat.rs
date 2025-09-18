@@ -325,6 +325,21 @@ impl Splatting {
                         TTerm::Jmp(*b2)
                     }
                 },
+                TTerm::Tail { callee, args } => match self.ret.as_ref(){
+                    None => TTerm::Tail { callee: callee.clone(), args: args.clone() },
+                    Some((id,b2)) => {
+                          output.blocks[out_block].stmts.push(TStmt {
+                            left: id.clone(),
+                            flags: Default::default(),
+                            right: Item::Call { callee: callee.clone(), args: args.clone() },
+                            span: input.blocks[in_block]
+                                .post
+                                .orig_span
+                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                        });
+                        TTerm::Jmp(*b2)
+                    }
+                }
                 TTerm::Throw(t) => match output.blocks[out_block].post.catch.clone() {
                     TCatch::Throw => TTerm::Throw(t.clone()),
                     TCatch::Jump { pat, k: k2 } => {

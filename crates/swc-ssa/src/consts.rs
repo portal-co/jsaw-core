@@ -223,6 +223,15 @@ impl ConstantInstantiator {
                 STerm::Throw(id) => {
                     STerm::Throw(params.get(id).cloned().context("in getting a variable")?)
                 }
+                TTerm::Tail { callee, args } => TTerm::Tail {
+                    callee: callee
+                        .as_ref()
+                        .map(&mut |id| params.get(id).cloned().context("in getting a variable"))?,
+                    args: args
+                        .iter()
+                        .map(|id| params.get(id).cloned().context("in getting a variable"))
+                        .collect::<Result<_, _>>()?,
+                },
                 STerm::Return(id) => STerm::Return(match id.as_ref() {
                     None => Some({
                         let val = SValue::Item {

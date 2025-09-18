@@ -322,6 +322,7 @@ impl ToSSAConverter {
             };
             // let mut dtc = dtc.iter().map(|(a, b)| (a.clone(), b.clone()));
             let term = match &i.blocks[k].post.term {
+                TTerm::Tail { callee, args } => TTerm::Tail { callee: callee.as_ref().map(&mut |a|self.load(&state, i, o, t, a.clone(), &cache))?, args: args.iter().map(|a|self.load(&state, i, o, t, a.clone(), &cache)).collect::<Result<_,_>>()? },
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {
                     None => STerm::Return(None),
                     Some(a) => {

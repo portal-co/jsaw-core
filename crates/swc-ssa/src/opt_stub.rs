@@ -82,6 +82,7 @@ impl OptStub {
                         None => None,
                         Some(a) => Some(baseline.get(a).cloned().context("in getting the value")?),
                     }),
+                    STerm::Tail { callee, args } => STerm::Tail { callee: callee.as_ref().map(&mut |a|baseline.get(a).cloned().context("in getting the value"))?, args: args.iter().map(|a|baseline.get(a).cloned().context("in getting the value")).collect::<Result<_,anyhow::Error>>()? },
                     STerm::Jmp(starget) => STerm::Jmp(tgt!(starget)),
                     STerm::CondJmp {
                         cond,

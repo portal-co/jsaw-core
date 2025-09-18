@@ -383,6 +383,18 @@ impl TCfg {
                     Box::new(once(x.clone()).chain(blocks.iter().map(|a| a.0.clone())))
                 }
                 TTerm::Default => Box::new(std::iter::empty()),
+                TTerm::Tail { callee, args } => Box::new(
+                    match callee {
+                        TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
+                            vec![a]
+                        }
+                        TCallee::Member { func: r#fn, member } => vec![r#fn, member],
+                        TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    }
+                    .into_iter()
+                    .cloned()
+                    .chain(args.iter().cloned()),
+                ),
             };
             i.chain(k.1.stmts.iter().flat_map(
                 |TStmt {
@@ -513,6 +525,10 @@ impl<B, I> TCatch<B, I> {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
+    Tail {
+        callee: TCallee<I>,
+        args: Vec<I>,
+    },
     Throw(I),
     Jmp(B),
     CondJmp {
@@ -552,6 +568,10 @@ where
                 default,
             },
             TTerm::Default => TTerm::Default,
+            TTerm::Tail { callee, args } => TTerm::Tail {
+                callee: callee.as_ref(),
+                args: args.iter().collect(),
+            },
         }
     }
     pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B, &'a mut I>
@@ -577,13 +597,17 @@ where
                 default,
             },
             TTerm::Default => TTerm::Default,
+            TTerm::Tail { callee, args } => TTerm::Tail {
+                callee: callee.as_mut(),
+                args: args.iter_mut().collect(),
+            },
         }
     }
-    pub fn map<Cx, E, B2, I2>(
+    pub fn map<Cx, E, B2, I2: Ord>(
         self,
         cx: &mut Cx,
-        b: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
-        i: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
+        block: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
+        ident: &mut (dyn FnMut(&mut Cx, I) -> Result<I2, E> + '_),
     ) -> Result<TTerm<B2, I2>, E>
 where
         // I2: Eq + std::hash::Hash,
@@ -591,28 +615,35 @@ where
         Ok(match self {
             TTerm::Return(a) => TTerm::Return(match a {
                 None => None,
-                Some(a) => Some(i(cx, a)?),
+                Some(a) => Some(ident(cx, a)?),
             }),
-            TTerm::Throw(v) => TTerm::Throw(i(cx, v)?),
-            TTerm::Jmp(v) => TTerm::Jmp(b(cx, v)?),
+            TTerm::Throw(v) => TTerm::Throw(ident(cx, v)?),
+            TTerm::Jmp(v) => TTerm::Jmp(block(cx, v)?),
             TTerm::CondJmp {
                 cond,
                 if_true,
                 if_false,
             } => TTerm::CondJmp {
-                cond: i(cx, cond)?,
-                if_true: b(cx, if_true)?,
-                if_false: b(cx, if_false)?,
+                cond: ident(cx, cond)?,
+                if_true: block(cx, if_true)?,
+                if_false: block(cx, if_false)?,
             },
             TTerm::Switch { x, blocks, default } => TTerm::Switch {
-                x: i(cx, x)?,
+                x: ident(cx, x)?,
                 blocks: blocks
                     .into_iter()
-                    .map(|(a, c)| Ok::<_, E>((i(cx, a)?, b(cx, c)?)))
+                    .map(|(a, c)| Ok::<_, E>((ident(cx, a)?, block(cx, c)?)))
                     .collect::<Result<_, E>>()?,
-                default: b(cx, default)?,
+                default: block(cx, default)?,
             },
             TTerm::Default => TTerm::Default,
+            TTerm::Tail { callee, args } => TTerm::Tail {
+                callee: callee.map(&mut |a| ident(cx, a))?,
+                args: args
+                    .into_iter()
+                    .map(|a| ident(cx, a))
+                    .collect::<Result<_, E>>()?,
+            },
         })
     }
     //    pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B,&'a mut I> where I: Eq + std::hash::Hash{
@@ -700,13 +731,14 @@ impl<I, F> PropVal<I, F> {
         })
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TCallee<I = Ident> {
     Val(I),
     Member { func: I, member: I },
     PrivateMember { func: I, member: Private },
     Import,
     Super,
+    Eval,
     // Static(Ident),
 }
 impl<I> TCallee<I> {
@@ -720,6 +752,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -733,6 +766,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
@@ -749,6 +783,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a),
         })
     }
@@ -1220,7 +1255,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import | TCallee::Super => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter()),
@@ -1307,7 +1342,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import | TCallee::Super => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut()),

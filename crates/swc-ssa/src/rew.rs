@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::OnceLock};
+use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
 
 use id_arena::Id;
 use swc_atoms::Atom;
@@ -6,7 +6,7 @@ use swc_common::{Mark, Span, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
 use swc_tac::{Item, LId, TBlock, TCatch, TCfg, TFunc, TStmt, TTerm, ValFlags};
 
-use crate::{SBlock, SFunc, STarget, SValue, SValueW};
+use crate::{SBlock, SFunc, STarget, STerm, SValue, SValueW};
 impl SFunc {
     pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
         let value = self;
@@ -228,6 +228,7 @@ impl Rew {
                             id.clone()
                                 .map(|value| mangle_value(self.prefix.clone(), ctxt, func, value)),
                         ),
+                        STerm::Tail { callee, args } => TTerm::Tail { callee: callee.as_ref().map(&mut |a|Ok::<_,Infallible>(mangle_value(self.prefix.clone(), ctxt, func, *a))).unwrap(), args: args.iter().map(|a|mangle_value(self.prefix.clone(), ctxt, func, *a)).collect() },
                         crate::STerm::Jmp(starget) => TTerm::Jmp(self.trans(
                             func,
                             cfg,

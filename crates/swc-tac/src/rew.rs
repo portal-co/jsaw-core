@@ -347,6 +347,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                     // phase: Default::default(),
                                 });
                             }
+                            TCallee::Eval => Box::new(Expr::Ident(swc_ecma_ast::Ident::new(
+                                Atom::new("eval"),
+                                span,
+                                Default::default(),
+                            ))),
                         })
                     },
                     args: args
@@ -1130,6 +1135,29 @@ impl Rew<'_> {
                     default: self.trans(cfg, tcfg, *default)?,
                 },
                 crate::TTerm::Default => Term::Default,
+                crate::TTerm::Tail { callee, args } => Term::Return(Some({
+                    let i = Item::Call {
+                        callee: callee.clone(),
+                        args: args.clone(),
+                    };
+                    let span = tcfg.blocks[block_id]
+                        .post
+                        .orig_span
+                        .clone()
+                        .unwrap_or(Span::dummy_with_cmt());
+                    let mut mark = false;
+                    *i.render(
+                        &mut mark,
+                        span,
+                        &mut (),
+                        &mut |_, a| Ok(ident(a,span).into()),
+                        &mut |_, a| Ok(ident(a, span)),
+                        &mut |_, f: &TFunc| {
+                            f.to_func_with_options(self.options)
+                                .and_then(|a| (self.options.conf)(a))
+                        },
+                    )?
+                })),
             };
             cfg.blocks[new_block_id].end.term = term;
         }
