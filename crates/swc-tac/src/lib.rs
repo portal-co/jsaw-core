@@ -1443,9 +1443,9 @@ impl<I, F> Item<I, F> {
         }
     }
 }
-enum Frame {
-    Assign(AssignTarget, AssignOp),
-    Member(MemberProp),
-    Member2(Expr, Expr),
+enum Frame<'a> {
+    Assign(&'a AssignTarget, AssignOp),
+    Member(&'a MemberProp),
+    Member2(&'a Expr, &'a Expr),
 }
 // #[derive(Default)]

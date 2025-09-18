@@ -902,7 +902,7 @@ impl ToTACConverter<'_> {
         o: &mut TCfg,
         b: Id<Block>,
         mut t: Id<TBlock>,
-        f: Frame,
+        f: Frame<'_>,
         s: Ident,
         r: Ident,
     ) -> anyhow::Result<(Ident, Id<TBlock>)> {
@@ -921,8 +921,8 @@ impl ToTACConverter<'_> {
                     expr: Box::new(Expr::Cond(CondExpr {
                         span: Span::dummy_with_cmt(),
                         test: r.into(),
-                        cons: Box::new(a),
-                        alt: Box::new(b2),
+                        cons: Box::new(a.clone()),
+                        alt: Box::new(b2.clone()),
                     })),
                 }),
                 s,
@@ -995,10 +995,10 @@ impl ToTACConverter<'_> {
                     }
                     _ => {}
                 }
-                fn px<'a, 'b>(
+                fn px<'a, 'b: 'a>(
                     a: &'a Expr,
                     b: &'b Expr,
-                ) -> Option<(Vec<Frame>, &'a Expr, &'b Expr)> {
+                ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
                     if a.is_pure() && b.is_pure() {
                         Some((vec![], a, b))
                     } else {
@@ -1009,14 +1009,14 @@ impl ToTACConverter<'_> {
                                     && a.op == b.op =>
                             {
                                 let (mut e, a2, b) = px(&a.right, &b.right)?;
-                                e.push(Frame::Assign(a.left.clone(), a.op));
+                                e.push(Frame::Assign(&a.left, a.op));
                                 Some((e, a2, b))
                             }
                             (Expr::Member(a), Expr::Member(b))
                                 if a.prop.eq_ignore_span(&b.prop) =>
                             {
                                 let (mut e, a2, b) = px(&a.obj, &b.obj)?;
-                                e.push(Frame::Member(a.prop.clone()));
+                                e.push(Frame::Member(&a.prop));
                                 Some((e, a2, b))
                             }
                             (Expr::Member(a), Expr::Member(b))
@@ -1024,8 +1024,8 @@ impl ToTACConverter<'_> {
                             {
                                 let (mut e, a2, b2) = px(&a.obj, &b.obj)?;
                                 e.push(Frame::Member2(
-                                    *a.prop.as_computed().unwrap().expr.clone(),
-                                    *b.prop.as_computed().unwrap().expr.clone(),
+                                    &a.prop.as_computed().unwrap().expr,
+                                    &b.prop.as_computed().unwrap().expr,
                                 ));
                                 Some((e, a2, b2))
                             }
