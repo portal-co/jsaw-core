@@ -94,6 +94,17 @@ impl ToSSAConverter {
         k: Id<TBlock>,
         app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
     ) -> anyhow::Result<Id<SBlock>> {
+        self.convert_block(i, o, k, app)
+    }
+
+    // Private helper for block/term conversion
+    fn convert_block(
+        &mut self,
+        i: &TCfg,
+        o: &mut SCfg,
+        k: Id<TBlock>,
+        app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
+    ) -> anyhow::Result<Id<SBlock>> {
         loop {
             if let Some(a) = self.map.get(&k) {
                 return Ok(*a);
@@ -145,8 +156,6 @@ impl ToSSAConverter {
                         .filter_map(|x| v.get(x))
                         .cloned()
                         .collect::<Vec<_>>();
-                    // let mut x;
-                    // let mut y;
                     let t = STerm::Jmp(STarget {
                         block: self.trans(
                             i,
@@ -164,17 +173,6 @@ impl ToSSAConverter {
                 .all
                 .iter()
                 .filter(|a| !app.contains_key(&**a))
-                // .filter(|a| {
-                //     i.blocks.iter().all(|k| {
-                //         k.1.stmts.iter().all(|i| {
-                //             i.left
-                //                 != LId::Id {
-                //                     id: a.clone().clone(),
-                //                 }
-                //                 || !i.flags.contains(ValFlags::SSA_LIKE)
-                //         })
-                //     })
-                // })
                 .map(|a| (a.clone(), (o.add_blockparam(t), ValFlags::all())))
                 .chain(
                     app.iter()
@@ -191,20 +189,7 @@ impl ToSSAConverter {
                 span: s,
             } in i.blocks[k].stmts.iter()
             {
-                let mut b = b.as_ref();
-                // if let Item::Call { callee, args } = &mut b {
-                //     if let TCallee::Val(v) = callee {
-                //         if !i.blocks.iter().any(|k| {
-                //             k.1.stmts.iter().any(|a| match &a.left {
-                //                 LId::Id { id } => id == v,
-                //                 _ => false,
-                //             })
-                //         }) {
-                //             *callee = TCallee::Static(v.clone());
-                //         }
-                //     }
-                // }
-
+                let b = b.as_ref();
                 let b = 'a: {
                     let b = match b {
                         Item::Undef => break 'a self.undef,
@@ -223,7 +208,7 @@ impl ToSSAConverter {
                     )
                 };
                 o.blocks[t].stmts.push(b);
-                let flags = match a.clone() {
+                match a.clone() {
                     LId::Id { id } => match state.get_mut(&id) {
                         Some((a, f)) => {
                             *f &= *flags;
@@ -242,12 +227,10 @@ impl ToSSAConverter {
                                 });
                                 t = u;
                             }
-                            Some(f)
                         }
                         None => {
                             if flags.contains(ValFlags::SSA_LIKE) {
                                 state.insert(id.clone(), (b, *flags));
-                                Some(*flags)
                             } else {
                                 cache.insert(id.clone(), b);
                                 let c = o.values.alloc(
@@ -258,21 +241,17 @@ impl ToSSAConverter {
                                     .into(),
                                 );
                                 o.blocks[t].stmts.push(c);
-                                None
                             }
                         }
                     },
                     a => {
-                        // let obj = self.load(&state, o, t, obj.clone());
-                        // let mem = self.load(&state, o, t, mem.clone());
                         let c = a.map::<_, anyhow::Error>(&mut |a| {
                             self.load(&state, i, o, t, a, &cache)
                         })?;
                         let c = o.values.alloc(SValue::Assign { target: c, val: b }.into());
                         o.blocks[t].stmts.push(c);
-                        None
                     }
-                };
+                }
             }
             let params = |this: &Self, k2: Id<TBlock>| {
                 let d = this.domtree.get(&Some(k2)).cloned() == Some(Some(k));
@@ -283,7 +262,7 @@ impl ToSSAConverter {
                             k.1.stmts.iter().all(|i| {
                                 i.left
                                     != LId::Id {
-                                        id: a.clone().clone(),
+                                        id: (**a).clone(),
                                     }
                                     || !i.flags.contains(ValFlags::SSA_LIKE)
                             })
@@ -294,7 +273,7 @@ impl ToSSAConverter {
                     .cloned()
                     .collect::<Vec<_>>()
             };
-            let mut dtc = |this: &Self, k2: Id<TBlock>| {
+            let dtc = |this: &Self, k2: Id<TBlock>| {
                 let d = this.domtree.get(&Some(k2)).cloned() == Some(Some(k));
                 if d {
                     app.clone()
@@ -307,7 +286,7 @@ impl ToSSAConverter {
                                         k.1.stmts.iter().all(|i| {
                                             i.left
                                                 != LId::Id {
-                                                    id: a.clone().clone(),
+                                                    id: (**a).clone(),
                                                 }
                                                 || !i.flags.contains(ValFlags::SSA_LIKE)
                                         })
@@ -320,7 +299,6 @@ impl ToSSAConverter {
                     app.clone()
                 }
             };
-            // let mut dtc = dtc.iter().map(|(a, b)| (a.clone(), b.clone()));
             let term = match &i.blocks[k].post.term {
                 TTerm::Tail { callee, args } => TTerm::Tail { callee: callee.as_ref().map(&mut |a|self.load(&state, i, o, t, a.clone(), &cache))?, args: args.iter().map(|a|self.load(&state, i, o, t, a.clone(), &cache)).collect::<Result<_,_>>()? },
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {

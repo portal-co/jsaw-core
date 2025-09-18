@@ -13,6 +13,11 @@ pub struct ToTACConverter<'a> {
 }
 impl ToTACConverter<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
+        self.convert_block(i, o, b)
+    }
+
+    // Private helper for block/term conversion
+    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
         loop {
             if let Some(a) = self.map.get(&b) {
                 return Ok(*a);
