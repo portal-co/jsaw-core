@@ -603,7 +603,7 @@ where
             },
         }
     }
-    pub fn map<Cx, E, B2, I2: Ord>(
+    pub fn map<Cx, E, B2, I2>(
         self,
         cx: &mut Cx,
         block: &mut (dyn FnMut(&mut Cx, B) -> Result<B2, E> + '_),
@@ -770,7 +770,7 @@ impl<I> TCallee<I> {
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
     }
-    pub fn map<J: Ord, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<TCallee<J>, E> {
+    pub fn map<J, E>(self, f: &mut impl FnMut(I) -> Result<J, E>) -> Result<TCallee<J>, E> {
         Ok(match self {
             TCallee::Val(a) => TCallee::Val(f(a)?),
             TCallee::Member { func: r#fn, member } => TCallee::Member {
