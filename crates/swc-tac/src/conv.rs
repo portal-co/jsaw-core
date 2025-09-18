@@ -1039,22 +1039,19 @@ impl ToTACConverter<'_> {
                 self.assign(i, o, b, t, &assign_target, &assign_op, s)
             }
             Frame::Member(m) => self.member_prop(i, o, b, t, &m, s),
-            Frame::Member2(a, b2) => self.member_prop(
-                i,
-                o,
-                b,
-                t,
-                &MemberProp::Computed(ComputedPropName {
+            Frame::Member2(a, b2) => {
+                let mem;
+                (mem, t) = self.convert_cond_expr(i, o, b, t, r, a, b2, Span::dummy_with_cmt())?;
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Mem { obj: s, mem },
                     span: Span::dummy_with_cmt(),
-                    expr: Box::new(Expr::Cond(CondExpr {
-                        span: Span::dummy_with_cmt(),
-                        test: r.into(),
-                        cons: Box::new(a.clone()),
-                        alt: Box::new(b2.clone()),
-                    })),
-                }),
-                s,
-            ),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
         }
     }
     fn inlinable(&self, x: &Expr) -> bool {
