@@ -1,6 +1,7 @@
+
 use std::{cell::OnceCell, mem::replace};
 
-use swc_ecma_ast::{AssignPat, AssignTargetPat, BindingIdent, ObjectPat, ObjectPatProp};
+use swc_ecma_ast::{AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp};
 
 use crate::*;
 #[non_exhaustive]
@@ -16,6 +17,52 @@ impl ToTACConverter<'_> {
         self.convert_block(i, o, b)
     }
 
+
+        // Private helper for tail call conversion
+    fn convert_call_expr(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>, mut t: Id<TBlock>, call: &CallExpr) -> anyhow::Result<(TCallee, Vec<(Atom, SyntaxContext)>, Id<TBlock>)> {
+        let callee = match &call.callee {
+            Callee::Import(_) => TCallee::Import,
+            Callee::Super(_) => TCallee::Super,
+            Callee::Expr(e) => match e.as_ref() {
+                Expr::Ident(i) if i.sym == "eval" && !i.optional => TCallee::Eval,
+                Expr::Member(m) => {
+                    let r#fn;
+                    (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
+                    match &m.prop {
+                        MemberProp::PrivateName(p) => TCallee::PrivateMember {
+                            func: r#fn,
+                            member: Private {
+                                sym: p.name.clone(),
+                                ctxt: Default::default(),
+                                span: p.span,
+                            },
+                        },
+                        _ => {
+                            let member;
+                            (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
+                            TCallee::Member { func: r#fn, member }
+                        }
+                    }
+                }
+                _ => {
+                    let r#fn;
+                    (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
+                    TCallee::Val(r#fn)
+                }
+            },
+            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+        };
+        let args: Vec<(Atom, SyntaxContext)> = call
+            .args
+            .iter()
+            .map(|a| {
+                let arg;
+                (arg, t) = self.expr(i, o, b, t, &a.expr)?;
+                anyhow::Ok(arg)
+            })
+            .collect::<anyhow::Result<_>>()?;
+        Ok((callee, args, t))
+    }
     // Private helper for block/term conversion
     fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
         loop {
@@ -59,47 +106,8 @@ impl ToTACConverter<'_> {
                     None => Ok(TTerm::Return(None)),
                     Some(a) => match a {
                         Expr::Call(call) => {
-                            let callee = match &call.callee {
-                                Callee::Import(_) => TCallee::Import,
-                                Callee::Super(_) => TCallee::Super,
-                                Callee::Expr(e) => match e.as_ref() {
-                                    Expr::Ident(i) if i.sym == "eval" && !i.optional => TCallee::Eval,
-                                    Expr::Member(m) => {
-                                        let r#fn;
-                                        (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
-                                        match &m.prop {
-                                            MemberProp::PrivateName(p) => TCallee::PrivateMember {
-                                                func: r#fn,
-                                                member: Private {
-                                                    sym: p.name.clone(),
-                                                    ctxt: Default::default(),
-                                                    span: p.span,
-                                                },
-                                            },
-                                            _ => {
-                                                let member;
-                                                (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
-                                                TCallee::Member { func: r#fn, member }
-                                            }
-                                        }
-                                    }
-                                    _ => {
-                                        let r#fn;
-                                        (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
-                                        TCallee::Val(r#fn)
-                                    }
-                                },
-                                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                            };
-                            let args: Vec<(Atom, SyntaxContext)> = call
-                                .args
-                                .iter()
-                                .map(|a| {
-                                    let arg;
-                                    (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                                    anyhow::Ok(arg)
-                                })
-                                .collect::<anyhow::Result<_>>()?;
+                            let (callee, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
+                            t = t2;
                             Ok(TTerm::Tail { callee, args })
                         }
                         a => {
@@ -1102,48 +1110,8 @@ impl ToTACConverter<'_> {
                 return Ok((tmp, t));
             }
             Expr::Call(call) => {
-                let c = match &call.callee {
-                    Callee::Import(i) => TCallee::Import,
-                    Callee::Super(s) => TCallee::Super,
-                    Callee::Expr(e) => match e.as_ref() {
-                        Expr::Ident(i) if i.sym == "eval" && !i.optional => TCallee::Eval,
-                        Expr::Member(m) => {
-                            let r#fn;
-                            (r#fn, t) = self.expr(i, o, b, t, &m.obj)?;
-                            match &m.prop {
-                                MemberProp::PrivateName(p) => TCallee::PrivateMember {
-                                    func: r#fn,
-                                    member: Private {
-                                        sym: p.name.clone(),
-                                        ctxt: Default::default(),
-                                        span: p.span,
-                                    },
-                                },
-                                _ => {
-                                    let member;
-                                    (member, t) = self.expr(i, o, b, t, &imp(m.prop.clone()))?;
-                                    TCallee::Member { func: r#fn, member }
-                                }
-                            }
-                        }
-                        _ => {
-                            let r#fn;
-                            (r#fn, t) = self.expr(i, o, b, t, e.as_ref())?;
-
-                            TCallee::Val(r#fn)
-                        }
-                    },
-                    _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                };
-                let args: Vec<(Atom, SyntaxContext)> = call
-                    .args
-                    .iter()
-                    .map(|a| {
-                        let arg;
-                        (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                        anyhow::Ok(arg)
-                    })
-                    .collect::<anyhow::Result<_>>()?;
+                let (c, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
+                t = t2;
                 match self
                     .mapper
                     .semantic
