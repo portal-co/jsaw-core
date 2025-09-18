@@ -22,13 +22,12 @@ impl ToTACConverter<'_> {
         o: &mut TCfg,
         b: Id<Block>,
         mut t: Id<TBlock>,
-        test: &Expr,
+        test: Ident,
         cons: &Expr,
         alt: &Expr,
         span: Span,
     ) -> anyhow::Result<(Ident, Id<TBlock>)> {
-        let v;
-        (v, t) = self.expr(i, o, b, t, test)?;
+        let v = test;
         match o.def(LId::Id { id: v.clone() }) {
             Some(Item::Lit { lit: Lit::Bool(b2) }) => {
                 let w;
@@ -1104,7 +1103,11 @@ impl ToTACConverter<'_> {
                 }
                 Ok((d, t))
             }
-            Expr::Cond(c) => self.convert_cond_expr(i, o, b, t, &c.test, &c.cons, &c.alt, c.span),
+            Expr::Cond(c) => {
+                let v;
+                (v, t) = self.expr(i, o, b, t, &c.test)?;
+                self.convert_cond_expr(i, o, b, t, v, &c.cons, &c.alt, c.span)
+            }
             Expr::This(this) => {
                 let id = match self.this.clone() {
                     Some(a) => a,
