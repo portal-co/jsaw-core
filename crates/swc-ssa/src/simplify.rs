@@ -92,6 +92,9 @@ pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
         }
         Some(n)
     }
+    fn taints_object(&self, id: I) -> bool {
+        return true;
+    }
 }
 #[doc(hidden)]
 pub fn _get_item<'a, I: Copy, B, F>(
@@ -202,6 +205,9 @@ impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
         Id<SBlock>: 'a,
     {
         Box::new(SCfg::inputs(self, block, param))
+    }
+    fn taints_object(&self, id: Id<SValueW>) -> bool {
+        SCfg::taints_object(self, &id)
     }
 }
 sval_item!(SCfg [block Id<SBlock>]);
@@ -317,12 +323,10 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
     ) -> Option<Lit> {
         match self {
             SValue::Param { block, idx, ty } => {
-                let mut i = k
-                    .inputs(block.clone(), *idx)
-                    .filter_map(|i| k.val(i))
-                    .filter_map(|t| t.const_in(semantics, k));
-                let mut n = i.next()?;
+                let mut i = k.inputs(block.clone(), *idx).filter_map(|i| k.val(i));
+                let mut n = i.next()?.const_in(semantics, k)?;
                 for j in i {
+                    let j = j.const_in(semantics, k)?;
                     if j != n {
                         return None;
                     }
