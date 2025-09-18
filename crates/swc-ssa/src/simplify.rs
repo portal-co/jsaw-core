@@ -71,6 +71,27 @@ impl SCfg {
 pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
     fn val(&self, id: I) -> Option<&SValue<I, B, F>>;
     fn val_mut(&mut self, id: I) -> Option<&mut SValue<I, B, F>>;
+    fn inputs<'a>(&'a self, block: B, param: usize) -> Box<dyn Iterator<Item = I> + 'a>
+    where
+        I: 'a,
+        B: 'a,
+    {
+        Box::new(empty())
+    }
+    fn input<'a>(&'a self, block: B, param: usize) -> Option<I>
+    where
+        I: Eq + 'a,
+        B: 'a,
+    {
+        let mut i = self.inputs(block, param);
+        let n = i.next()?;
+        for o in i {
+            if o != n {
+                return None;
+            }
+        }
+        Some(n)
+    }
 }
 #[doc(hidden)]
 pub fn _get_item<'a, I: Copy, B, F>(
@@ -171,6 +192,17 @@ impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
     fn val_mut(&mut self, id: Id<SValueW>) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
         Some(&mut self.values[id].value)
     }
+    fn inputs<'a>(
+        &'a self,
+        block: Id<SBlock>,
+        param: usize,
+    ) -> Box<dyn Iterator<Item = Id<SValueW>> + 'a>
+    where
+        Id<SValueW>: 'a,
+        Id<SBlock>: 'a,
+    {
+        Box::new(SCfg::inputs(self, block, param))
+    }
 }
 sval_item!(SCfg [block Id<SBlock>]);
 pub(crate) fn default_ctx() -> ExprCtx {
@@ -181,19 +213,34 @@ pub(crate) fn default_ctx() -> ExprCtx {
         remaining_depth: 4,
     }
 }
-impl<I: Copy + Eq, B, F> SValue<I, B, F> {
+impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
     pub fn array_in(
         &self,
         semantics: &SemanticCfg,
         k: &(dyn SValGetter<I, B, F> + '_),
     ) -> Option<Vec<I>> {
         match self {
+            SValue::Param { block, idx, ty } => {
+                let mut i = k
+                    .inputs(block.clone(), *idx)
+                    .filter_map(|i| k.val(i))
+                    .filter_map(|t| t.array_in(semantics, k));
+                let mut n = i.next()?;
+                for j in i {
+                    if j != n {
+                        return None;
+                    }
+                }
+                Some(n)
+            }
             SValue::Item { item, span } => match item {
                 Item::Arr { members } => Some(members.clone()),
                 Item::Mem { obj, mem } => {
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
                         Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
+                            Some(i)
+                                if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                            {
                                 match i.array_in(semantics, k) {
                                     None => None,
                                     Some(a) => a
@@ -269,6 +316,19 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
         k: &(dyn SValGetter<I, B, F> + '_),
     ) -> Option<Lit> {
         match self {
+            SValue::Param { block, idx, ty } => {
+                let mut i = k
+                    .inputs(block.clone(), *idx)
+                    .filter_map(|i| k.val(i))
+                    .filter_map(|t| t.const_in(semantics, k));
+                let mut n = i.next()?;
+                for j in i {
+                    if j != n {
+                        return None;
+                    }
+                }
+                Some(n)
+            }
             SValue::Item { item, span } => match item {
                 Item::Just { id } => None,
                 Item::Bin { left, right, op } => {
@@ -626,7 +686,11 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
                         Some(Lit::Str(s)) => match &*s.value {
                             "length" => match k.val(*obj) {
-                                Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
+                                Some(i)
+                                    if semantics
+                                        .flags
+                                        .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                                {
                                     match i.array_in(semantics, k) {
                                         None => {
                                             let l = i.const_in(semantics, k)?;
@@ -654,7 +718,9 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                             _ => None,
                         },
                         Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
+                            Some(i)
+                                if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                            {
                                 match i.array_in(semantics, k) {
                                     None => None,
                                     Some(a) => a

@@ -368,6 +368,16 @@ impl TCfg {
                 }
             })
     }
+    pub fn taints_object(&self, a: &Ident) -> bool {
+        return self.blocks.iter().any(|s| {
+            s.1.stmts.iter().any(|s| {
+                s.left.taints_object(a)
+                    || s.right
+                        .funcs()
+                        .any(|f| f.cfg.taints_object(a) || s.right.taints_object(a))
+            }) || s.1.post.term.taints_object(a)
+        });
+    }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
         let a = self.blocks.iter().flat_map(|k| {
             let i: Box<dyn Iterator<Item = Ident> + '_> = match &k.1.post.term {
@@ -543,6 +553,31 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
     },
     // #[default]
     Default,
+}
+impl<I: Eq, F> Item<I, F> {
+    pub fn taints_object(&self, a: &I) -> bool {
+        match self {
+            Item::Call { callee, args } => {
+                matches!(callee, TCallee::Eval) || args.iter().any(|b| b == a)
+            }
+            _ => false,
+        }
+    }
+}
+impl<I: Eq, M> LId<I, M> {
+    pub fn taints_object(&self, a: &I) -> bool {
+        match self {
+            LId::Member { obj, mem } if obj == a => true,
+            _ => false,
+        }
+    }
+}
+impl<B, I: Eq> TTerm<B, I> {
+    pub fn taints_object(&self, a: &I) -> bool {
+        match self {
+            _ => false,
+        }
+    }
 }
 impl<B, I> TTerm<B, I> {
     pub fn as_ref<'a>(&'a self) -> TTerm<&'a B, &'a I>

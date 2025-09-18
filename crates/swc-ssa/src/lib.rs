@@ -146,6 +146,58 @@ pub struct SCfg {
     pub ts_retty: Option<TsTypeAnn>,
 }
 impl SCfg {
+    pub fn inputs(&self, block: Id<SBlock>, param: usize) -> impl Iterator<Item = Id<SValueW>> {
+        return self.blocks.iter().flat_map(move |k| {
+            k.1.postcedent
+                .term
+                .targets()
+                .filter_map(move |t| {
+                    if t.block == block {
+                        t.args.get(param).cloned()
+                    } else {
+                        None
+                    }
+                })
+                .chain(k.1.postcedent.catch.targets().filter_map(move |t| {
+                    if t.block == block {
+                        t.args.get(param.wrapping_sub(1)).cloned()
+                    } else {
+                        None
+                    }
+                }))
+        });
+    }
+    pub fn input(&self, block: Id<SBlock>, param: usize) -> Option<Id<SValueW>> {
+        let mut i = self.inputs(block, param);
+        let a = i.next()?;
+        for j in i {
+            if j != a {
+                return None;
+            }
+        }
+        return Some(a);
+    }
+    pub fn taints_object(&self, a: &Id<SValueW>) -> bool {
+        return self.blocks.iter().any(|s| {
+            s.1.stmts.iter().any(|s| {
+                let mut s = *s;
+                loop {
+                    return match &self.values[s].value {
+                        SValue::Assign { target, val } => target.taints_object(a),
+                        SValue::Item { item, span } => item.taints_object(a),
+                        SValue::Param { block, idx, ty } => match self.input(*block, *idx) {
+                            None => true,
+                            Some(a) => {
+                                s = a;
+                                continue;
+                            }
+                        },
+                        _ => true,
+                    };
+                }
+            }) || s.1.postcedent.term.taints_object(a)
+        });
+    }
     pub fn refs(&self) -> BTreeSet<Ident> {
         return self
             .values
