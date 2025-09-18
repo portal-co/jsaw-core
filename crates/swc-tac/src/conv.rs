@@ -1152,7 +1152,7 @@ impl ToTACConverter<'_> {
                     .mapper
                     .semantic
                     .flags
-                    .contains(SemanticFlags::ASSUME_SES)
+                    .contains(SemanticFlags::NO_MONKEYPATCHING)
                     .then(|| {
                         let mut i;
                         match &c {

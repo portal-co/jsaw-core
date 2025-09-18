@@ -193,7 +193,7 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                 Item::Mem { obj, mem } => {
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
                         Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                            Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
                                 match i.array_in(semantics, k) {
                                     None => None,
                                     Some(a) => a
@@ -208,7 +208,7 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                     }
                 }
                 Item::Call { callee, args }
-                    if semantics.flags.contains(SemanticFlags::ASSUME_SES) =>
+                    if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
                 {
                     match callee {
                         TCallee::Member { func, member } => {
@@ -626,7 +626,7 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k)) {
                         Some(Lit::Str(s)) => match &*s.value {
                             "length" => match k.val(*obj) {
-                                Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                                Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
                                     match i.array_in(semantics, k) {
                                         None => {
                                             let l = i.const_in(semantics, k)?;
@@ -654,7 +654,7 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                             _ => None,
                         },
                         Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i) if semantics.flags.contains(SemanticFlags::ASSUME_SES) => {
+                            Some(i) if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) => {
                                 match i.array_in(semantics, k) {
                                     None => None,
                                     Some(a) => a
@@ -669,7 +669,7 @@ impl<I: Copy + Eq, B, F> SValue<I, B, F> {
                     }
                 }
                 Item::Call { callee, args }
-                    if semantics.flags.contains(SemanticFlags::ASSUME_SES) =>
+                    if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
                 {
                     match callee {
                         TCallee::Member { func, member } => {

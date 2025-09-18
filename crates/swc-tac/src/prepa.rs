@@ -222,7 +222,7 @@ impl VisitMut for Prepa<'_> {
                     }
                     Expr::Bin(m)
                         if m.op == BinaryOp::In
-                            && self.semantics.flags.contains(SemanticFlags::ASSUME_NORMAL)
+                            && self.semantics.flags.contains(SemanticFlags::NO_CRAZY)
                             && !m.left.is_private_name() =>
                     {
                         let b = (
@@ -271,7 +271,7 @@ impl VisitMut for Prepa<'_> {
                                                                 raw: None,
                                                             },
                                                         ))) {
-                                                            s => if self.semantics.flags.contains(SemanticFlags::ASSUME_SES){
+                                                            s => if self.semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING){
                                                                 Box::new(Expr::Call(CallExpr{
                                                                     span:m.span,
                                                                     ctxt: Default::default(),

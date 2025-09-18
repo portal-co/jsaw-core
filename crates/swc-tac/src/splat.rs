@@ -168,7 +168,7 @@ impl Splatting {
                         value = id;
                     }
                 }
-                if semantic.flags.contains(SemanticFlags::ASSUME_SES) {
+                if semantic.flags.contains(SemanticFlags::NO_MONKEYPATCHING) {
                     if let Item::Call {
                         callee: TCallee::Member { func, member },
                         args,
