@@ -488,6 +488,7 @@ impl SCfg {
         return val;
     }
     pub fn do_consts(&mut self, semantic: &SemanticCfg) {
+        self.unblock_edges();
         let mut m = BTreeMap::new();
         let mut aliases = BTreeMap::new();
         for (k, v) in self.values.iter() {
