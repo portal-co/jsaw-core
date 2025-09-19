@@ -9,6 +9,8 @@ use anyhow::Context;
 use cfg_traits::Term;
 use id_arena::{Arena, Id};
 use portal_jsc_common::Asm;
+use portal_jsc_swc_util::SemanticCfg;
+use ssa_traits::HasChainableValues;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
 use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags};
@@ -484,5 +486,35 @@ impl SCfg {
         let val = self.values.alloc(val.into());
         self.blocks[k].params.push((val, ()));
         return val;
+    }
+    pub fn do_consts(&mut self, semantic: &SemanticCfg) {
+        let mut m = BTreeMap::new();
+        let mut aliases = BTreeMap::new();
+        for (k, v) in self.values.iter() {
+            if let SValue::Param { block, idx, ty } = &v.value {
+                if let Some(i) = self.input(*block, *idx){
+                    aliases.insert(k, i);
+                }
+                continue;
+            };
+            if let Some(v) = v.value.const_in(semantic, self, true) {
+                m.insert(k, v);
+                continue;
+            };
+            if let SValue::Item { item: Item::Just { id }, span } = &v.value{
+                aliases.insert(k, *id);
+            }
+        }
+        for (k, v) in m {
+            self.values[k].value = SValue::Item {
+                item: Item::Lit { lit: v },
+                span: None,
+            };
+        }
+        for r in self.blocks.iter_mut().flat_map(|a|a.1.stmts.iter_mut().chain(a.1.postcedent.values_chain_mut())){
+            while let Some(x) = aliases.get(r){
+                *r = *x
+            }
+        }
     }
 }
