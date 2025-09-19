@@ -15,6 +15,63 @@ impl ToTACConverter<'_> {
     pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
         self.convert_block(i, o, b)
     }
+    fn convert_cond_prop(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        test: Ident,
+        cons: &MemberProp,
+        alt: &MemberProp,
+        span: Span,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match (cons, alt) {
+            (MemberProp::Computed(cons), MemberProp::Computed(alt)) => {
+                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &alt.expr, span)
+            }
+            (MemberProp::Ident(a), MemberProp::Ident(b)) => {
+                let [a, b] = [a, b].map(|v| {
+                    let val = o.regs.alloc(());
+                    o.decls.insert(val.clone());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: val.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Lit {
+                            lit: Lit::Str(Str {
+                                span: v.span,
+                                value: v.sym.clone(),
+                                raw: None,
+                            }),
+                        },
+                        span,
+                    });
+                    val
+                });
+                let mut tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Select {
+                        cond: test.clone(),
+                        then: a,
+                        otherwise: b,
+                    },
+                    span,
+                });
+                o.decls.insert(tmp.clone());
+
+                return Ok((tmp, t));
+            }
+            (MemberProp::Computed(cons), alt) => {
+                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &imp(alt.clone()), span)
+            }
+            (cons, MemberProp::Computed(alt)) => {
+                self.convert_cond_expr(i, o, b, t, test, &imp(cons.clone()), &alt.expr, span)
+            }
+            _ => todo!(),
+        }
+    }
     /// Converts a conditional expression (CondExpr) to TAC, factoring out test, cons, alt, and span.
     fn convert_cond_expr(
         &mut self,
@@ -59,13 +116,10 @@ impl ToTACConverter<'_> {
                         Some((e, a2, b))
                     }
                     (Expr::Member(a), Expr::Member(b))
-                        if a.prop.is_computed() && b.prop.is_computed() =>
+                        if !(a.prop.is_private_name() || b.prop.is_private_name()) =>
                     {
                         let (mut e, a2, b2) = try_get_frames(&a.obj, &b.obj)?;
-                        e.push(Frame::Member2(
-                            &a.prop.as_computed().unwrap().expr,
-                            &b.prop.as_computed().unwrap().expr,
-                        ));
+                        e.push(Frame::Member2(&a.prop, &b.prop));
                         Some((e, a2, b2))
                     }
                     (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
@@ -85,14 +139,14 @@ impl ToTACConverter<'_> {
                                 Some((e, a2_, b2))
                             }
                             (Expr::Member(aa), Expr::Member(bb))
-                                if aa.prop.is_computed() && bb.prop.is_computed() =>
+                                if !aa.prop.is_private_name() && !bb.prop.is_private_name() =>
                             {
                                 let (mut e, a2_, b2) = try_get_frames(&aa.obj, &bb.obj)?;
                                 e.push(Frame::CallMember2(
                                     a.args.iter().map(|a| &*a.expr).collect(),
-                                    &aa.prop.as_computed().unwrap().expr,
+                                    &aa.prop,
                                     b.args.iter().map(|a| &*a.expr).collect(),
-                                    &bb.prop.as_computed().unwrap().expr,
+                                    &bb.prop,
                                 ));
                                 Some((e, a2_, b2))
                             }
@@ -1090,7 +1144,7 @@ impl ToTACConverter<'_> {
             Frame::Member(m) => self.member_prop(i, o, b, t, &m, s),
             Frame::Member2(a, b2) => {
                 let mem;
-                (mem, t) = self.convert_cond_expr(i, o, b, t, r, a, b2, Span::dummy_with_cmt())?;
+                (mem, t) = self.convert_cond_prop(i, o, b, t, r, a, b2, Span::dummy_with_cmt())?;
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: v.clone() },
@@ -1167,7 +1221,7 @@ impl ToTACConverter<'_> {
             Frame::CallMember2(a, am, b2, bm) => {
                 let mem;
                 (mem, t) =
-                    self.convert_cond_expr(i, o, b, t, r.clone(), am, bm, Span::dummy_with_cmt())?;
+                    self.convert_cond_prop(i, o, b, t, r.clone(), am, bm, Span::dummy_with_cmt())?;
                 let mut args = Vec::default();
                 let mut arg;
                 for (a, b2) in a.iter().zip(b2.iter()) {

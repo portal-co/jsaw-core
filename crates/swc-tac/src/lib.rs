@@ -1443,9 +1443,9 @@ impl<I, F> Item<I, F> {
 enum Frame<'a> {
     Assign(&'a AssignTarget, AssignOp),
     Member(&'a MemberProp),
-    Member2(&'a Expr, &'a Expr),
+    Member2(&'a MemberProp, &'a MemberProp),
     Call(Vec<&'a Expr>, Vec<&'a Expr>),
     CallMember(&'a MemberProp, Vec<&'a Expr>, Vec<&'a Expr>),
-    CallMember2(Vec<&'a Expr>, &'a Expr, Vec<&'a Expr>, &'a Expr),
+    CallMember2(Vec<&'a Expr>, &'a MemberProp, Vec<&'a Expr>, &'a MemberProp),
 }
 // #[derive(Default)]
