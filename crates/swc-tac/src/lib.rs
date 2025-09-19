@@ -119,8 +119,8 @@ where
     }
 }
 
-#[cfg(feature = "simpl")]
-pub mod simpl;
+#[cfg(feature = "simpl-legacy")]
+pub mod simpl_legacy;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, linearize::Linearize)]
 #[non_exhaustive]

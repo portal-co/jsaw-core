@@ -19,7 +19,7 @@ either = "1.13.0"
 id-arena.workspace = true
 swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
 portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util" }
-# portal-jsc-simpl-js = { version = "0.8.0-pre.0", path = "../simpl-js", optional = true }
+portal-jsc-simpl-js = {workspace=true, optional = true }
 swc_atoms.workspace = true
 swc_common.workspace = true
 swc_ecma_ast.workspace = true
@@ -33,4 +33,4 @@ portal-solutions-swibb.workspace = true
 portal-solutions-proxy-signs.workspace = true
 
 [features]
-# simpl=["dep:portal-jsc-simpl-js"]
+simpl-legacy=["dep:portal-jsc-simpl-js"]

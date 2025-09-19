@@ -664,6 +664,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-jsc-simpl-js"
+version = "0.8.0-pre.9"
+dependencies = [
+ "portal-jsc-swc-util",
+ "swc_atoms",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_utils",
+ "swc_ecma_visit",
+ "typenum",
+]
+
+[[package]]
 name = "portal-jsc-swc-cfg"
 version = "0.8.0-pre.9"
 dependencies = [
@@ -739,6 +752,7 @@ dependencies = [
  "linearize",
  "linearize-derive",
  "portal-jsc-common",
+ "portal-jsc-simpl-js",
  "portal-jsc-swc-cfg",
  "portal-jsc-swc-util",
  "portal-solutions-proxy-signs",
@@ -1364,6 +1378,12 @@ dependencies = [
  "serde",
  "stable_deref_trait",
 ]
+
+[[package]]
+name = "typenum"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "unicode-id-start"
