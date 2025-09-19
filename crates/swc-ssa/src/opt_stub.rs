@@ -74,52 +74,11 @@ impl OptStub {
                         }
                     };
                 }
-                o.blocks[var].postcedent.term = match &i.blocks[k].postcedent.term {
-                    STerm::Throw(a) => {
-                        STerm::Throw(baseline.get(a).cloned().context("in getting the value")?)
-                    }
-                    STerm::Return(r) => STerm::Return(match r {
-                        None => None,
-                        Some(a) => Some(baseline.get(a).cloned().context("in getting the value")?),
-                    }),
-                    STerm::Tail { callee, args } => STerm::Tail {
-                        callee: callee.as_ref().map(&mut |a| {
-                            baseline.get(a).cloned().context("in getting the value")
-                        })?,
-                        args: args
-                            .iter()
-                            .map(|a| baseline.get(a).cloned().context("in getting the value"))
-                            .collect::<Result<_, anyhow::Error>>()?,
-                    },
-                    STerm::Jmp(starget) => STerm::Jmp(tgt!(starget)),
-                    STerm::CondJmp {
-                        cond,
-                        if_true,
-                        if_false,
-                    } => STerm::CondJmp {
-                        cond: baseline
-                            .get(cond)
-                            .cloned()
-                            .context("in getting the value")?,
-                        if_true: tgt!(if_true),
-                        if_false: tgt!(if_false),
-                    },
-                    STerm::Switch { x, blocks, default } => STerm::Switch {
-                        x: baseline.get(x).cloned().context("in getting the value")?,
-                        blocks: {
-                            let mut blocks2: Vec<(Id<SValueW>, STarget)> = Vec::default();
-                            for (a, b) in blocks.iter() {
-                                blocks2.push((
-                                    baseline.get(a).cloned().context("in getting the value")?,
-                                    tgt!(b),
-                                ));
-                            }
-                            blocks2
-                        },
-                        default: tgt!(default),
-                    },
-                    STerm::Default => STerm::Default,
-                };
+                o.blocks[var].postcedent.term = i.blocks[k].postcedent.term.as_ref().map(
+                    &mut (),
+                    &mut |_, target| Ok(tgt!(target)),
+                    &mut |_, a| (baseline.get(a).cloned().context("in getting the value")),
+                )?;
             }
         }
     }
