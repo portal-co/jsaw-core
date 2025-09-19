@@ -136,7 +136,10 @@ pub enum SimplItem<D: TacDialect, P = SimplPathId> {
     },
 }
 impl<D: TacDialect, P> SimplItem<D, P> {
-    pub fn map<Q, E>(self, mut go: impl FnMut(P) -> Result<Q, E>) -> Result<SimplItem<D, Q>, E> {
+    pub fn map<Q, E>(
+        self,
+        mut go: &mut (dyn FnMut(P) -> Result<Q, E> + '_),
+    ) -> Result<SimplItem<D, Q>, E> {
         Ok(match self {
             SimplItem::Just { id } => SimplItem::Just {
                 id: (go(id.0)?, id.1),

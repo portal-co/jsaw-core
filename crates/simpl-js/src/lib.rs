@@ -363,12 +363,12 @@ impl<D: Dialect<Tag = Infallible>> From<SimplExpr<D>> for Expr {
                                     MethodProp {
                                         key: swc_ecma_ast::PropName::Ident(IdentName {
                                             span: s.span,
-                                            sym: p.0 .0,
+                                            sym: p.0.0,
                                         }),
                                         function: Box::new(Function {
                                             params: p
                                                 .1
-                                                 .1
+                                                .1
                                                 .into_iter()
                                                 .map(|x| Param {
                                                     span: s.span,
@@ -384,7 +384,7 @@ impl<D: Dialect<Tag = Infallible>> From<SimplExpr<D>> for Expr {
                                                 ctxt: Default::default(),
                                                 stmts: p
                                                     .1
-                                                     .0
+                                                    .0
                                                     .into_iter()
                                                     .map(|a| a.into())
                                                     .collect(),
@@ -749,10 +749,12 @@ impl Conv for Expr {
                                             path.as_ref().keys.last().map(|a| a as &str),
                                         ) {
                                             (
-                                                &[ExprOrSpread {
-                                                    ref spread,
-                                                    ref expr,
-                                                }],
+                                                &[
+                                                    ExprOrSpread {
+                                                        ref spread,
+                                                        ref expr,
+                                                    },
+                                                ],
                                                 Some("$match"),
                                             ) if expr.as_object().is_some() => {
                                                 let obj = expr.as_object().unwrap();
@@ -845,7 +847,7 @@ impl Conv for Expr {
                                                                     None => {
                                                                         return Err(
                                                                             Error::Unsupported,
-                                                                        )
+                                                                        );
                                                                     }
                                                                 },
                                                                 (&*k.value).clone(),
