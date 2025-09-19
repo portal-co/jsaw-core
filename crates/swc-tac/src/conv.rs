@@ -97,8 +97,13 @@ impl ToTACConverter<'_> {
                                 Some((e, a2_, b2))
                             }
                             (Expr::Member(_), _) | (_, Expr::Member(_)) => None,
-                            (Expr::Ident(i), _) | (_, Expr::Ident(i))
-                                if !i.optional && i.sym == "eval" =>
+                            (Expr::Ident(i), j) | (j, Expr::Ident(i))
+                                if !i.optional
+                                    && i.sym == "eval"
+                                    && match j {
+                                        Expr::Ident(j) => !j.eq_ignore_span(i),
+                                        _ => true,
+                                    } =>
                             {
                                 None
                             }
