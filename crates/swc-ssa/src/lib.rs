@@ -493,7 +493,7 @@ impl SCfg {
         let mut aliases = BTreeMap::new();
         for (k, v) in self.values.iter() {
             if let SValue::Param { block, idx, ty } = &v.value {
-                if let Some(i) = self.input(*block, *idx){
+                if let Some(i) = self.input(*block, *idx) {
                     aliases.insert(k, i);
                 }
                 continue;
@@ -502,7 +502,11 @@ impl SCfg {
                 m.insert(k, v);
                 continue;
             };
-            if let SValue::Item { item: Item::Just { id }, span } = &v.value{
+            if let SValue::Item {
+                item: Item::Just { id },
+                span,
+            } = &v.value
+            {
                 aliases.insert(k, *id);
             }
         }
@@ -512,8 +516,12 @@ impl SCfg {
                 span: None,
             };
         }
-        for r in self.blocks.iter_mut().flat_map(|a|a.1.stmts.iter_mut().chain(a.1.postcedent.values_chain_mut())){
-            while let Some(x) = aliases.get(r){
+        for r in self.blocks.iter_mut().flat_map(|a| {
+            a.1.stmts
+                .iter_mut()
+                .chain(a.1.postcedent.values_chain_mut())
+        }) {
+            while let Some(x) = aliases.get(r) {
                 *r = *x
             }
         }
