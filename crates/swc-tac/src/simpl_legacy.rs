@@ -11,9 +11,9 @@ use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
 
 use crate::*;
 
+pub mod convert;
 pub mod impls;
 pub mod reloop;
-pub mod convert;
 
 pub trait TacDialect: Dialect<Mark<()>: Clone + Default> {}
 
@@ -56,8 +56,37 @@ impl<D: TacDialect> Default for TSimplFunc<D> {
         Self { cfg, entry: e }
     }
 }
+pub struct TSimplStmt<D: TacDialect> {
+    left: SimplPathId,
+    mark: D::Mark<()>,
+    flags: ValFlags,
+    right: SimplItem<D>,
+    span: Span,
+}
+impl<D: TacDialect> Clone for TSimplStmt<D> {
+    fn clone(&self) -> Self {
+        Self {
+            left: self.left.clone(),
+            mark: self.mark.clone(),
+            flags: self.flags.clone(),
+            right: self.right.clone(),
+            span: self.span.clone(),
+        }
+    }
+}
+// impl<D: TacDialect> Clone for TSimplStmt<D> {
+//     fn clone(&self) -> Self {
+//         Self(
+//             self.0.clone(),
+//             self.1.clone(),
+//             self.2.clone(),
+//             self.3.clone(),
+//             self.4.clone(),
+//         )
+//     }
+// }
 pub struct TSimplBlock<D: TacDialect> {
-    pub stmts: Vec<(SimplPathId, D::Mark<()>, ValFlags, SimplItem<D>, Span)>,
+    pub stmts: Vec<TSimplStmt<D>>,
     pub term: TSimplTerm<D>,
     pub orig_span: Option<Span>,
 }
@@ -251,15 +280,15 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     root: cfg.regs.alloc(()),
                     keys: vec![],
                 };
-                cfg.blocks[start_block].stmts.push((
-                    i.clone(),
-                    Default::default(),
-                    ValFlags::SSA_LIKE,
-                    SimplItem::Lit {
+                cfg.blocks[start_block].stmts.push(TSimplStmt {
+                    left: i.clone(),
+                    mark: Default::default(),
+                    flags: ValFlags::SSA_LIKE,
+                    right: SimplItem::Lit {
                         lit: literal.clone(),
                     },
-                    literal.span(),
-                ));
+                    span: literal.span(),
+                });
                 ((i, Default::default()), start_block)
             }
             SimplExpr::Ident(i) => (
@@ -274,11 +303,11 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                 let o = make_spanned.value.target.clone();
                 let (mark, o) = D::despan(o);
                 let o = o.to_id();
-                cfg.blocks[start_block].stmts.push((
-                    o.clone(),
-                    mark.clone(),
-                    Default::default(),
-                    match make_spanned.value.assign.to_update() {
+                cfg.blocks[start_block].stmts.push(TSimplStmt {
+                    left: o.clone(),
+                    mark: mark.clone(),
+                    flags: Default::default(),
+                    right: match make_spanned.value.assign.to_update() {
                         None => SimplItem::Just { id: value },
                         Some(b) => SimplItem::Bin {
                             left: (o.clone(), mark.clone()),
@@ -286,8 +315,8 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                             op: b,
                         },
                     },
-                    make_spanned.span,
-                ));
+                    span: make_spanned.span,
+                });
                 ((o, mark), start_block)
             }
             SimplExpr::Bin(make_spanned) => {
@@ -299,17 +328,17 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     root: cfg.regs.alloc(()),
                     keys: vec![],
                 };
-                cfg.blocks[start_block].stmts.push((
-                    i.clone(),
-                    Default::default(),
-                    ValFlags::SSA_LIKE,
-                    SimplItem::Bin {
+                cfg.blocks[start_block].stmts.push(TSimplStmt {
+                    left: i.clone(),
+                    mark: Default::default(),
+                    flags: ValFlags::SSA_LIKE,
+                    right: SimplItem::Bin {
                         left: left,
                         right: right,
                         op: make_spanned.value.op,
                     },
-                    make_spanned.span,
-                ));
+                    span: make_spanned.span,
+                });
                 ((i, Default::default()), start_block)
             }
             SimplExpr::Call(make_spanned) => match &*make_spanned.value {
@@ -319,11 +348,11 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         root: cfg.regs.alloc(()),
                         keys: vec![],
                     };
-                    cfg.blocks[start_block].stmts.push((
-                        i.clone(),
-                        Default::default(),
-                        ValFlags::SSA_LIKE,
-                        SimplItem::CallStatic {
+                    cfg.blocks[start_block].stmts.push(TSimplStmt {
+                        left: i.clone(),
+                        mark: Default::default(),
+                        flags: ValFlags::SSA_LIKE,
+                        right: SimplItem::CallStatic {
                             r#fn: FuncId {
                                 path: match D::despan(path.path.clone()) {
                                     (a, b) => (b.to_id(), a),
@@ -332,8 +361,8 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                             },
                             args: args,
                         },
-                        make_spanned.span,
-                    ));
+                        span: make_spanned.span,
+                    });
                     ((i, Default::default()), start_block)
                 }
                 portal_jsc_simpl_js::SimplCallExpr::Tag { tag, args } => {
@@ -342,16 +371,16 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         root: cfg.regs.alloc(()),
                         keys: vec![],
                     };
-                    cfg.blocks[start_block].stmts.push((
-                        i.clone(),
-                        Default::default(),
-                        ValFlags::SSA_LIKE,
-                        SimplItem::CallTag {
+                    cfg.blocks[start_block].stmts.push(TSimplStmt {
+                        left: i.clone(),
+                        mark: Default::default(),
+                        flags: ValFlags::SSA_LIKE,
+                        right: SimplItem::CallTag {
                             tag: tag.clone(),
                             args: args,
                         },
-                        make_spanned.span,
-                    ));
+                        span: make_spanned.span,
+                    });
                     ((i, Default::default()), start_block)
                 }
                 portal_jsc_simpl_js::SimplCallExpr::Block(simpl_stmt) => {
@@ -544,13 +573,13 @@ impl<D: TacDialect> Bake<D> for SimplStmt<D> {
                     match ret.map(|a| a.clone()) {
                         None => cfg.blocks[start_block].term = TSimplTerm::Return(value),
                         Some((k, v)) => {
-                            cfg.blocks[start_block].stmts.push((
-                                v,
-                                Default::default(),
-                                Default::default(),
-                                SimplItem::Just { id: value },
-                                make_spanned.span,
-                            ));
+                            cfg.blocks[start_block].stmts.push(TSimplStmt {
+                                left: v,
+                                mark: Default::default(),
+                                flags: Default::default(),
+                                right: SimplItem::Just { id: value },
+                                span: make_spanned.span,
+                            });
                             cfg.blocks[start_block].term = TSimplTerm::Jmp(k);
                         }
                     };

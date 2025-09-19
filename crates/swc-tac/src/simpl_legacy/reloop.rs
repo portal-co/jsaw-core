@@ -81,7 +81,7 @@ pub fn reloop<D: TacDialect>(
             let mut body = block
                 .stmts
                 .iter()
-                .map(|(b, m, f, i, e)| {
+                .map(|TSimplStmt { left: b, mark: m, flags: f, right: i, span: e }| {
                     let e = *e;
                     let loaded: SimplExpr<D> = match i {
                         SimplItem::Just { id } => {
