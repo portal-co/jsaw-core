@@ -23,11 +23,17 @@ pub enum SemanticTarget {
     ECMAScript,
     Simpl(SimplVersion),
     MuJSC(MuJSCVersion),
+    Porffor(PorfforVersion),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum MuJSCVersion {
-    
+
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum PorfforVersion {
+
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
