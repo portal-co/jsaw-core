@@ -260,10 +260,7 @@ impl ToSSAConverter {
                     .filter(|a| {
                         !d || i.blocks.iter().all(|k| {
                             k.1.stmts.iter().all(|i| {
-                                i.left
-                                    != LId::Id {
-                                        id: (**a).clone(),
-                                    }
+                                i.left != LId::Id { id: (**a).clone() }
                                     || !i.flags.contains(ValFlags::SSA_LIKE)
                             })
                         })
@@ -284,10 +281,7 @@ impl ToSSAConverter {
                                 .filter(|a| {
                                     !i.blocks.iter().all(|k| {
                                         k.1.stmts.iter().all(|i| {
-                                            i.left
-                                                != LId::Id {
-                                                    id: (**a).clone(),
-                                                }
+                                            i.left != LId::Id { id: (**a).clone() }
                                                 || !i.flags.contains(ValFlags::SSA_LIKE)
                                         })
                                     })
@@ -300,7 +294,15 @@ impl ToSSAConverter {
                 }
             };
             let term = match &i.blocks[k].post.term {
-                TTerm::Tail { callee, args } => TTerm::Tail { callee: callee.as_ref().map(&mut |a|self.load(&state, i, o, t, a.clone(), &cache))?, args: args.iter().map(|a|self.load(&state, i, o, t, a.clone(), &cache)).collect::<Result<_,_>>()? },
+                TTerm::Tail { callee, args } => TTerm::Tail {
+                    callee: callee
+                        .as_ref()
+                        .map(&mut |a| self.load(&state, i, o, t, a.clone(), &cache))?,
+                    args: args
+                        .iter()
+                        .map(|a| self.load(&state, i, o, t, a.clone(), &cache))
+                        .collect::<Result<_, _>>()?,
+                },
                 swc_tac::TTerm::Return(ident) => match ident.as_ref() {
                     None => STerm::Return(None),
                     Some(a) => {

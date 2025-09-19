@@ -155,8 +155,8 @@ impl ConstantInstantiator {
                         }
                     }
                 };
-                let v = match v.const_in(semantic, out,false) {
-                    None => match v.array_in(semantic, out,false) {
+                let v = match v.const_in(semantic, out, false) {
+                    None => match v.array_in(semantic, out, false) {
                         None => v,
                         Some(a) => SValue::Item {
                             item: Item::Arr { members: a },

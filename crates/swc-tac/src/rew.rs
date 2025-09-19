@@ -1150,7 +1150,7 @@ impl Rew<'_> {
                         &mut mark,
                         span,
                         &mut (),
-                        &mut |_, a| Ok(ident(a,span).into()),
+                        &mut |_, a| Ok(ident(a, span).into()),
                         &mut |_, a| Ok(ident(a, span)),
                         &mut |_, f: &TFunc| {
                             f.to_func_with_options(self.options)

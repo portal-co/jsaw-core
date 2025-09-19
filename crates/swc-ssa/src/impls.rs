@@ -1,4 +1,7 @@
-use std::{convert::Infallible, iter::{empty, once}};
+use std::{
+    convert::Infallible,
+    iter::{empty, once},
+};
 
 use id_arena::{Arena, Id};
 use ssa_traits::{HasChainableValues, HasValues};
@@ -69,7 +72,7 @@ impl cfg_traits::Term<SFunc> for STerm {
             STerm::Switch { x, blocks, default } => {
                 Box::new(blocks.iter().map(|a| &a.1).chain(once(default)))
             }
-            STerm::Default | STerm::Tail{..}=> Box::new(empty()),
+            STerm::Default | STerm::Tail { .. } => Box::new(empty()),
         }
     }
 
@@ -89,7 +92,7 @@ impl cfg_traits::Term<SFunc> for STerm {
             STerm::Switch { x, blocks, default } => {
                 Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default)))
             }
-            STerm::Default| STerm::Tail{..} => Box::new(empty()),
+            STerm::Default | STerm::Tail { .. } => Box::new(empty()),
         }
     }
 }
@@ -280,12 +283,12 @@ impl HasChainableValues<SFunc> for STerm {
             STerm::Default => Box::new(empty()),
             Self::Tail { callee, args } => Box::new(args.iter().cloned().chain({
                 let mut v = Vec::default();
-                callee.as_ref().map(&mut |a|{
+                callee.as_ref().map(&mut |a| {
                     v.push(*a);
-                    Ok::<_,Infallible>(())
+                    Ok::<_, Infallible>(())
                 });
                 v
-            }))
+            })),
         }
     }
 
@@ -316,14 +319,14 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-              Self::Tail { callee, args } => Box::new(args.iter_mut().chain({
+            Self::Tail { callee, args } => Box::new(args.iter_mut().chain({
                 let mut v = Vec::default();
-                callee.as_mut().map(&mut |a|{
+                callee.as_mut().map(&mut |a| {
                     v.push(a);
-                    Ok::<_,Infallible>(())
+                    Ok::<_, Infallible>(())
                 });
                 v
-            }))
+            })),
         }
     }
 }

@@ -228,7 +228,23 @@ impl Rew {
                             id.clone()
                                 .map(|value| mangle_value(self.prefix.clone(), ctxt, func, value)),
                         ),
-                        STerm::Tail { callee, args } => TTerm::Tail { callee: callee.as_ref().map(&mut |a|Ok::<_,Infallible>(mangle_value(self.prefix.clone(), ctxt, func, *a))).unwrap(), args: args.iter().map(|a|mangle_value(self.prefix.clone(), ctxt, func, *a)).collect() },
+                        STerm::Tail { callee, args } => TTerm::Tail {
+                            callee: callee
+                                .as_ref()
+                                .map(&mut |a| {
+                                    Ok::<_, Infallible>(mangle_value(
+                                        self.prefix.clone(),
+                                        ctxt,
+                                        func,
+                                        *a,
+                                    ))
+                                })
+                                .unwrap(),
+                            args: args
+                                .iter()
+                                .map(|a| mangle_value(self.prefix.clone(), ctxt, func, *a))
+                                .collect(),
+                        },
                         crate::STerm::Jmp(starget) => TTerm::Jmp(self.trans(
                             func,
                             cfg,
