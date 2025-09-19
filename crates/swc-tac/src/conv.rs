@@ -40,7 +40,7 @@ impl ToTACConverter<'_> {
             a: &'a Expr,
             b: &'b Expr,
         ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
-            if a.is_pure() && b.is_pure() {
+            if (a.is_pure() && b.is_pure()) || a.eq_ignore_span(b) {
                 Some((vec![], a, b))
             } else {
                 match (a, b) {
@@ -1155,8 +1155,9 @@ impl ToTACConverter<'_> {
                 Ok((v, t))
             }
             Frame::CallMember2(a, am, b2, bm) => {
-                 let mem;
-                (mem, t) = self.convert_cond_expr(i, o, b, t, r.clone(), am, bm, Span::dummy_with_cmt())?;
+                let mem;
+                (mem, t) =
+                    self.convert_cond_expr(i, o, b, t, r.clone(), am, bm, Span::dummy_with_cmt())?;
                 let mut args = Vec::default();
                 let mut arg;
                 for (a, b2) in a.iter().zip(b2.iter()) {
