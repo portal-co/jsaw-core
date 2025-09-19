@@ -57,11 +57,11 @@ impl<D: TacDialect> Default for TSimplFunc<D> {
     }
 }
 pub struct TSimplStmt<D: TacDialect> {
-    left: SimplPathId,
-    mark: D::Mark<()>,
-    flags: ValFlags,
-    right: SimplItem<D>,
-    span: Span,
+    pub left: SimplPathId,
+    pub mark: D::Mark<()>,
+    pub flags: ValFlags,
+    pub right: SimplItem<D>,
+    pub span: Span,
 }
 impl<D: TacDialect> Clone for TSimplStmt<D> {
     fn clone(&self) -> Self {
