@@ -97,6 +97,11 @@ impl ToTACConverter<'_> {
                                 Some((e, a2_, b2))
                             }
                             (Expr::Member(_), _) | (_, Expr::Member(_)) => None,
+                            (Expr::Ident(i), _) | (_, Expr::Ident(i))
+                                if !i.optional && i.sym == "eval" =>
+                            {
+                                None
+                            }
                             (a2, b2) => {
                                 let (mut e, a2, b2) = try_get_frames(a2, b2)?;
                                 e.push(Frame::Call(
