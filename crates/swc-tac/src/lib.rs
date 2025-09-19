@@ -223,6 +223,13 @@ impl TryFrom<Function> for TFunc {
         return a.try_into();
     }
 }
+impl Default for TFunc{
+    fn default() -> Self {
+        let mut cfg = TCfg::default();
+        let entry = cfg.blocks.alloc(Default::default());
+        Self { cfg, entry, params: Default::default(), ts_params: Default::default(), is_generator: Default::default(), is_async: Default::default() }
+    }
+}
 #[derive(Default, Clone, Debug)]
 pub struct TCfg {
     pub blocks: Arena<TBlock>,

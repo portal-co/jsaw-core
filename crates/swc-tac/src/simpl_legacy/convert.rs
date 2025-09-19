@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use swc_ecma_ast::Ident;
 
 use super::*;
@@ -53,7 +55,53 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                     if_true: self.convert_block(i, o, *if_true)?,
                     if_false: self.convert_block(i, o, *if_false)?,
                 },
-                TSimplTerm::Select { scrutinee, cases } => todo!(),
+                TSimplTerm::Select { scrutinee, cases } => {
+                    let d = self.discriminant(
+                        i,
+                        o,
+                        k,
+                        n,
+                        &scrutinee.0,
+                        cases.iter().map(|c| (&*c.0, c.1.1.iter().map(|a| &a.0))),
+                        &i.blocks[k].orig_span.unwrap_or(Span::dummy_with_cmt()),
+                    );
+                    let v = o.regs.alloc(());
+                    o.decls.insert(v.clone());
+                    o.blocks[n].stmts.push(TStmt {
+                        left: LId::Id { id: v.clone() },
+                        flags: ValFlags::default(),
+                        right: d,
+                        span: i.blocks[k].orig_span.unwrap_or(Span::dummy_with_cmt()),
+                    });
+                    TTerm::Switch {
+                        x: v,
+                        blocks: cases
+                            .iter()
+                            .enumerate()
+                            .map(|(idx, (_, (b, _)))| {
+                                let c = self.convert_block(i, o, *b)?;
+                                let v = o.regs.alloc(());
+                                o.decls.insert(v.clone());
+                                o.blocks[n].stmts.push(TStmt {
+                                    left: LId::Id { id: v.clone() },
+                                    flags: ValFlags::default(),
+                                    right: Item::Lit {
+                                        lit: Lit::Num(Number {
+                                            span: i.blocks[k]
+                                                .orig_span
+                                                .unwrap_or(Span::dummy_with_cmt()),
+                                            value: idx as f64,
+                                            raw: None,
+                                        }),
+                                    },
+                                    span: i.blocks[k].orig_span.unwrap_or(Span::dummy_with_cmt()),
+                                });
+                                Ok((v, c))
+                            })
+                            .collect::<anyhow::Result<_>>()?,
+                        default: n,
+                    }
+                }
                 TSimplTerm::Switch { scrutinee, cases } => TTerm::Switch {
                     x: self.convert_path(
                         i,
@@ -183,6 +231,89 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             v
         })
     }
+    fn discriminant<'a, 'b>(
+        &mut self,
+        i: &TSimplCfg<D>,
+        o: &mut TCfg,
+        k: Id<TSimplBlock<D>>,
+        mut n: Id<TBlock>,
+        left: &SimplPathId,
+        ids: impl Iterator<Item = (&'a crate::Ident, impl Iterator<Item = &'b SimplPathId>)>,
+        span: &Span,
+    ) -> crate::Item {
+        let v = o.regs.alloc(());
+        o.decls.insert(v.clone());
+        o.blocks[n].stmts.push(TStmt {
+            left: LId::Id { id: v.clone() },
+            flags: ValFlags::default(),
+            right: Item::Lit {
+                lit: Lit::Str(Str {
+                    span: *span,
+                    value: Atom::new("$match"),
+                    raw: None,
+                }),
+            },
+            span: *span,
+        });
+        let member = v;
+        let item = Item::Obj {
+            members: ids
+                .collect::<Vec<_>>()
+                .into_iter()
+                .enumerate()
+                .map(|(idx, (a, b))| {
+                    (
+                        PropKey::Lit(a.clone()),
+                        PropVal::Method({
+                            let mut f: TFunc = Default::default();
+                            for x in b {
+                                let v = f.cfg.regs.alloc(());
+                                f.params.push(v.clone());
+                                f.cfg.blocks[f.entry].stmts.push(TStmt {
+                                    left: self.convert_path_lid(i, o, k, n, x, span),
+                                    flags: Default::default(),
+                                    right: Item::Just { id: v.clone() },
+                                    span: *span,
+                                });
+                            }
+                            let v = o.regs.alloc(());
+                            o.decls.insert(v.clone());
+                            o.blocks[n].stmts.push(TStmt {
+                                left: LId::Id { id: v.clone() },
+                                flags: ValFlags::default(),
+                                right: Item::Lit {
+                                    lit: Lit::Num(Number {
+                                        span: *span,
+                                        value: idx as f64,
+                                        raw: None,
+                                    }),
+                                },
+                                span: *span,
+                            });
+                            let idx = v;
+                            f.cfg.blocks[f.entry].post.term = TTerm::Return(Some(idx));
+                            f
+                        }),
+                    )
+                })
+                .collect(),
+        };
+        let v = o.regs.alloc(());
+        o.decls.insert(v.clone());
+        o.blocks[n].stmts.push(TStmt {
+            left: LId::Id { id: v.clone() },
+            flags: ValFlags::default(),
+            right: item,
+            span: *span,
+        });
+        Item::Call {
+            callee: TCallee::Member {
+                func: self.convert_path(i, o, k, n, left, span),
+                member,
+            },
+            args: [v].into_iter().collect(),
+        }
+    }
     fn convert_stmt(
         &mut self,
         i: &TSimplCfg<D>,
@@ -225,7 +356,15 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                 args: args.iter().map(|a| path!(&a.0)).collect(),
             },
             SimplItem::CallTag { tag, args } => match tag.path {},
-            SimplItem::DiscriminantIn { value, ids } => todo!(),
+            SimplItem::DiscriminantIn { value, ids } => self.discriminant(
+                i,
+                o,
+                k,
+                n,
+                &value.0,
+                ids.iter().map(|(a, b)| (a, b.iter().map(|c| &c.0))),
+                span,
+            ),
         };
         Ok((
             TStmt {
