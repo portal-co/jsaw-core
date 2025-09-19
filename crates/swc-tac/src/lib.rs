@@ -911,7 +911,7 @@ pub enum Item<I = Ident, F = TFunc> {
     // },
 }
 impl<I> Item<I> {
-    pub fn map<J: Ord, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J>, E> {
+    pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J>, E> {
         self.map2(f, &mut |a, b| a(b), &mut |_, b| Ok(b))
     }
 }
