@@ -350,7 +350,7 @@ impl<I, B, F> SValue<I, B, F> {
             },
         }
     }
-    pub fn map<J: Ord, C, G, X, E>(
+    pub fn map<J, C, G, X, E>(
         self,
         cx: &mut X,
         ident: &mut (dyn FnMut(&mut X, I) -> Result<J, E> + '_),

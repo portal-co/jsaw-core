@@ -717,7 +717,7 @@ impl<I> PropKey<I> {
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
-    pub fn map<J: Ord, E>(
+    pub fn map<J, E>(
         self,
         f: &mut (dyn FnMut(I) -> Result<J, E> + '_),
     ) -> Result<PropKey<J>, E> {
@@ -1114,7 +1114,7 @@ impl<I, F> Item<I, F> {
                // },
         }
     }
-    pub fn map2<J: Ord, G, E, C: ?Sized>(
+    pub fn map2<J, G, E, C: ?Sized>(
         self,
         cx: &mut C,
         f: &mut (dyn FnMut(&mut C, I) -> Result<J, E> + '_),
