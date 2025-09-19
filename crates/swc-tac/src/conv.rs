@@ -36,7 +36,7 @@ impl ToTACConverter<'_> {
             }
             _ => {}
         }
-        fn px<'a, 'b: 'a>(
+        fn try_get_frames<'a, 'b: 'a>(
             a: &'a Expr,
             b: &'b Expr,
         ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
@@ -49,30 +49,69 @@ impl ToTACConverter<'_> {
                             && a.left.as_simple().is_some_and(|s| s.is_ident())
                             && a.op == b.op =>
                     {
-                        let (mut e, a2, b) = px(&a.right, &b.right)?;
+                        let (mut e, a2, b) = try_get_frames(&a.right, &b.right)?;
                         e.push(Frame::Assign(&a.left, a.op));
                         Some((e, a2, b))
                     }
                     (Expr::Member(a), Expr::Member(b)) if a.prop.eq_ignore_span(&b.prop) => {
-                        let (mut e, a2, b) = px(&a.obj, &b.obj)?;
+                        let (mut e, a2, b) = try_get_frames(&a.obj, &b.obj)?;
                         e.push(Frame::Member(&a.prop));
                         Some((e, a2, b))
                     }
                     (Expr::Member(a), Expr::Member(b))
                         if a.prop.is_computed() && b.prop.is_computed() =>
                     {
-                        let (mut e, a2, b2) = px(&a.obj, &b.obj)?;
+                        let (mut e, a2, b2) = try_get_frames(&a.obj, &b.obj)?;
                         e.push(Frame::Member2(
                             &a.prop.as_computed().unwrap().expr,
                             &b.prop.as_computed().unwrap().expr,
                         ));
                         Some((e, a2, b2))
                     }
+                    (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
+                        let (Callee::Expr(a2), Callee::Expr(b2)) = (&a.callee, &b.callee) else {
+                            return None;
+                        };
+                        match (&**a2, &**b2) {
+                            (Expr::Member(a2), Expr::Member(b2))
+                                if a2.prop.eq_ignore_span(&b2.prop) =>
+                            {
+                                let (mut e, a2_, b2) = try_get_frames(&a2.obj, &b2.obj)?;
+                                e.push(Frame::CallMember(
+                                    &a2.prop,
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                ));
+                                Some((e, a2_, b2))
+                            }
+                            (Expr::Member(aa), Expr::Member(bb))
+                                if aa.prop.is_computed() && bb.prop.is_computed() =>
+                            {
+                                let (mut e, a2_, b2) = try_get_frames(&aa.obj, &bb.obj)?;
+                                e.push(Frame::CallMember2(
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    &aa.prop.as_computed().unwrap().expr,
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                    &bb.prop.as_computed().unwrap().expr,
+                                ));
+                                Some((e, a2_, b2))
+                            }
+                            (Expr::Member(_), _) | (_, Expr::Member(_)) => None,
+                            (a2, b2) => {
+                                let (mut e, a2, b2) = try_get_frames(a2, b2)?;
+                                e.push(Frame::Call(
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                ));
+                                Some((e, a2, b2))
+                            }
+                        }
+                    }
                     _ => None,
                 }
             }
         }
-        if let Some((frames, c2, a2)) = px(&cons, &alt) {
+        if let Some((frames, c2, a2)) = try_get_frames(&cons, &alt) {
             let cons;
             let alt;
             (cons, t) = self.expr(i, o, b, t, &c2)?;
@@ -1047,6 +1086,103 @@ impl ToTACConverter<'_> {
                     left: LId::Id { id: v.clone() },
                     flags: ValFlags::SSA_LIKE,
                     right: Item::Mem { obj: s, mem },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
+            Frame::Call(a, b2) => {
+                let mut args = Vec::default();
+                let mut arg;
+                for (a, b2) in a.iter().zip(b2.iter()) {
+                    (arg, t) = self.convert_cond_expr(
+                        i,
+                        o,
+                        b,
+                        t,
+                        r.clone(),
+                        a,
+                        b2,
+                        Span::dummy_with_cmt(),
+                    )?;
+                    args.push(arg);
+                }
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Call {
+                        callee: TCallee::Val(s),
+                        args: args,
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
+            Frame::CallMember(prop, a, b2) => {
+                let mem;
+                (mem, t) = self.member_prop_expr(i, o, b, t, prop)?;
+                let mut args = Vec::default();
+                let mut arg;
+                for (a, b2) in a.iter().zip(b2.iter()) {
+                    (arg, t) = self.convert_cond_expr(
+                        i,
+                        o,
+                        b,
+                        t,
+                        r.clone(),
+                        a,
+                        b2,
+                        Span::dummy_with_cmt(),
+                    )?;
+                    args.push(arg);
+                }
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Call {
+                        callee: TCallee::Member {
+                            func: s,
+                            member: mem,
+                        },
+                        args: args,
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
+            Frame::CallMember2(a, am, b2, bm) => {
+                 let mem;
+                (mem, t) = self.convert_cond_expr(i, o, b, t, r.clone(), am, bm, Span::dummy_with_cmt())?;
+                let mut args = Vec::default();
+                let mut arg;
+                for (a, b2) in a.iter().zip(b2.iter()) {
+                    (arg, t) = self.convert_cond_expr(
+                        i,
+                        o,
+                        b,
+                        t,
+                        r.clone(),
+                        a,
+                        b2,
+                        Span::dummy_with_cmt(),
+                    )?;
+                    args.push(arg);
+                }
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Call {
+                        callee: TCallee::Member {
+                            func: s,
+                            member: mem,
+                        },
+                        args: args,
+                    },
                     span: Span::dummy_with_cmt(),
                 });
                 o.decls.insert(v.clone());

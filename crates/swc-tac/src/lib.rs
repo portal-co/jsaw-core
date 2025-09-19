@@ -1447,5 +1447,8 @@ enum Frame<'a> {
     Assign(&'a AssignTarget, AssignOp),
     Member(&'a MemberProp),
     Member2(&'a Expr, &'a Expr),
+    Call(Vec<&'a Expr>,Vec<&'a Expr>),
+    CallMember(&'a MemberProp,Vec<&'a Expr>,Vec<&'a Expr>),
+    CallMember2(Vec<&'a Expr>,&'a Expr,Vec<&'a Expr>,&'a Expr)
 }
 // #[derive(Default)]
