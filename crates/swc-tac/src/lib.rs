@@ -1447,5 +1447,9 @@ enum Frame<'a> {
     Call(Vec<&'a Expr>, Vec<&'a Expr>),
     CallMember(&'a MemberProp, Vec<&'a Expr>, Vec<&'a Expr>),
     CallMember2(Vec<&'a Expr>, &'a MemberProp, Vec<&'a Expr>, &'a MemberProp),
+    Await,
+    Yield{
+        delegate: bool,
+    }
 }
 // #[derive(Default)]

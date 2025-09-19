@@ -122,6 +122,18 @@ impl ToTACConverter<'_> {
                         e.push(Frame::Member2(&a.prop, &b.prop));
                         Some((e, a2, b2))
                     }
+                    (Expr::Await(a), Expr::Await(b)) => {
+                        let (mut e, a2, b2) = try_get_frames(&a.arg, &b.arg)?;
+                        e.push(Frame::Await);
+                        Some((e, a2, b2))
+                    }
+                    (Expr::Yield(a), Expr::Yield(b)) if a.delegate == b.delegate => {
+                        let (mut e, a2, b2) = try_get_frames(a.arg.as_ref()?, b.arg.as_ref()?)?;
+                        e.push(Frame::Yield {
+                            delegate: a.delegate,
+                        });
+                        Some((e, a2, b2))
+                    }
                     (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
                         let (Callee::Expr(a2), Callee::Expr(b2)) = (&a.callee, &b.callee) else {
                             return None;
@@ -1247,6 +1259,31 @@ impl ToTACConverter<'_> {
                             member: mem,
                         },
                         args: args,
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
+            Frame::Await => {
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Await { value: s },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(v.clone());
+                Ok((v, t))
+            }
+            Frame::Yield { delegate } => {
+                let v = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: v.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Yield {
+                        value: Some(s),
+                        delegate,
                     },
                     span: Span::dummy_with_cmt(),
                 });
