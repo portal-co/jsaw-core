@@ -9,10 +9,11 @@ use swc_cfg::Loop;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
 
-use crate::{ValFlags, lam::LAM};
+use crate::*;
 
 pub mod impls;
 pub mod reloop;
+pub mod convert;
 
 pub trait TacDialect: Dialect<Mark<()>: Clone + Default> {}
 
