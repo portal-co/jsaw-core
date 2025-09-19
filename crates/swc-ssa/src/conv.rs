@@ -293,82 +293,93 @@ impl ToSSAConverter {
                     app.clone()
                 }
             };
-            let term = match &i.blocks[k].post.term {
-                TTerm::Tail { callee, args } => TTerm::Tail {
-                    callee: callee
-                        .as_ref()
-                        .map(&mut |a| self.load(&state, i, o, t, a.clone(), &cache))?,
-                    args: args
-                        .iter()
-                        .map(|a| self.load(&state, i, o, t, a.clone(), &cache))
-                        .collect::<Result<_, _>>()?,
-                },
-                swc_tac::TTerm::Return(ident) => match ident.as_ref() {
-                    None => STerm::Return(None),
-                    Some(a) => {
-                        STerm::Return(Some(self.load(&state, i, o, t, a.clone(), &cache)?))
-                    }
-                },
-                swc_tac::TTerm::Throw(ident) => {
-                    STerm::Throw(self.load(&state, i, o, t, ident.clone(), &cache)?)
-                }
-                swc_tac::TTerm::Jmp(id) => {
-                    let id2 = self.trans(i, o, *id, &mut dtc(self, *id).into_iter())?;
-                    STerm::Jmp(STarget {
+            let term = i.blocks[k].post.term.as_ref().map(
+                &mut (&mut *self, &mut *o),
+                &mut |(this, o), id| {
+                    let id2 = this.trans(i, o, *id, &mut dtc(this, *id).into_iter())?;
+                    Ok(STarget {
                         block: id2,
-                        args: params(self, *id),
+                        args: params(this, *id),
                     })
-                }
-                swc_tac::TTerm::CondJmp {
-                    cond,
-                    if_true,
-                    if_false,
-                } => {
-                    let if_true2 =
-                        self.trans(i, o, *if_true, &mut dtc(self, *if_true).into_iter())?;
-                    let if_true = STarget {
-                        block: if_true2,
-                        args: params(self, *if_true),
-                    };
-                    let if_false2 =
-                        self.trans(i, o, *if_false, &mut dtc(self, *if_false).into_iter())?;
-                    let if_false = STarget {
-                        block: if_false2,
-                        args: params(self, *if_false),
-                    };
-                    let cond = self.load(&state, i, o, t, cond.clone(), &cache)?;
-                    STerm::CondJmp {
-                        cond,
-                        if_true,
-                        if_false,
-                    }
-                }
-                swc_tac::TTerm::Switch { x, blocks, default } => {
-                    let x = self.load(&state, i, o, t, x.clone(), &cache)?;
-                    let blocks = blocks
-                        .iter()
-                        .map(|(a, b)| {
-                            let c = self.trans(i, o, *b, &mut dtc(self, *b).into_iter())?;
-                            let d = self.load(&state, i, o, t, a.clone(), &cache)?;
-                            Ok((
-                                d,
-                                STarget {
-                                    block: c,
-                                    args: params(self, *b),
-                                },
-                            ))
-                        })
-                        .collect::<anyhow::Result<Vec<_>>>()?;
-                    let default2 =
-                        self.trans(i, o, *default, &mut dtc(self, *default).into_iter())?;
-                    let default = STarget {
-                        block: default2,
-                        args: params(self, *default),
-                    };
-                    STerm::Switch { x, blocks, default }
-                }
-                swc_tac::TTerm::Default => STerm::Default,
-            };
+                },
+                &mut |(this, o), a| this.load(&state, i, o, t, a.clone(), &cache),
+            )?;
+            // let term = match &i.blocks[k].post.term {
+            //     TTerm::Tail { callee, args } => TTerm::Tail {
+            //         callee: callee
+            //             .as_ref()
+            //             .map(&mut |a| self.load(&state, i, o, t, a.clone(), &cache))?,
+            //         args: args
+            //             .iter()
+            //             .map(|a| self.load(&state, i, o, t, a.clone(), &cache))
+            //             .collect::<Result<_, _>>()?,
+            //     },
+            //     swc_tac::TTerm::Return(ident) => match ident.as_ref() {
+            //         None => STerm::Return(None),
+            //         Some(a) => {
+            //             STerm::Return(Some(self.load(&state, i, o, t, a.clone(), &cache)?))
+            //         }
+            //     },
+            //     swc_tac::TTerm::Throw(ident) => {
+            //         STerm::Throw(self.load(&state, i, o, t, ident.clone(), &cache)?)
+            //     }
+            //     swc_tac::TTerm::Jmp(id) => {
+            //         let id2 = self.trans(i, o, *id, &mut dtc(self, *id).into_iter())?;
+            //         STerm::Jmp(STarget {
+            //             block: id2,
+            //             args: params(self, *id),
+            //         })
+            //     }
+            //     swc_tac::TTerm::CondJmp {
+            //         cond,
+            //         if_true,
+            //         if_false,
+            //     } => {
+            //         let if_true2 =
+            //             self.trans(i, o, *if_true, &mut dtc(self, *if_true).into_iter())?;
+            //         let if_true = STarget {
+            //             block: if_true2,
+            //             args: params(self, *if_true),
+            //         };
+            //         let if_false2 =
+            //             self.trans(i, o, *if_false, &mut dtc(self, *if_false).into_iter())?;
+            //         let if_false = STarget {
+            //             block: if_false2,
+            //             args: params(self, *if_false),
+            //         };
+            //         let cond = self.load(&state, i, o, t, cond.clone(), &cache)?;
+            //         STerm::CondJmp {
+            //             cond,
+            //             if_true,
+            //             if_false,
+            //         }
+            //     }
+            //     swc_tac::TTerm::Switch { x, blocks, default } => {
+            //         let x = self.load(&state, i, o, t, x.clone(), &cache)?;
+            //         let blocks = blocks
+            //             .iter()
+            //             .map(|(a, b)| {
+            //                 let c = self.trans(i, o, *b, &mut dtc(self, *b).into_iter())?;
+            //                 let d = self.load(&state, i, o, t, a.clone(), &cache)?;
+            //                 Ok((
+            //                     d,
+            //                     STarget {
+            //                         block: c,
+            //                         args: params(self, *b),
+            //                     },
+            //                 ))
+            //             })
+            //             .collect::<anyhow::Result<Vec<_>>>()?;
+            //         let default2 =
+            //             self.trans(i, o, *default, &mut dtc(self, *default).into_iter())?;
+            //         let default = STarget {
+            //             block: default2,
+            //             args: params(self, *default),
+            //         };
+            //         STerm::Switch { x, blocks, default }
+            //     }
+            //     swc_tac::TTerm::Default => STerm::Default,
+            // };
             o.blocks[t].postcedent.term = term;
         }
     }

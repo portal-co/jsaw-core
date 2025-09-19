@@ -217,78 +217,14 @@ impl Rew {
                             }
                         }
                     }
-                    let term = match &func.cfg.blocks[*block_id].postcedent.term {
-                        crate::STerm::Throw(id) => swc_tac::TTerm::Throw(mangle_value(
-                            self.prefix.clone(),
-                            ctxt,
-                            func,
-                            *id,
-                        )),
-                        crate::STerm::Return(id) => swc_tac::TTerm::Return(
-                            id.clone()
-                                .map(|value| mangle_value(self.prefix.clone(), ctxt, func, value)),
-                        ),
-                        STerm::Tail { callee, args } => TTerm::Tail {
-                            callee: callee
-                                .as_ref()
-                                .map(&mut |a| {
-                                    Ok::<_, Infallible>(mangle_value(
-                                        self.prefix.clone(),
-                                        ctxt,
-                                        func,
-                                        *a,
-                                    ))
-                                })
-                                .unwrap(),
-                            args: args
-                                .iter()
-                                .map(|a| mangle_value(self.prefix.clone(), ctxt, func, *a))
-                                .collect(),
+                    let term = func.cfg.blocks[*block_id].postcedent.term.as_ref().map(
+                        &mut *self,
+                        &mut |this, starget| {
+                            this.trans(func, cfg, BlockEntry::Target(starget.clone(), None))
                         },
-                        crate::STerm::Jmp(starget) => TTerm::Jmp(self.trans(
-                            func,
-                            cfg,
-                            BlockEntry::Target(starget.clone(), None),
-                        )?),
-                        crate::STerm::CondJmp {
-                            cond,
-                            if_true,
-                            if_false,
-                        } => {
-                            let if_true =
-                                self.trans(func, cfg, BlockEntry::Target(if_true.clone(), None))?;
-                            let if_false =
-                                self.trans(func, cfg, BlockEntry::Target(if_false.clone(), None))?;
-                            TTerm::CondJmp {
-                                cond: mangle_value(self.prefix.clone(), ctxt, func, *cond),
-                                if_true,
-                                if_false,
-                            }
-                        }
-                        crate::STerm::Switch { x, blocks, default } => {
-                            let default =
-                                self.trans(func, cfg, BlockEntry::Target(default.clone(), None))?;
-                            let blocks = blocks
-                                .iter()
-                                .map(|(a2, b2)| {
-                                    anyhow::Ok((
-                                        mangle_value(self.prefix.clone(), ctxt, func, *a2),
-                                        self.trans(
-                                            func,
-                                            cfg,
-                                            BlockEntry::Target(b2.clone(), None),
-                                        )?,
-                                    ))
-                                })
-                                .collect::<anyhow::Result<_>>()?;
-                            TTerm::Switch {
-                                x: mangle_value(self.prefix.clone(), ctxt, func, *x),
-                                blocks,
-                                default,
-                            }
-                        }
-                        crate::STerm::Default => swc_tac::TTerm::Default,
-                    };
+                        &mut |this, a| Ok(mangle_value(this.prefix.clone(), ctxt, func, *a)),
+                    )?;
+
                     cfg.blocks[new_block_id].post.term = term;
                 }
                 BlockEntry::Target(starget, val) => {
