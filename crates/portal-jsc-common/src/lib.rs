@@ -21,6 +21,18 @@ bitflags::bitflags! {
 pub enum SemanticTarget {
     #[default]
     ECMAScript,
+    Simpl(SimplVersion),
+    MuJSC(MuJSCVersion),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum MuJSCVersion {
+    
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum SimplVersion{
+    Legacy,
 }
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum RefOrMut<'a, T: ?Sized> {
