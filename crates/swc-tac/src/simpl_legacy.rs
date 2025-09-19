@@ -108,31 +108,36 @@ impl<D: TacDialect> Clone for TSimplBlock<D> {
         }
     }
 }
-
+pub struct SimplRef<D: TacDialect,P>(pub P, pub D::Mark<()>);
+impl<D: TacDialect,P: Clone> Clone for SimplRef<D,P>{
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), self.1.clone())
+    }
+}
 #[non_exhaustive]
 pub enum SimplItem<D: TacDialect, P = SimplPathId> {
     Just {
-        id: (P, D::Mark<()>),
+        id: SimplRef<D,P>,
     },
     Bin {
-        left: (P, D::Mark<()>),
-        right: (P, D::Mark<()>),
+        left: SimplRef<D,P>,
+        right: SimplRef<D,P>,
         op: BinaryOp,
     },
     Lit {
         lit: Lit,
     },
     CallStatic {
-        r#fn: FuncId<Expr, (P, D::Mark<()>)>,
-        args: Vec<(P, D::Mark<()>)>,
+        r#fn: FuncId<Expr, SimplRef<D,P>>,
+        args: Vec<SimplRef<D,P>>,
     },
     CallTag {
         tag: FuncId<Expr, D::Tag>,
-        args: Vec<(P, D::Mark<()>)>,
+        args: Vec<SimplRef<D,P>>,
     },
     DiscriminantIn {
-        value: (P, D::Mark<()>),
-        ids: BTreeMap<Ident, Vec<(P, D::Mark<()>)>>,
+        value: SimplRef<D,P>,
+        ids: BTreeMap<Ident, Vec<SimplRef<D,P>>>,
     },
 }
 impl<D: TacDialect, P> SimplItem<D, P> {
@@ -142,37 +147,37 @@ impl<D: TacDialect, P> SimplItem<D, P> {
     ) -> Result<SimplItem<D, Q>, E> {
         Ok(match self {
             SimplItem::Just { id } => SimplItem::Just {
-                id: (go(id.0)?, id.1),
+                id: SimplRef(go(id.0)?, id.1),
             },
             SimplItem::Bin { left, right, op } => SimplItem::Bin {
-                left: (go(left.0)?, left.1),
-                right: (go(right.0)?, right.1),
+                left: SimplRef(go(left.0)?, left.1),
+                right: SimplRef(go(right.0)?, right.1),
                 op: op,
             },
             SimplItem::Lit { lit } => SimplItem::Lit { lit: lit },
             SimplItem::CallStatic { r#fn, args } => SimplItem::CallStatic {
-                r#fn: r#fn.map(|r#fn| Ok::<_, E>((go(r#fn.0)?, r#fn.1)), Ok)?,
+                r#fn: r#fn.map(|r#fn| Ok::<_, E>(SimplRef(go(r#fn.0)?, r#fn.1)), Ok)?,
                 args: args
                     .into_iter()
-                    .map(|(a, b)| Ok((go(a)?, b)))
+                    .map(|SimplRef(a, b)| Ok(SimplRef(go(a)?, b)))
                     .collect::<Result<_, E>>()?,
             },
             SimplItem::CallTag { tag, args } => SimplItem::CallTag {
                 tag: tag,
                 args: args
                     .into_iter()
-                    .map(|(a, b)| Ok((go(a)?, b)))
+                    .map(|SimplRef(a, b)| Ok(SimplRef(go(a)?, b)))
                     .collect::<Result<_, E>>()?,
             },
             SimplItem::DiscriminantIn { value, ids } => SimplItem::DiscriminantIn {
-                value: (go(value.0)?, value.1),
+                value: SimplRef(go(value.0)?, value.1),
                 ids: ids
                     .into_iter()
                     .map(|(i, v)| {
                         Ok((
                             i,
                             v.into_iter()
-                                .map(|(a, b)| Ok((go(a)?, b)))
+                                .map(|SimplRef(a, b)| Ok(SimplRef(go(a)?, b)))
                                 .collect::<Result<_, E>>()?,
                         ))
                     })
@@ -208,21 +213,21 @@ impl<D: TacDialect, P: Clone> Clone for SimplItem<D, P> {
 }
 
 pub enum TSimplTerm<D: TacDialect> {
-    Return((SimplPathId, D::Mark<()>)),
+    Return(SimplRef<D,SimplPathId>),
     // Throw(Ident),
     Jmp(Id<TSimplBlock<D>>),
     CondJmp {
-        cond: (SimplPathId, D::Mark<()>),
+        cond: SimplRef<D,SimplPathId>,
         if_true: Id<TSimplBlock<D>>,
         if_false: Id<TSimplBlock<D>>,
     },
     Select {
-        scrutinee: (SimplPathId, D::Mark<()>),
-        cases: BTreeMap<Ident, (Id<TSimplBlock<D>>, Vec<(SimplPathId, D::Mark<()>)>)>,
+        scrutinee: SimplRef<D,SimplPathId>,
+        cases: BTreeMap<Ident, (Id<TSimplBlock<D>>, Vec<SimplRef<D,SimplPathId>>)>,
     },
     Switch {
-        scrutinee: (SimplPathId, D::Mark<()>),
-        cases: Vec<((SimplPathId, D::Mark<()>), Id<TSimplBlock<D>>)>,
+        scrutinee: SimplRef<D,SimplPathId>,
+        cases: Vec<(SimplRef<D,SimplPathId>, Id<TSimplBlock<D>>)>,
     },
     Default,
 }
@@ -268,7 +273,7 @@ pub trait Bake<D: TacDialect> {
     ) -> (Self::Res, Id<TSimplBlock<D>>);
 }
 impl<D: TacDialect> Bake<D> for SimplExpr<D> {
-    type Res = (SimplPathId, D::Mark<()>);
+    type Res = SimplRef<D,SimplPathId>;
 
     fn bake(
         &self,
@@ -292,11 +297,11 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     },
                     span: literal.span(),
                 });
-                ((i, Default::default()), start_block)
+                (SimplRef(i, Default::default()), start_block)
             }
             SimplExpr::Ident(i) => (
                 match D::despan(i.clone()) {
-                    (a, b) => (b.to_id(), a),
+                    (a, b) => SimplRef(b.to_id(), a),
                 },
                 start_block,
             ),
@@ -313,14 +318,14 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     right: match make_spanned.value.assign.to_update() {
                         None => SimplItem::Just { id: value },
                         Some(b) => SimplItem::Bin {
-                            left: (o.clone(), mark.clone()),
+                            left: SimplRef(o.clone(), mark.clone()),
                             right: value,
                             op: b,
                         },
                     },
                     span: make_spanned.span,
                 });
-                ((o, mark), start_block)
+                (SimplRef(o, mark), start_block)
             }
             SimplExpr::Bin(make_spanned) => {
                 let (left, start_block) =
@@ -342,7 +347,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     },
                     span: make_spanned.span,
                 });
-                ((i, Default::default()), start_block)
+                (SimplRef(i, Default::default()), start_block)
             }
             SimplExpr::Call(make_spanned) => match &*make_spanned.value {
                 portal_jsc_simpl_js::SimplCallExpr::Path { path, args } => {
@@ -358,7 +363,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         right: SimplItem::CallStatic {
                             r#fn: FuncId {
                                 path: match D::despan(path.path.clone()) {
-                                    (a, b) => (b.to_id(), a),
+                                    (a, b) =>SimplRef (b.to_id(), a),
                                 },
                                 template_args: path.template_args.clone(),
                             },
@@ -366,7 +371,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         },
                         span: make_spanned.span,
                     });
-                    ((i, Default::default()), start_block)
+                    (SimplRef(i, Default::default()), start_block)
                 }
                 portal_jsc_simpl_js::SimplCallExpr::Tag { tag, args } => {
                     let (args, start_block) = args.bake(labels, ret, cfg, start_block);
@@ -384,7 +389,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         },
                         span: make_spanned.span,
                     });
-                    ((i, Default::default()), start_block)
+                    (SimplRef(i, Default::default()), start_block)
                 }
                 portal_jsc_simpl_js::SimplCallExpr::Block(simpl_stmt) => {
                     let i = SimplPathId {
@@ -396,7 +401,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         simpl_stmt.bake(labels, Some(&(then, i.clone())), cfg, start_block);
                     cfg.blocks[start_block].term = TSimplTerm::Jmp(then);
                     cfg.blocks[start_block].orig_span = Some(make_spanned.span);
-                    ((i, Default::default()), then)
+                    (SimplRef(i, Default::default()), then)
                 }
             },
             SimplExpr::Select(make_spanned) => {
@@ -428,7 +433,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                                         root: a.to_id(),
                                         keys: vec![],
                                     })
-                                    .map(|a| (a, Default::default()))
+                                    .map(|a| SimplRef(a, Default::default()))
                                     .collect(),
                             ),
                         )
@@ -439,7 +444,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                     scrutinee: value,
                     cases: xs,
                 };
-                ((i, Default::default()), then)
+                (SimplRef(i, Default::default()), then)
                 // (i, then)
             }
             _ => todo!(),
