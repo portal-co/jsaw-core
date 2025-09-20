@@ -13,6 +13,6 @@ swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
 
 
-portal-jsc-swc-util = { version = "0.8.0-pre.0", path = "../swc-util",features = ["ty"] }
+portal-jsc-swc-util.workspace = true
 typenum.workspace = true
 
