@@ -223,11 +223,18 @@ impl TryFrom<Function> for TFunc {
         return a.try_into();
     }
 }
-impl Default for TFunc{
+impl Default for TFunc {
     fn default() -> Self {
         let mut cfg = TCfg::default();
         let entry = cfg.blocks.alloc(Default::default());
-        Self { cfg, entry, params: Default::default(), ts_params: Default::default(), is_generator: Default::default(), is_async: Default::default() }
+        Self {
+            cfg,
+            entry,
+            params: Default::default(),
+            ts_params: Default::default(),
+            is_generator: Default::default(),
+            is_async: Default::default(),
+        }
     }
 }
 #[derive(Default, Clone, Debug)]
@@ -1455,8 +1462,16 @@ enum Frame<'a> {
     CallMember(&'a MemberProp, Vec<&'a Expr>, Vec<&'a Expr>),
     CallMember2(Vec<&'a Expr>, &'a MemberProp, Vec<&'a Expr>, &'a MemberProp),
     Await,
-    Yield{
+    Yield {
         delegate: bool,
-    }
+    },
+    Cond {
+        thena: &'a Expr,
+        elsea: &'a Expr,
+        fra: Vec<Frame<'a>>,
+        thenb: &'a Expr,
+        elseb: &'a Expr,
+        frb: Vec<Frame<'a>>,
+    },
 }
 // #[derive(Default)]

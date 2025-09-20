@@ -134,6 +134,20 @@ impl ToTACConverter<'_> {
                         });
                         Some((e, a2, b2))
                     }
+                    (Expr::Cond(a), Expr::Cond(b)) => {
+                        let (mut e, a2, b2) = try_get_frames(&a.test, &b.test)?;
+                        let (fra, thena, elsea) = try_get_frames(&a.cons, &a.alt)?;
+                        let (frb, thenb, elseb) = try_get_frames(&b.cons, &b.alt)?;
+                        e.push(Frame::Cond {
+                            thena,
+                            elsea,
+                            fra,
+                            thenb,
+                            elseb,
+                            frb,
+                        });
+                        Some((e, a2, b2))
+                    }
                     (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
                         let (Callee::Expr(a2), Callee::Expr(b2)) = (&a.callee, &b.callee) else {
                             return None;
@@ -1289,6 +1303,56 @@ impl ToTACConverter<'_> {
                 });
                 o.decls.insert(v.clone());
                 Ok((v, t))
+            }
+            Frame::Cond {
+                thena,
+                elsea,
+                fra,
+                thenb,
+                elseb,
+                frb,
+            } => {
+                let mut a;
+                let mut b2;
+                (a, t) = self.convert_cond_expr(
+                    i,
+                    o,
+                    b,
+                    t,
+                    s.clone(),
+                    thena,
+                    elsea,
+                    Span::dummy_with_cmt(),
+                )?;
+                for f in fra.into_iter() {
+                    (a, t) = self.frame(i, o, b, t, f, a, s.clone())?;
+                }
+                (b2, t) = self.convert_cond_expr(
+                    i,
+                    o,
+                    b,
+                    t,
+                    s.clone(),
+                    thenb,
+                    elseb,
+                    Span::dummy_with_cmt(),
+                )?;
+                for f in frb.into_iter() {
+                    (b2, t) = self.frame(i, o, b, t, f, b2, s.clone())?;
+                }
+                let mut tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Select {
+                        cond: r.clone(),
+                        then: a,
+                        otherwise: b2,
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
             }
         }
     }

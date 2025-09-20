@@ -27,17 +27,13 @@ pub enum SemanticTarget {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum MuJSCVersion {
-
-}
+pub enum MuJSCVersion {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum PorfforVersion {
-
-}
+pub enum PorfforVersion {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum SimplVersion{
+pub enum SimplVersion {
     Legacy,
 }
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

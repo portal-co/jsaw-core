@@ -81,114 +81,125 @@ pub fn reloop<D: TacDialect>(
             let mut body = block
                 .stmts
                 .iter()
-                .map(|TSimplStmt { left: b, mark: m, flags: f, right: i, span: e }| {
-                    let e = *e;
-                    let loaded: SimplExpr<D> = match i {
-                        SimplItem::Just { id } => {
-                            SimplExpr::Ident(D::span(id.1.clone(), id.0.clone().span(e)))
-                        }
-                        SimplItem::Bin { left, right, op } => SimplExpr::Bin(MakeSpanned {
-                            span,
-                            value: SimplBinOp {
-                                lhs: Box::new(SimplExpr::Ident(D::span(
-                                    left.1.clone(),
-                                    left.0.clone().span(e),
-                                ))),
-                                rhs: Box::new(SimplExpr::Ident(D::span(
-                                    right.1.clone(),
-                                    right.0.clone().span(e),
-                                ))),
-                                op: op.clone(),
-                            },
-                        }),
-                        SimplItem::Lit { lit } => SimplExpr::Lit(lit.clone()),
-                        SimplItem::CallStatic { r#fn, args } => SimplExpr::Call(MakeSpanned {
-                            value: Box::new(SimplCallExpr::Path {
-                                path: FuncId {
-                                    path: D::span(r#fn.path.1.clone(), r#fn.path.0.clone().span(e)),
-                                    template_args: r#fn.template_args.clone(),
-                                },
-                                args: args
-                                    .iter()
-                                    .map(|id| {
-                                        SimplExpr::Ident(D::span(
-                                            id.1.clone(),
-                                            id.0.clone().span(e),
-                                        ))
-                                    })
-                                    .collect(),
-                            }),
-                            span: span,
-                        }),
-                        SimplItem::CallTag { tag, args } => SimplExpr::Call(MakeSpanned {
-                            value: Box::new(SimplCallExpr::Tag {
-                                tag: tag.clone(),
-                                args: args
-                                    .iter()
-                                    .map(|id| {
-                                        SimplExpr::Ident(D::span(
-                                            id.1.clone(),
-                                            id.0.clone().span(e),
-                                        ))
-                                    })
-                                    .collect(),
-                            }),
-                            span: span,
-                        }),
-                        SimplItem::DiscriminantIn { value, ids } => {
-                            SimplExpr::Select(MakeSpanned {
-                                value: SimplSelectExpr {
-                                    scrutinee: Box::new(SimplExpr::Ident(D::span(
-                                        value.1.clone(),
-                                        value.0.clone().span(e),
+                .map(
+                    |TSimplStmt {
+                         left: b,
+                         mark: m,
+                         flags: f,
+                         right: i,
+                         span: e,
+                     }| {
+                        let e = *e;
+                        let loaded: SimplExpr<D> = match i {
+                            SimplItem::Just { id } => {
+                                SimplExpr::Ident(D::span(id.1.clone(), id.0.clone().span(e)))
+                            }
+                            SimplItem::Bin { left, right, op } => SimplExpr::Bin(MakeSpanned {
+                                span,
+                                value: SimplBinOp {
+                                    lhs: Box::new(SimplExpr::Ident(D::span(
+                                        left.1.clone(),
+                                        left.0.clone().span(e),
                                     ))),
-                                    cases: ids
+                                    rhs: Box::new(SimplExpr::Ident(D::span(
+                                        right.1.clone(),
+                                        right.0.clone().span(e),
+                                    ))),
+                                    op: op.clone(),
+                                },
+                            }),
+                            SimplItem::Lit { lit } => SimplExpr::Lit(lit.clone()),
+                            SimplItem::CallStatic { r#fn, args } => SimplExpr::Call(MakeSpanned {
+                                value: Box::new(SimplCallExpr::Path {
+                                    path: FuncId {
+                                        path: D::span(
+                                            r#fn.path.1.clone(),
+                                            r#fn.path.0.clone().span(e),
+                                        ),
+                                        template_args: r#fn.template_args.clone(),
+                                    },
+                                    args: args
                                         .iter()
-                                        .enumerate()
-                                        .map(|(i, (a, b))| {
-                                            (
-                                                a.clone(),
-                                                (
-                                                    vec![SimplStmt::Return(MakeSpanned {
-                                                        value: Box::new(SimplExpr::Lit(Lit::Num(
-                                                            Number {
-                                                                span: e,
-                                                                raw: None,
-                                                                value: i as u32 as f64,
-                                                            },
-                                                        ))),
-                                                        span: e,
-                                                    })],
-                                                    b.iter()
-                                                        .map(|c| c.0.root.clone())
-                                                        .map(|(a, b)| swc_ecma_ast::Ident {
-                                                            span: e,
-                                                            ctxt: b,
-                                                            sym: a,
-                                                            optional: false,
-                                                        })
-                                                        .collect(),
-                                                ),
-                                            )
+                                        .map(|id| {
+                                            SimplExpr::Ident(D::span(
+                                                id.1.clone(),
+                                                id.0.clone().span(e),
+                                            ))
                                         })
                                         .collect(),
-                                },
+                                }),
                                 span: span,
-                            })
-                        }
-                    };
-                    SimplStmt::Expr(MakeSpanned {
-                        value: Box::new(SimplExpr::Assign(MakeSpanned {
-                            value: SimplAssignment {
-                                target: D::span(m.clone(), b.clone().span(e)),
-                                assign: AssignOp::Assign,
-                                body: Box::new(loaded),
-                            },
-                            span: e,
-                        })),
-                        span: span,
-                    })
-                })
+                            }),
+                            SimplItem::CallTag { tag, args } => SimplExpr::Call(MakeSpanned {
+                                value: Box::new(SimplCallExpr::Tag {
+                                    tag: tag.clone(),
+                                    args: args
+                                        .iter()
+                                        .map(|id| {
+                                            SimplExpr::Ident(D::span(
+                                                id.1.clone(),
+                                                id.0.clone().span(e),
+                                            ))
+                                        })
+                                        .collect(),
+                                }),
+                                span: span,
+                            }),
+                            SimplItem::DiscriminantIn { value, ids } => {
+                                SimplExpr::Select(MakeSpanned {
+                                    value: SimplSelectExpr {
+                                        scrutinee: Box::new(SimplExpr::Ident(D::span(
+                                            value.1.clone(),
+                                            value.0.clone().span(e),
+                                        ))),
+                                        cases: ids
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, (a, b))| {
+                                                (
+                                                    a.clone(),
+                                                    (
+                                                        vec![SimplStmt::Return(MakeSpanned {
+                                                            value: Box::new(SimplExpr::Lit(
+                                                                Lit::Num(Number {
+                                                                    span: e,
+                                                                    raw: None,
+                                                                    value: i as u32 as f64,
+                                                                }),
+                                                            )),
+                                                            span: e,
+                                                        })],
+                                                        b.iter()
+                                                            .map(|c| c.0.root.clone())
+                                                            .map(|(a, b)| swc_ecma_ast::Ident {
+                                                                span: e,
+                                                                ctxt: b,
+                                                                sym: a,
+                                                                optional: false,
+                                                            })
+                                                            .collect(),
+                                                    ),
+                                                )
+                                            })
+                                            .collect(),
+                                    },
+                                    span: span,
+                                })
+                            }
+                        };
+                        SimplStmt::Expr(MakeSpanned {
+                            value: Box::new(SimplExpr::Assign(MakeSpanned {
+                                value: SimplAssignment {
+                                    target: D::span(m.clone(), b.clone().span(e)),
+                                    assign: AssignOp::Assign,
+                                    body: Box::new(loaded),
+                                },
+                                span: e,
+                            })),
+                            span: span,
+                        })
+                    },
+                )
                 .collect::<Vec<SimplStmt<D>>>();
             match &block.term {
                 TSimplTerm::Return(r) => {

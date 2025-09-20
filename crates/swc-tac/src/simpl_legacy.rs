@@ -108,8 +108,8 @@ impl<D: TacDialect> Clone for TSimplBlock<D> {
         }
     }
 }
-pub struct SimplRef<D: TacDialect,P>(pub P, pub D::Mark<()>);
-impl<D: TacDialect,P: Clone> Clone for SimplRef<D,P>{
+pub struct SimplRef<D: TacDialect, P>(pub P, pub D::Mark<()>);
+impl<D: TacDialect, P: Clone> Clone for SimplRef<D, P> {
     fn clone(&self) -> Self {
         Self(self.0.clone(), self.1.clone())
     }
@@ -117,27 +117,27 @@ impl<D: TacDialect,P: Clone> Clone for SimplRef<D,P>{
 #[non_exhaustive]
 pub enum SimplItem<D: TacDialect, P = SimplPathId> {
     Just {
-        id: SimplRef<D,P>,
+        id: SimplRef<D, P>,
     },
     Bin {
-        left: SimplRef<D,P>,
-        right: SimplRef<D,P>,
+        left: SimplRef<D, P>,
+        right: SimplRef<D, P>,
         op: BinaryOp,
     },
     Lit {
         lit: Lit,
     },
     CallStatic {
-        r#fn: FuncId<Expr, SimplRef<D,P>>,
-        args: Vec<SimplRef<D,P>>,
+        r#fn: FuncId<Expr, SimplRef<D, P>>,
+        args: Vec<SimplRef<D, P>>,
     },
     CallTag {
         tag: FuncId<Expr, D::Tag>,
-        args: Vec<SimplRef<D,P>>,
+        args: Vec<SimplRef<D, P>>,
     },
     DiscriminantIn {
-        value: SimplRef<D,P>,
-        ids: BTreeMap<Ident, Vec<SimplRef<D,P>>>,
+        value: SimplRef<D, P>,
+        ids: BTreeMap<Ident, Vec<SimplRef<D, P>>>,
     },
 }
 impl<D: TacDialect, P> SimplItem<D, P> {
@@ -213,21 +213,21 @@ impl<D: TacDialect, P: Clone> Clone for SimplItem<D, P> {
 }
 
 pub enum TSimplTerm<D: TacDialect> {
-    Return(SimplRef<D,SimplPathId>),
+    Return(SimplRef<D, SimplPathId>),
     // Throw(Ident),
     Jmp(Id<TSimplBlock<D>>),
     CondJmp {
-        cond: SimplRef<D,SimplPathId>,
+        cond: SimplRef<D, SimplPathId>,
         if_true: Id<TSimplBlock<D>>,
         if_false: Id<TSimplBlock<D>>,
     },
     Select {
-        scrutinee: SimplRef<D,SimplPathId>,
-        cases: BTreeMap<Ident, (Id<TSimplBlock<D>>, Vec<SimplRef<D,SimplPathId>>)>,
+        scrutinee: SimplRef<D, SimplPathId>,
+        cases: BTreeMap<Ident, (Id<TSimplBlock<D>>, Vec<SimplRef<D, SimplPathId>>)>,
     },
     Switch {
-        scrutinee: SimplRef<D,SimplPathId>,
-        cases: Vec<(SimplRef<D,SimplPathId>, Id<TSimplBlock<D>>)>,
+        scrutinee: SimplRef<D, SimplPathId>,
+        cases: Vec<(SimplRef<D, SimplPathId>, Id<TSimplBlock<D>>)>,
     },
     Default,
 }
@@ -273,7 +273,7 @@ pub trait Bake<D: TacDialect> {
     ) -> (Self::Res, Id<TSimplBlock<D>>);
 }
 impl<D: TacDialect> Bake<D> for SimplExpr<D> {
-    type Res = SimplRef<D,SimplPathId>;
+    type Res = SimplRef<D, SimplPathId>;
 
     fn bake(
         &self,
@@ -363,7 +363,7 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
                         right: SimplItem::CallStatic {
                             r#fn: FuncId {
                                 path: match D::despan(path.path.clone()) {
-                                    (a, b) =>SimplRef (b.to_id(), a),
+                                    (a, b) => SimplRef(b.to_id(), a),
                                 },
                                 template_args: path.template_args.clone(),
                             },
