@@ -250,11 +250,11 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             {
                                 match i.array_in(semantics, k, pierce) {
                                     None => None,
-                                    Some(a) => {  if a.iter().any(|SpreadOr(_, v)| *v) {
+                                    Some(a) => {  if a.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
                                             return None;
                                         };a
                                         .get((n.value.round() as usize))
-                                        .and_then(|SpreadOr(a,_)| k.val(*a))
+                                        .and_then(|SpreadOr { value: a, is_spread: _ }| k.val(*a))
                                         .and_then(|a| a.array_in(semantics, k, pierce))},
                                 }
                             }
@@ -277,7 +277,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 Some(members) => match s.value.as_str() {
                                     "concat" => {
                                         let mut members: Vec<SpreadOr<I>> = members;
-                                        for SpreadOr(a,s) in args.iter().cloned() {
+                                        for SpreadOr { value: a, is_spread: s } in args.iter().cloned() {
                                             let a = k.val(a)?;
                                             let i = a.array_in(semantics, k, pierce)?;
                                             if s{
@@ -291,18 +291,18 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     "slice" => {
                                         let begin: Option<usize> = args
                                             .get(0)
-                                            .cloned().and_then(|SpreadOr(a,b)|(!b).then(move||a))
+                                            .cloned().and_then(|SpreadOr { value: a, is_spread: b }|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let end: Option<usize> = args
                                             .get(1)
-                                            .cloned().and_then(|SpreadOr(a,b)|(!b).then(move||a))
+                                            .cloned().and_then(|SpreadOr { value: a, is_spread: b }|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let mut members: Vec<SpreadOr<I>> = members;
-                                        if members.iter().any(|SpreadOr(_, v)| *v) {
+                                        if members.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
                                             return None;
                                         }
                                         members = match (begin, end) {
@@ -843,10 +843,10 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     None => None,
                                     Some(a) => a
                                         .iter()
-                                        .all(|SpreadOr(_, v)| !*v)
+                                        .all(|SpreadOr { value: _, is_spread: v }| !*v)
                                         .then(|| {
                                             a.get((n.value.round() as usize))
-                                                .and_then(|SpreadOr(a,_)| k.val(*a))
+                                                .and_then(|SpreadOr { value: a, is_spread: _ }| k.val(*a))
                                                 .and_then(|a| a.const_in(semantics, k, pierce))
                                         })
                                         .flatten(),
@@ -878,7 +878,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                             i2 => {
                                                 i = i2;
                                                 std::iter::from_fn(|| {
-                                                    let SpreadOr(n,s) = i.next()?;
+                                                    let SpreadOr { value: n, is_spread: s } = i.next()?;
                                                     let i = k
                                                         .val(*n)?
                                                         .const_in(semantics, k, pierce)?;

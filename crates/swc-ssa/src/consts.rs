@@ -230,12 +230,12 @@ impl ConstantInstantiator {
                         .map(&mut |id| params.get(id).cloned().context("in getting a variable"))?,
                     args: args
                         .iter()
-                        .map(|SpreadOr(id, b)| match *b {
+                        .map(|SpreadOr { value: id, is_spread: b }| match *b {
                             b => params
                                 .get(id)
                                 .cloned()
                                 .context("in getting a variable")
-                                .map(|c|SpreadOr (c, b)),
+                                .map(|c|SpreadOr { value: c, is_spread: b }),
                         })
                         .collect::<Result<_, _>>()?,
                 },

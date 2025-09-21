@@ -311,7 +311,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                 func: self.convert_path(i, o, k, n, left, span),
                 member,
             },
-            args: [v].into_iter().map(|a|SpreadOr(a,false)).collect(),
+            args: [v].into_iter().map(|a|SpreadOr { value: a, is_spread: false }).collect(),
         }
     }
     fn convert_stmt(
@@ -353,7 +353,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             SimplItem::Lit { lit } => Item::Lit { lit: lit.clone() },
             SimplItem::CallStatic { r#fn, args } => Item::Call {
                 callee: TCallee::Val(path!(&r#fn.path.0)),
-                args: args.iter().map(|a| path!(&a.0)).map(|a|SpreadOr(a,false)).collect(),
+                args: args.iter().map(|a| path!(&a.0)).map(|a|SpreadOr { value: a, is_spread: false }).collect(),
             },
             SimplItem::CallTag { tag, args } => match tag.path {},
             SimplItem::DiscriminantIn { value, ids } => self.discriminant(

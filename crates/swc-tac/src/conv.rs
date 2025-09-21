@@ -355,7 +355,7 @@ impl ToTACConverter<'_> {
             .map(|a| {
                 let arg;
                 (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                anyhow::Ok(SpreadOr(arg, a.spread.is_some()))
+                anyhow::Ok(SpreadOr { value: arg, is_spread: a.spread.is_some() })
             })
             .collect::<anyhow::Result<_>>()?;
         Ok((callee, args, t))
@@ -1195,7 +1195,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr(arg, false));
+                    args.push(SpreadOr { value: arg, is_spread: false });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1226,7 +1226,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr(arg, false));
+                    args.push(SpreadOr { value: arg, is_spread: false });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1261,7 +1261,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr(arg, false));
+                    args.push(SpreadOr { value: arg, is_spread: false });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1498,7 +1498,7 @@ impl ToTACConverter<'_> {
                                                 i2 => {
                                                     i = i2;
                                                     std::iter::from_fn(|| {
-                                                        let SpreadOr(n, b) = i.next()?;
+                                                        let SpreadOr { value: n, is_spread: b } = i.next()?;
                                                         let false = b else { return None };
                                                         let i = o.def(LId::Id { id: n.clone() })?;
                                                         let Item::Lit { lit } = i else {
@@ -1780,7 +1780,7 @@ impl ToTACConverter<'_> {
                         anyhow::Ok({
                             let y;
                             (y, t) = self.expr(i, o, b, t, &x.expr)?;
-                           SpreadOr (y, x.spread.is_some())
+                           SpreadOr { value: y, is_spread: x.spread.is_some() }
                         })
                     })
                     .collect::<anyhow::Result<_>>()?;

@@ -103,7 +103,7 @@ impl Splatting {
                                                     flags: Default::default(),
                                                     right: match arg {
                                                         None => Item::Undef,
-                                                        Some(SpreadOr(a,_)) => Item::Just { id: a },
+                                                        Some(SpreadOr{value:a,..}) => Item::Just { id: a },
                                                     },
                                                     span: Span::dummy_with_cmt(),
                                                 });
@@ -223,7 +223,7 @@ impl Splatting {
                                                                     flags: Default::default(),
                                                                     right: match arg {
                                                                         None => Item::Undef,
-                                                                        Some(SpreadOr(a,_)) => {
+                                                                        Some(SpreadOr{value:a,..}) => {
                                                                             Item::Just { id: a }
                                                                         }
                                                                     },
@@ -263,7 +263,7 @@ impl Splatting {
                                                                     Atom::new("globalThis"),
                                                                     Default::default(),
                                                                 )),
-                                                                Some(SpreadOr(arg,_)) => Some(arg),
+                                                                Some(SpreadOr{value: arg,..}) => Some(arg),
                                                             }
                                                         },
                                                         stack: self

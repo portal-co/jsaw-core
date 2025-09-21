@@ -362,7 +362,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     },
                     args: args
                         .iter()
-                        .map(|SpreadOr(a,s)| {
+                        .map(|SpreadOr { value: a, is_spread: s }| {
                             Ok::<_, E>(swc_ecma_ast::ExprOrSpread {
                                 spread: s.then(||span),
                                 expr: sr(cx, a)?,
@@ -648,7 +648,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                 span: span,
                 elems: members
                     .iter()
-                    .map(|SpreadOr(a,b)| {
+                    .map(|SpreadOr { value: a, is_spread: b }| {
                         Ok(Some(ExprOrSpread {
                             spread: b.then(||span),
                             expr: sr(cx, a)?,

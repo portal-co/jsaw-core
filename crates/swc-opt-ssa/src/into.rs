@@ -426,19 +426,19 @@ impl Convert {
                             Some(OptType::Lit(lit.clone())),
                         ),
                         Item::Arr { members } if members.len() > 0 => {
-                            let SpreadOr(v0, s0) = &members[0];
+                            let SpreadOr { value: v0, is_spread: s0 } = &members[0];
                             let (x, ty) = state.get(v0).cloned().context("in getting the var")?;
                             let mut elem_tys = vec![];
-                            let members = [SpreadOr(x, *s0)]
+                            let members = [SpreadOr { value: x, is_spread: *s0 }]
                                 .into_iter()
                                 .map(Ok::<_,anyhow::Error>)
-                                .chain(members[1..].iter().map(|SpreadOr(a, b)| {
+                                .chain(members[1..].iter().map(|SpreadOr { value: a, is_spread: b }| {
                                     let (a, at) =
                                         state.get(a).cloned().context("in getting the val")?;
                                     // (a, x, at) = bi_id_deopt(out, k, a, at, x, ty.clone())?;
                                     // ty = at.clone();
                                     elem_tys.push(at.clone());
-                                    Ok(SpreadOr(a, *b))
+                                    Ok(SpreadOr { value: a, is_spread: *b })
                                 }))
                                 .collect::<anyhow::Result<Vec<_>>>()?;
                             let ty = Some(OptType::Object {
