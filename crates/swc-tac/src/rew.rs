@@ -362,12 +362,17 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     },
                     args: args
                         .iter()
-                        .map(|SpreadOr { value: a, is_spread: s }| {
-                            Ok::<_, E>(swc_ecma_ast::ExprOrSpread {
-                                spread: s.then(||span),
-                                expr: sr(cx, a)?,
-                            })
-                        })
+                        .map(
+                            |SpreadOr {
+                                 value: a,
+                                 is_spread: s,
+                             }| {
+                                Ok::<_, E>(swc_ecma_ast::ExprOrSpread {
+                                    spread: s.then(|| span),
+                                    expr: sr(cx, a)?,
+                                })
+                            },
+                        )
                         .collect::<Result<_, E>>()?,
                     type_args: None,
                 })
@@ -648,12 +653,17 @@ impl<I, F> Render<I, F> for Item<I, F> {
                 span: span,
                 elems: members
                     .iter()
-                    .map(|SpreadOr { value: a, is_spread: b }| {
-                        Ok(Some(ExprOrSpread {
-                            spread: b.then(||span),
-                            expr: sr(cx, a)?,
-                        }))
-                    })
+                    .map(
+                        |SpreadOr {
+                             value: a,
+                             is_spread: b,
+                         }| {
+                            Ok(Some(ExprOrSpread {
+                                spread: b.then(|| span),
+                                expr: sr(cx, a)?,
+                            }))
+                        },
+                    )
                     .collect::<Result<_, E>>()?,
             }),
             crate::Item::Yield { value, delegate } => {
@@ -696,6 +706,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
             } => {
                 let rest = swc_ecma_ast::Ident::new_private(Atom::new("rest"), span);
                 let any = || swc_ecma_ast::Ident::new_private(Atom::new("ignored"), span);
+                let end = (0..*end).map(|_| any()).collect::<Vec<_>>();
                 Expr::Call(CallExpr {
                     span,
                     ctxt: Default::default(),
@@ -714,13 +725,32 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                     type_ann: None,
                                     arg: Box::new(Pat::Ident(rest.clone().into())),
                                 })])
-                                .chain((0..*end).map(|_| Pat::Ident(any().into())))
+                                .chain(end.iter().cloned().map(|a| Pat::Ident(a.into())))
                                 .map(Some)
                                 .collect(),
                         })]
                         .into_iter()
                         .collect(),
-                        body: Box::new(swc_ecma_ast::BlockStmtOrExpr::Expr(rest.into())),
+                        body: Box::new(swc_ecma_ast::BlockStmtOrExpr::Expr(if end.len() == 0 {
+                            rest.into()
+                        } else {
+                            Box::new(Expr::Array(ArrayLit {
+                                span,
+                                elems: end
+                                    .into_iter()
+                                    .map(|a| {
+                                        Some(ExprOrSpread {
+                                            expr: a.into(),
+                                            spread: None,
+                                        })
+                                    })
+                                    .chain([Some(ExprOrSpread {
+                                        spread: Some(span),
+                                        expr: rest.into(),
+                                    })])
+                                    .collect(),
+                            }))
+                        })),
                         is_async: false,
                         is_generator: false,
                         type_params: None,

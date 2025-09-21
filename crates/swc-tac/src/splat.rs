@@ -81,34 +81,6 @@ impl Splatting {
                             match $func {
                                 func => match $arrow {
                                     arrow => {
-                                        for (param, arg) in func
-                                            .params
-                                            .iter()
-                                            .cloned()
-                                            .map(Some)
-                                            .chain(once(None).cycle())
-                                            .zip(
-                                                args.iter()
-                                                    .cloned()
-                                                    .map(Some)
-                                                    .chain(once(None).cycle()),
-                                            )
-                                        {
-                                            if param.is_none() && arg.is_none() {
-                                                break;
-                                            }
-                                            if let Some(param) = param {
-                                                output.blocks[out_block].stmts.push(TStmt {
-                                                    left: LId::Id { id: param },
-                                                    flags: Default::default(),
-                                                    right: match arg {
-                                                        None => Item::Undef,
-                                                        Some(SpreadOr{value:a,..}) => Item::Just { id: a },
-                                                    },
-                                                    span: Span::dummy_with_cmt(),
-                                                });
-                                            }
-                                        }
                                         let argv = output.regs.alloc(());
                                         output.decls.insert(argv.clone());
                                         output.blocks[out_block].stmts.push(TStmt {
@@ -119,6 +91,65 @@ impl Splatting {
                                             },
                                             span: Span::dummy_with_cmt(),
                                         });
+                                        if args.iter().any(|a| a.is_spread) {
+                                            for (i, param) in
+                                                func.params.iter().cloned().enumerate()
+                                            {
+                                                output.blocks[out_block].stmts.push(TStmt {
+                                                    left: LId::Id { id: param.clone() },
+                                                    flags: Default::default(),
+                                                    right: Item::Lit {
+                                                        lit: Lit::Num(Number {
+                                                            value: i as f64,
+                                                            raw: None,
+                                                            span: Span::dummy_with_cmt(),
+                                                        }),
+                                                    },
+                                                    span: Span::dummy_with_cmt(),
+                                                });
+                                                output.blocks[out_block].stmts.push(TStmt {
+                                                    left: LId::Id { id: param.clone() },
+                                                    flags: Default::default(),
+                                                    right: Item::Mem {
+                                                        obj: argv.clone(),
+                                                        mem: param.clone(),
+                                                    },
+                                                    span: Span::dummy_with_cmt(),
+                                                });
+                                            }
+                                        } else {
+                                            for (param, arg) in func
+                                                .params
+                                                .iter()
+                                                .cloned()
+                                                .map(Some)
+                                                .chain(once(None).cycle())
+                                                .zip(
+                                                    args.iter()
+                                                        .cloned()
+                                                        .map(Some)
+                                                        .chain(once(None).cycle()),
+                                                )
+                                            {
+                                                if param.is_none() && arg.is_none() {
+                                                    break;
+                                                }
+                                                if let Some(param) = param {
+                                                    output.blocks[out_block].stmts.push(TStmt {
+                                                        left: LId::Id { id: param },
+                                                        flags: Default::default(),
+                                                        right: match arg {
+                                                            None => Item::Undef,
+                                                            Some(SpreadOr { value: a, .. }) => {
+                                                                Item::Just { id: a }
+                                                            }
+                                                        },
+                                                        span: Span::dummy_with_cmt(),
+                                                    });
+                                                }
+                                            }
+                                        }
+
                                         // if {
                                         let mut d = output.blocks.alloc(Default::default());
                                         output.blocks[d].post.catch =
@@ -223,9 +254,10 @@ impl Splatting {
                                                                     flags: Default::default(),
                                                                     right: match arg {
                                                                         None => Item::Undef,
-                                                                        Some(SpreadOr{value:a,..}) => {
-                                                                            Item::Just { id: a }
-                                                                        }
+                                                                        Some(SpreadOr {
+                                                                            value: a,
+                                                                            ..
+                                                                        }) => Item::Just { id: a },
                                                                     },
                                                                     span: Span::dummy_with_cmt(),
                                                                 },
@@ -263,7 +295,10 @@ impl Splatting {
                                                                     Atom::new("globalThis"),
                                                                     Default::default(),
                                                                 )),
-                                                                Some(SpreadOr{value: arg,..}) => Some(arg),
+                                                                Some(SpreadOr {
+                                                                    value: arg,
+                                                                    ..
+                                                                }) => Some(arg),
                                                             }
                                                         },
                                                         stack: self

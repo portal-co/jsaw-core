@@ -1,6 +1,8 @@
 use std::{cell::OnceCell, mem::replace};
 
-use swc_ecma_ast::{AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp};
+use swc_ecma_ast::{
+    ArrayPat, AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp,
+};
 
 use crate::*;
 #[non_exhaustive]
@@ -355,7 +357,10 @@ impl ToTACConverter<'_> {
             .map(|a| {
                 let arg;
                 (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                anyhow::Ok(SpreadOr { value: arg, is_spread: a.spread.is_some() })
+                anyhow::Ok(SpreadOr {
+                    value: arg,
+                    is_spread: a.spread.is_some(),
+                })
             })
             .collect::<anyhow::Result<_>>()?;
         Ok((callee, args, t))
@@ -625,6 +630,132 @@ impl ToTACConverter<'_> {
             if_false: gb,
         };
         return self.bind(i, o, b, t, &assign_pat.left, g, decl);
+    }
+    pub fn bind_array(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        p: &ArrayPat,
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
+        let mut ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
+        let mut ix = 0;
+        let r = loop {
+            if let Some(a) = ps.get(ix).and_then(|a| *a) {
+                if let Pat::Rest(r) = a {
+                    ix += 1;
+                    break r;
+                }
+                let fi = o.regs.alloc(());
+                o.decls.insert(fi.clone());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: fi.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Lit {
+                        lit: Lit::Num(Number {
+                            span: a.span(),
+                            value: ix as f64,
+                            raw: None,
+                        }),
+                    },
+                    span: a.span(),
+                });
+                let fi = match fi {
+                    v => {
+                        let fi = o.regs.alloc(());
+                        o.decls.insert(fi.clone());
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: fi.clone() },
+                            flags: ValFlags::SSA_LIKE,
+                            right: Item::Mem {
+                                obj: f.clone(),
+                                mem: v.clone(),
+                            },
+                            span: a.span(),
+                        });
+                        fi
+                    }
+                };
+                t = self.bind(i, o, b, t, a, fi, decl)?;
+            }
+            ix += 1;
+            if ix == ps.len() {
+                return Ok(t);
+            }
+        };
+        let fi2 = o.regs.alloc(());
+        o.decls.insert(fi2.clone());
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id { id: fi2.clone() },
+            flags: ValFlags::SSA_LIKE,
+            right: Item::StaticSubArray {
+                begin: ix,
+                end: ps.len() - ix,
+                wrapped: f.clone(),
+            },
+            span: p.span(),
+        });
+        let fi3 = match fi2.clone() {
+            v => {
+                let fi2 = o.regs.alloc(());
+                o.decls.insert(fi2.clone());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: fi2.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::StaticSubArray {
+                        begin: ps.len() - ix,
+                        end: 0,
+                        wrapped: v,
+                    },
+                    span: p.span(),
+                });
+                fi2
+            }
+        };
+        t = self.bind(i, o, b, t, &r.arg, fi3, decl)?;
+        let ox = ix;
+        while ix != ps.len() {
+            // j += 1;
+            if let Some(a) = ps.get(ix).and_then(|a| *a) {
+                let fi = o.regs.alloc(());
+                o.decls.insert(fi.clone());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: fi.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Lit {
+                        lit: Lit::Num(Number {
+                            span: a.span(),
+                            value: (ix - ox) as f64,
+                            raw: None,
+                        }),
+                    },
+                    span: a.span(),
+                });
+                let fi = match fi {
+                    v => {
+                        let fi = o.regs.alloc(());
+                        o.decls.insert(fi.clone());
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: fi.clone() },
+                            flags: ValFlags::SSA_LIKE,
+                            right: Item::Mem {
+                                obj: fi2.clone(),
+                                mem: v,
+                            },
+                            span: a.span(),
+                        });
+                        fi
+                    }
+                };
+                t = self.bind(i, o, b, t, a, fi, decl)?;
+            }
+            ix += 1
+            // i += 1;
+        }
+        Ok(t)
     }
     pub fn bind_object(
         &mut self,
@@ -1148,6 +1279,9 @@ impl ToTACConverter<'_> {
                 AssignTargetPat::Object(p) => {
                     t = self.bind_object(i, o, b, t, p, right.clone(), false)?;
                 }
+                AssignTargetPat::Array(p) => {
+                    t = self.bind_array(i, o, b, t, p, right.clone(), false)?;
+                }
                 _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
             },
         };
@@ -1195,7 +1329,10 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr { value: arg, is_spread: false });
+                    args.push(SpreadOr {
+                        value: arg,
+                        is_spread: false,
+                    });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1226,7 +1363,10 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr { value: arg, is_spread: false });
+                    args.push(SpreadOr {
+                        value: arg,
+                        is_spread: false,
+                    });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1261,7 +1401,10 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(SpreadOr { value: arg, is_spread: false });
+                    args.push(SpreadOr {
+                        value: arg,
+                        is_spread: false,
+                    });
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1498,7 +1641,10 @@ impl ToTACConverter<'_> {
                                                 i2 => {
                                                     i = i2;
                                                     std::iter::from_fn(|| {
-                                                        let SpreadOr { value: n, is_spread: b } = i.next()?;
+                                                        let SpreadOr {
+                                                            value: n,
+                                                            is_spread: b,
+                                                        } = i.next()?;
                                                         let false = b else { return None };
                                                         let i = o.def(LId::Id { id: n.clone() })?;
                                                         let Item::Lit { lit } = i else {
@@ -1780,7 +1926,10 @@ impl ToTACConverter<'_> {
                         anyhow::Ok({
                             let y;
                             (y, t) = self.expr(i, o, b, t, &x.expr)?;
-                           SpreadOr { value: y, is_spread: x.spread.is_some() }
+                            SpreadOr {
+                                value: y,
+                                is_spread: x.spread.is_some(),
+                            }
                         })
                     })
                     .collect::<anyhow::Result<_>>()?;
