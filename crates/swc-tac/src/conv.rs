@@ -642,6 +642,20 @@ impl ToTACConverter<'_> {
         decl: bool,
     ) -> anyhow::Result<Id<TBlock>> {
         let mut ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
+        self.bind_array_contents(i, o, b, t, ps, p, f, decl)
+    }
+
+    pub fn bind_array_contents(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        ps: Vec<Option<&Pat>>,
+        p: &(dyn Spanned + '_),
+        f: Ident,
+        decl: bool,
+    ) -> anyhow::Result<Id<TBlock>> {
         let mut ix = 0;
         let r = loop {
             if let Some(a) = ps.get(ix).and_then(|a| *a) {
@@ -2125,29 +2139,59 @@ impl TFunc {
         cfg.ts_retty = value.cfg.ts_retty.clone();
         cfg.generics = value.cfg.generics.clone();
         let mut ts_params = vec![];
-        let mut params = value
-            .params
-            .iter()
-            .rev()
-            .map(|x| {
-                Ok(match &x.pat {
-                    Pat::Ident(i) => {
-                        ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
-                        i.id.clone().into()
-                    }
-                    p => {
-                        ts_params.push(None);
-                        let e2 = cfg.blocks.alloc(Default::default());
-                        let i = cfg.regs.alloc(());
-                        let k =
-                            conv.bind(&value.cfg, &mut cfg, value.entry, e2, p, i.clone(), true)?;
-                        cfg.blocks[k].post.term = TTerm::Jmp(entry);
-                        entry = e2;
-                        i
-                    }
+        let mut params = if value.params.iter().any(|a| a.pat.is_rest()) {
+            // ts_params.extend(value.params.iter().map(|_| None));
+            let e2 = cfg.blocks.alloc(Default::default());
+            let i = cfg.regs.alloc(());
+            let k = conv.bind_array_contents(
+                &value.cfg,
+                &mut cfg,
+                value.entry,
+                e2,
+                value.params.iter().map(|a| &a.pat).map(Some).collect(),
+                &value.cfg.blocks[value.entry]
+                    .end
+                    .orig_span
+                    .unwrap_or_else(|| Span::dummy_with_cmt()),
+                i.clone(),
+                true,
+            )?;
+            cfg.blocks[k].post.term = TTerm::Jmp(entry);
+            entry = e2;
+            Default::default()
+        } else {
+            value
+                .params
+                .iter()
+                .rev()
+                .map(|x| {
+                    Ok(match &x.pat {
+                        Pat::Ident(i) => {
+                            ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
+                            i.id.clone().into()
+                        }
+
+                        p => {
+                            ts_params.push(None);
+                            let e2 = cfg.blocks.alloc(Default::default());
+                            let i = cfg.regs.alloc(());
+                            let k = conv.bind(
+                                &value.cfg,
+                                &mut cfg,
+                                value.entry,
+                                e2,
+                                p,
+                                i.clone(),
+                                true,
+                            )?;
+                            cfg.blocks[k].post.term = TTerm::Jmp(entry);
+                            entry = e2;
+                            i
+                        }
+                    })
                 })
-            })
-            .collect::<anyhow::Result<Vec<Ident>>>()?;
+                .collect::<anyhow::Result<Vec<Ident>>>()?
+        };
         params.reverse();
         ts_params.reverse();
         Ok(Self {
