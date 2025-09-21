@@ -225,7 +225,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
         semantics: &SemanticCfg,
         k: &(dyn SValGetter<I, B, F> + '_),
         pierce: bool,
-    ) -> Option<Vec<I>> {
+    ) -> Option<Vec<(I, bool)>> {
         match self {
             SValue::Param { block, idx, ty } if pierce => {
                 let mut i = k
@@ -250,10 +250,12 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             {
                                 match i.array_in(semantics, k, pierce) {
                                     None => None,
-                                    Some(a) => a
+                                    Some(a) => {  if a.iter().any(|(_, v)| *v) {
+                                            return None;
+                                        };a
                                         .get((n.value.round() as usize))
-                                        .and_then(|a| k.val(*a))
-                                        .and_then(|a| a.array_in(semantics, k, pierce)),
+                                        .and_then(|(a,_)| k.val(*a))
+                                        .and_then(|a| a.array_in(semantics, k, pierce))},
                                 }
                             }
                             _ => None,
@@ -274,28 +276,35 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             match func.array_in(semantics, k, pierce) {
                                 Some(members) => match s.value.as_str() {
                                     "concat" => {
-                                        let mut members: Vec<I> = members;
-                                        for a in args.iter().cloned() {
+                                        let mut members: Vec<(I, bool)> = members;
+                                        for (a,s) in args.iter().cloned() {
                                             let a = k.val(a)?;
                                             let i = a.array_in(semantics, k, pierce)?;
+                                            if s{
+                                                return None;
+                                            }else{
                                             members.extend(i);
+                                            }
                                         }
                                         Some(members)
                                     }
                                     "slice" => {
                                         let begin: Option<usize> = args
                                             .get(0)
-                                            .cloned()
+                                            .cloned().and_then(|(a,b)|b.then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let end: Option<usize> = args
                                             .get(1)
-                                            .cloned()
+                                            .cloned().and_then(|(a,b)|b.then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
-                                        let mut members: Vec<I> = members;
+                                        let mut members: Vec<(I, bool)> = members;
+                                        if members.iter().any(|(_, v)| *v) {
+                                            return None;
+                                        }
                                         members = match (begin, end) {
                                             (Some(a), Some(b)) => members.drain(a..b).collect(),
                                             (None, None) => members,
@@ -833,9 +842,14 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 match i.array_in(semantics, k, pierce) {
                                     None => None,
                                     Some(a) => a
-                                        .get((n.value.round() as usize))
-                                        .and_then(|a| k.val(*a))
-                                        .and_then(|a| a.const_in(semantics, k, pierce)),
+                                        .iter()
+                                        .all(|(_, v)| !*v)
+                                        .then(|| {
+                                            a.get((n.value.round() as usize))
+                                                .and_then(|(a,_)| k.val(*a))
+                                                .and_then(|a| a.const_in(semantics, k, pierce))
+                                        })
+                                        .flatten(),
                                 }
                             }
                             _ => None,
@@ -864,7 +878,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                             i2 => {
                                                 i = i2;
                                                 std::iter::from_fn(|| {
-                                                    let n = i.next()?;
+                                                    let (n,s) = i.next()?;
                                                     let i = k
                                                         .val(*n)?
                                                         .const_in(semantics, k, pierce)?;

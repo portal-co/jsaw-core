@@ -316,7 +316,7 @@ impl ToTACConverter<'_> {
         b: Id<Block>,
         mut t: Id<TBlock>,
         call: &CallExpr,
-    ) -> anyhow::Result<(TCallee, Vec<(Atom, SyntaxContext)>, Id<TBlock>)> {
+    ) -> anyhow::Result<(TCallee, Vec<((Atom, SyntaxContext), bool)>, Id<TBlock>)> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -349,13 +349,13 @@ impl ToTACConverter<'_> {
             },
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         };
-        let args: Vec<(Atom, SyntaxContext)> = call
+        let args: Vec<((Atom, SyntaxContext), bool)> = call
             .args
             .iter()
             .map(|a| {
                 let arg;
                 (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                anyhow::Ok(arg)
+                anyhow::Ok((arg, a.spread.is_some()))
             })
             .collect::<anyhow::Result<_>>()?;
         Ok((callee, args, t))
@@ -1195,7 +1195,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(arg);
+                    args.push((arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1226,7 +1226,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(arg);
+                    args.push((arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1261,7 +1261,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push(arg);
+                    args.push((arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1431,7 +1431,20 @@ impl ToTACConverter<'_> {
                 .and_then(|c| c.map.get(&id.to_id()))
             {
                 Some(e) if self.inlinable(e) => self.expr(i, o, b, t, &*e.clone()),
-                _ => Ok((id.clone().into(), t)),
+                _ => match &*id.sym {
+                    "arguments" => {
+                        let tmp = o.regs.alloc(());
+                        o.blocks[t].stmts.push(TStmt {
+                            left: LId::Id { id: tmp.clone() },
+                            flags: ValFlags::SSA_LIKE,
+                            right: Item::Arguments,
+                            span: id.span(),
+                        });
+                        o.decls.insert(tmp.clone());
+                        Ok((tmp, t))
+                    }
+                    _ => Ok((id.clone().into(), t)),
+                },
             },
             Expr::Assign(a) => {
                 let mut right;
@@ -1485,7 +1498,8 @@ impl ToTACConverter<'_> {
                                                 i2 => {
                                                     i = i2;
                                                     std::iter::from_fn(|| {
-                                                        let n = i.next()?;
+                                                        let (n, b) = i.next()?;
+                                                        let false = b else { return None };
                                                         let i = o.def(LId::Id { id: n.clone() })?;
                                                         let Item::Lit { lit } = i else {
                                                             return None;
@@ -1766,7 +1780,7 @@ impl ToTACConverter<'_> {
                         anyhow::Ok({
                             let y;
                             (y, t) = self.expr(i, o, b, t, &x.expr)?;
-                            y
+                            (y, x.spread.is_some())
                         })
                     })
                     .collect::<anyhow::Result<_>>()?;

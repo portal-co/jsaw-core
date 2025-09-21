@@ -11,8 +11,8 @@ use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
-    ArrayLit, ArrayPat, CondExpr, KeyValuePatProp, NewExpr, ObjectPat, ObjectPatProp, Param,
-    PrivateMethod, PrivateName, RestPat, UnaryOp,
+    ArrayLit, ArrayPat, CondExpr, KeyValuePatProp, MetaPropExpr, NewExpr, ObjectPat, ObjectPatProp,
+    Param, PrivateMethod, PrivateName, RestPat, UnaryOp,
 };
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
@@ -166,6 +166,12 @@ impl<I, F> Render<I, F> for Item<I, F> {
         sf: &mut (dyn FnMut(&mut Cx, &F) -> Result<Function, E> + '_),
     ) -> Result<Box<Expr>, E> {
         let right = Box::new(match self {
+            Item::Arguments => Expr::Ident(swc_ecma_ast::Ident {
+                span,
+                ctxt: Default::default(),
+                sym: Atom::new("arguments"),
+                optional: false,
+            }),
             Item::Select {
                 cond,
                 then,
@@ -356,9 +362,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     },
                     args: args
                         .iter()
-                        .map(|a| {
+                        .map(|(a,s)| {
                             Ok::<_, E>(swc_ecma_ast::ExprOrSpread {
-                                spread: None,
+                                spread: s.then(||span),
                                 expr: sr(cx, a)?,
                             })
                         })
@@ -642,9 +648,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                 span: span,
                 elems: members
                     .iter()
-                    .map(|a| {
+                    .map(|(a,b)| {
                         Ok(Some(ExprOrSpread {
-                            spread: None,
+                            spread: b.then(||span),
                             expr: sr(cx, a)?,
                         }))
                     })

@@ -281,7 +281,7 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter().cloned().chain({
+            Self::Tail { callee, args } => Box::new(args.iter().map(|(a,b)|a).cloned().chain({
                 let mut v = Vec::default();
                 callee.as_ref().map(&mut |a| {
                     v.push(*a);
@@ -319,7 +319,7 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter_mut().chain({
+            Self::Tail { callee, args } => Box::new(args.iter_mut().map(|(a,b)|a).chain({
                 let mut v = Vec::default();
                 callee.as_mut().map(&mut |a| {
                     v.push(a);

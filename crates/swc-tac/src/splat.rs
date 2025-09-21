@@ -20,7 +20,7 @@ impl TFunc {
 pub struct Splatting {
     pub cache: BTreeMap<Id<TBlock>, Id<TBlock>>,
     pub catch: TCatch,
-    pub ret: Option<(LId, Id<TBlock>)>,
+    pub ret: Option<(LId, Id<TBlock>, Ident)>,
     pub this_val: Option<Ident>,
     pub stack: BTreeSet<Ident>,
 }
@@ -66,6 +66,11 @@ impl Splatting {
                         stmt.right = Item::Just { id: thid.clone() }
                     }
                 }
+                if let Some((_, _, a)) = self.ret.as_ref() {
+                    if let Item::Arguments = &mut stmt.right {
+                        stmt.right = Item::Just { id: a.clone() }
+                    }
+                }
                 if let Item::Call {
                     callee: TCallee::Val(value),
                     args,
@@ -98,12 +103,22 @@ impl Splatting {
                                                     flags: Default::default(),
                                                     right: match arg {
                                                         None => Item::Undef,
-                                                        Some(a) => Item::Just { id: a },
+                                                        Some((a,_)) => Item::Just { id: a },
                                                     },
                                                     span: Span::dummy_with_cmt(),
                                                 });
                                             }
                                         }
+                                        let argv = output.regs.alloc(());
+                                        output.decls.insert(argv.clone());
+                                        output.blocks[out_block].stmts.push(TStmt {
+                                            left: LId::Id { id: argv.clone() },
+                                            flags: ValFlags::SSA_LIKE,
+                                            right: Item::Arr {
+                                                members: args.iter().cloned().collect(),
+                                            },
+                                            span: Span::dummy_with_cmt(),
+                                        });
                                         // if {
                                         let mut d = output.blocks.alloc(Default::default());
                                         output.blocks[d].post.catch =
@@ -111,7 +126,7 @@ impl Splatting {
                                         let mut new = Splatting {
                                             cache: Default::default(),
                                             catch: output.blocks[out_block].post.catch.clone(),
-                                            ret: Some((stmt.left, d)),
+                                            ret: Some((stmt.left, d, argv)),
                                             this_val: if arrow || (!func.cfg.has_this()) {
                                                 self.this_val.clone()
                                             } else {
@@ -208,7 +223,7 @@ impl Splatting {
                                                                     flags: Default::default(),
                                                                     right: match arg {
                                                                         None => Item::Undef,
-                                                                        Some(a) => {
+                                                                        Some((a,_)) => {
                                                                             Item::Just { id: a }
                                                                         }
                                                                     },
@@ -217,6 +232,16 @@ impl Splatting {
                                                             );
                                                         }
                                                     }
+                                                    let argv = output.regs.alloc(());
+                                                    output.decls.insert(argv.clone());
+                                                    output.blocks[out_block].stmts.push(TStmt {
+                                                        left: LId::Id { id: argv.clone() },
+                                                        flags: ValFlags::SSA_LIKE,
+                                                        right: Item::Arr {
+                                                            members: args.iter().cloned().collect(),
+                                                        },
+                                                        span: Span::dummy_with_cmt(),
+                                                    });
                                                     // if {
                                                     let mut d =
                                                         output.blocks.alloc(Default::default());
@@ -228,7 +253,7 @@ impl Splatting {
                                                             .post
                                                             .catch
                                                             .clone(),
-                                                        ret: Some((stmt.left, d)),
+                                                        ret: Some((stmt.left, d, argv)),
                                                         this_val: if arrow || (!func.cfg.has_this())
                                                         {
                                                             self.this_val.clone()
@@ -238,7 +263,7 @@ impl Splatting {
                                                                     Atom::new("globalThis"),
                                                                     Default::default(),
                                                                 )),
-                                                                Some(arg) => Some(arg),
+                                                                Some((arg,_)) => Some(arg),
                                                             }
                                                         },
                                                         stack: self
@@ -309,7 +334,7 @@ impl Splatting {
             output.blocks[out_block].post.term = match &input.blocks[in_block].post.term {
                 TTerm::Return(r) => match self.ret.as_ref() {
                     None => TTerm::Return(r.clone()),
-                    Some((id, b2)) => {
+                    Some((id, b2, _)) => {
                         output.blocks[out_block].stmts.push(TStmt {
                             left: id.clone(),
                             flags: Default::default(),
@@ -330,7 +355,7 @@ impl Splatting {
                         callee: callee.clone(),
                         args: args.clone(),
                     },
-                    Some((id, b2)) => {
+                    Some((id, b2, _)) => {
                         output.blocks[out_block].stmts.push(TStmt {
                             left: id.clone(),
                             flags: Default::default(),
