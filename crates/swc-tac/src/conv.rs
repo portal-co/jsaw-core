@@ -2143,16 +2143,23 @@ impl TFunc {
             // ts_params.extend(value.params.iter().map(|_| None));
             let e2 = cfg.blocks.alloc(Default::default());
             let i = cfg.regs.alloc(());
+            let span = value.cfg.blocks[value.entry]
+                .end
+                .orig_span
+                .unwrap_or_else(|| Span::dummy_with_cmt());
+            cfg.blocks[e2].stmts.push(TStmt {
+                left: LId::Id { id: i.clone() },
+                flags: ValFlags::SSA_LIKE,
+                right: Item::Arguments,
+                span,
+            });
             let k = conv.bind_array_contents(
                 &value.cfg,
                 &mut cfg,
                 value.entry,
                 e2,
                 value.params.iter().map(|a| &a.pat).map(Some).collect(),
-                &value.cfg.blocks[value.entry]
-                    .end
-                    .orig_span
-                    .unwrap_or_else(|| Span::dummy_with_cmt()),
+                &span,
                 i.clone(),
                 true,
             )?;
