@@ -103,7 +103,7 @@ impl Splatting {
                                                     flags: Default::default(),
                                                     right: match arg {
                                                         None => Item::Undef,
-                                                        Some((a,_)) => Item::Just { id: a },
+                                                        Some(SpreadOr(a,_)) => Item::Just { id: a },
                                                     },
                                                     span: Span::dummy_with_cmt(),
                                                 });
@@ -223,7 +223,7 @@ impl Splatting {
                                                                     flags: Default::default(),
                                                                     right: match arg {
                                                                         None => Item::Undef,
-                                                                        Some((a,_)) => {
+                                                                        Some(SpreadOr(a,_)) => {
                                                                             Item::Just { id: a }
                                                                         }
                                                                     },
@@ -263,7 +263,7 @@ impl Splatting {
                                                                     Atom::new("globalThis"),
                                                                     Default::default(),
                                                                 )),
-                                                                Some((arg,_)) => Some(arg),
+                                                                Some(SpreadOr(arg,_)) => Some(arg),
                                                             }
                                                         },
                                                         stack: self

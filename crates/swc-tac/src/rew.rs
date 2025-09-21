@@ -33,7 +33,7 @@ use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
 
-use crate::{Item, LId, MemberFlags, PropKey, TBlock, TCallee, TCfg, TFunc};
+use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TCallee, TCfg, TFunc};
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct Options<'a> {
@@ -362,7 +362,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     },
                     args: args
                         .iter()
-                        .map(|(a,s)| {
+                        .map(|SpreadOr(a,s)| {
                             Ok::<_, E>(swc_ecma_ast::ExprOrSpread {
                                 spread: s.then(||span),
                                 expr: sr(cx, a)?,
@@ -648,7 +648,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                 span: span,
                 elems: members
                     .iter()
-                    .map(|(a,b)| {
+                    .map(|SpreadOr(a,b)| {
                         Ok(Some(ExprOrSpread {
                             spread: b.then(||span),
                             expr: sr(cx, a)?,

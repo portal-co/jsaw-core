@@ -316,7 +316,7 @@ impl ToTACConverter<'_> {
         b: Id<Block>,
         mut t: Id<TBlock>,
         call: &CallExpr,
-    ) -> anyhow::Result<(TCallee, Vec<((Atom, SyntaxContext), bool)>, Id<TBlock>)> {
+    ) -> anyhow::Result<(TCallee, Vec<SpreadOr<(Atom, SyntaxContext)>>, Id<TBlock>)> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -349,13 +349,13 @@ impl ToTACConverter<'_> {
             },
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         };
-        let args: Vec<((Atom, SyntaxContext), bool)> = call
+        let args: Vec<SpreadOr<Ident>> = call
             .args
             .iter()
             .map(|a| {
                 let arg;
                 (arg, t) = self.expr(i, o, b, t, &a.expr)?;
-                anyhow::Ok((arg, a.spread.is_some()))
+                anyhow::Ok(SpreadOr(arg, a.spread.is_some()))
             })
             .collect::<anyhow::Result<_>>()?;
         Ok((callee, args, t))
@@ -1195,7 +1195,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push((arg, false));
+                    args.push(SpreadOr(arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1226,7 +1226,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push((arg, false));
+                    args.push(SpreadOr(arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1261,7 +1261,7 @@ impl ToTACConverter<'_> {
                         b2,
                         Span::dummy_with_cmt(),
                     )?;
-                    args.push((arg, false));
+                    args.push(SpreadOr(arg, false));
                 }
                 let v = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1498,7 +1498,7 @@ impl ToTACConverter<'_> {
                                                 i2 => {
                                                     i = i2;
                                                     std::iter::from_fn(|| {
-                                                        let (n, b) = i.next()?;
+                                                        let SpreadOr(n, b) = i.next()?;
                                                         let false = b else { return None };
                                                         let i = o.def(LId::Id { id: n.clone() })?;
                                                         let Item::Lit { lit } = i else {
@@ -1780,7 +1780,7 @@ impl ToTACConverter<'_> {
                         anyhow::Ok({
                             let y;
                             (y, t) = self.expr(i, o, b, t, &x.expr)?;
-                            (y, x.spread.is_some())
+                           SpreadOr (y, x.spread.is_some())
                         })
                     })
                     .collect::<anyhow::Result<_>>()?;

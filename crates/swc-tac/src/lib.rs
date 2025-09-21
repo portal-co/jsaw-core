@@ -417,7 +417,7 @@ impl TCfg {
                     }
                     .into_iter()
                     .cloned()
-                    .chain(args.iter().map(|(a,_)|a).cloned()),
+                    .chain(args.iter().map(|SpreadOr(a, _)| a).cloned()),
                 ),
             };
             i.chain(k.1.stmts.iter().flat_map(
@@ -551,7 +551,7 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
     Return(Option<I>),
     Tail {
         callee: TCallee<I>,
-        args: Vec<(I,bool)>,
+        args: Vec<SpreadOr<I>>,
     },
     Throw(I),
     Jmp(B),
@@ -572,7 +572,7 @@ impl<I: Eq, F> Item<I, F> {
     pub fn taints_object(&self, a: &I) -> bool {
         match self {
             Item::Call { callee, args } => {
-                matches!(callee, TCallee::Eval) || args.iter().any(|(b,_)| b == a)
+                matches!(callee, TCallee::Eval) || args.iter().any(|SpreadOr(b, _)| b == a)
             }
             _ => false,
         }
@@ -619,7 +619,7 @@ where
             TTerm::Default => TTerm::Default,
             TTerm::Tail { callee, args } => TTerm::Tail {
                 callee: callee.as_ref(),
-                args: args.iter().map(|(a,b)|(a,*b)).collect(),
+                args: args.iter().map(|SpreadOr(a, b)|SpreadOr (a, *b)).collect(),
             },
         }
     }
@@ -648,7 +648,7 @@ where
             TTerm::Default => TTerm::Default,
             TTerm::Tail { callee, args } => TTerm::Tail {
                 callee: callee.as_mut(),
-                args: args.iter_mut().map(|(a,b)|(a,*b)).collect(),
+                args: args.iter_mut().map(|SpreadOr(a, b)|SpreadOr (a, *b)).collect(),
             },
         }
     }
@@ -690,7 +690,7 @@ where
                 callee: callee.map(&mut |a| ident(cx, a))?,
                 args: args
                     .into_iter()
-                    .map(|(a,b)| ident(cx, a).map(|c|(c,b)))
+                    .map(|SpreadOr(a, b)| ident(cx, a).map(|c| SpreadOr(c, b)))
                     .collect::<Result<_, E>>()?,
             },
         })
@@ -838,6 +838,8 @@ impl<I> TCallee<I> {
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
     tcfg.inlinable(d)
 }
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
+pub struct SpreadOr<I>(pub I, pub bool);
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Item<I = Ident, F = TFunc> {
@@ -874,7 +876,7 @@ pub enum Item<I = Ident, F = TFunc> {
     },
     Call {
         callee: TCallee<I>,
-        args: Vec<(I,bool)>,
+        args: Vec<SpreadOr<I>>,
     },
     New {
         class: I,
@@ -889,7 +891,7 @@ pub enum Item<I = Ident, F = TFunc> {
         constructor: Option<F>,
     },
     Arr {
-        members: Vec<(I,bool)>,
+        members: Vec<SpreadOr<I>>,
     },
     StaticSubArray {
         begin: usize,
@@ -953,7 +955,7 @@ impl<I, F> Item<I, F> {
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_ref(),
-                args: args.iter().map(|(a,b)|(a,*b)).collect(),
+                args: args.iter().map(|SpreadOr(a, b)| SpreadOr(a, *b)).collect(),
             },
             Item::New { class, args } => Item::New {
                 class,
@@ -966,7 +968,7 @@ impl<I, F> Item<I, F> {
                     .collect(),
             },
             Item::Arr { members } => Item::Arr {
-                members: members.iter().map(|(a,b)|(a,*b)).collect(),
+                members: members.iter().map(|SpreadOr(a, b)| SpreadOr(a, *b)).collect(),
             },
             Item::Yield { value, delegate } => Item::Yield {
                 value: value.as_ref(),
@@ -1061,7 +1063,7 @@ impl<I, F> Item<I, F> {
             Item::Lit { lit } => Item::Lit { lit: lit.clone() },
             Item::Call { callee, args } => Item::Call {
                 callee: callee.as_mut(),
-                args: args.iter_mut().map(|(a,b)|(a,*b)).collect(),
+                args: args.iter_mut().map(|SpreadOr(a, b)|SpreadOr (a, *b)).collect(),
             },
             Item::New { class, args } => Item::New {
                 class,
@@ -1074,7 +1076,7 @@ impl<I, F> Item<I, F> {
                     .collect(),
             },
             Item::Arr { members } => Item::Arr {
-                members: members.iter_mut().map(|(a,b)|(a,*b)).collect(),
+                members: members.iter_mut().map(|SpreadOr(a, b)|SpreadOr (a, *b)).collect(),
             },
             Item::Yield { value, delegate } => Item::Yield {
                 value: value.as_mut(),
@@ -1086,7 +1088,7 @@ impl<I, F> Item<I, F> {
             },
             Item::Undef => Item::Undef,
             Item::This => Item::This,
-             Item::Arguments => Item::Arguments,
+            Item::Arguments => Item::Arguments,
             Item::Class {
                 superclass,
                 members,
@@ -1175,7 +1177,7 @@ impl<I, F> Item<I, F> {
                 callee: callee.map(&mut |a| f(cx, a))?,
                 args: args
                     .into_iter()
-                    .map(|(a,b)| f(cx, a).map(|c|(c,b)))
+                    .map(|SpreadOr(a, b)| f(cx, a).map(|c| SpreadOr(c, b)))
                     .collect::<Result<Vec<_>, E>>()?,
             },
             Item::New { class, args } => Item::New {
@@ -1194,7 +1196,7 @@ impl<I, F> Item<I, F> {
             Item::Arr { members } => Item::Arr {
                 members: members
                     .into_iter()
-                    .map(|(a,b)| f(cx, a).map(|c|(c,b)))
+                    .map(|SpreadOr(a, b)| f(cx, a).map(|c| SpreadOr(c, b)))
                     .collect::<Result<_, E>>()?,
             },
             Item::Yield { value, delegate } => Item::Yield {
@@ -1208,7 +1210,7 @@ impl<I, F> Item<I, F> {
                 value: f(cx, value)?,
             },
             Item::Undef => Item::Undef,
-             Item::Arguments => Item::Arguments,
+            Item::Arguments => Item::Arguments,
             Item::Asm { value } => Item::Asm {
                 value: value.map(&mut |a| f(cx, a))?,
             },
@@ -1308,7 +1310,7 @@ impl<I, F> Item<I, F> {
                     TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
-                .chain(args.iter().map(|(a,_)|a)),
+                .chain(args.iter().map(|SpreadOr(a, _)| a)),
             ),
             Item::New { class, args } => Box::new(args.iter().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter().flat_map(|m| {
@@ -1324,7 +1326,7 @@ impl<I, F> Item<I, F> {
                 };
                 v.chain(w)
             })),
-            swc_tac::Item::Arr { members } => Box::new(members.iter().map(|(a,_)|a)),
+            swc_tac::Item::Arr { members } => Box::new(members.iter().map(|SpreadOr(a, _)| a)),
             swc_tac::Item::Yield { value, delegate } => Box::new(value.iter()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This | Item::Arguments => Box::new(empty()),
@@ -1395,7 +1397,7 @@ impl<I, F> Item<I, F> {
                     TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
-                .chain(args.iter_mut().map(|(a,_)|a)),
+                .chain(args.iter_mut().map(|SpreadOr(a, _)| a)),
             ),
             Item::New { class, args } => Box::new(args.iter_mut().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter_mut().flat_map(|m| {
@@ -1411,7 +1413,7 @@ impl<I, F> Item<I, F> {
                 };
                 v.chain(w)
             })),
-            swc_tac::Item::Arr { members } => Box::new(members.iter_mut().map(|(a,_)|a)),
+            swc_tac::Item::Arr { members } => Box::new(members.iter_mut().map(|SpreadOr(a, _)| a)),
             swc_tac::Item::Yield { value, delegate } => Box::new(value.iter_mut()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This | Item::Arguments => Box::new(empty()),

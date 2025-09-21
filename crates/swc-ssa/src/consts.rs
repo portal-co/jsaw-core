@@ -4,6 +4,7 @@ use portal_jsc_swc_util::SemanticCfg;
 use swc_common::Spanned;
 use swc_ecma_ast::Expr;
 use swc_ecma_utils::{ExprExt, Value};
+use swc_tac::SpreadOr;
 
 use crate::{simplify::default_ctx, *};
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -229,12 +230,12 @@ impl ConstantInstantiator {
                         .map(&mut |id| params.get(id).cloned().context("in getting a variable"))?,
                     args: args
                         .iter()
-                        .map(|(id, b)| match *b {
+                        .map(|SpreadOr(id, b)| match *b {
                             b => params
                                 .get(id)
                                 .cloned()
                                 .context("in getting a variable")
-                                .map(|c| (c, b)),
+                                .map(|c|SpreadOr (c, b)),
                         })
                         .collect::<Result<_, _>>()?,
                 },

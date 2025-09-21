@@ -67,7 +67,7 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
             let mut args = args.iter().cloned();
             return n
                 .map::<I, ()>(&mut |_| match args.next() {
-                    Some((a,b)) if !b => Ok(a),
+                    Some(SpreadOr(a,b)) if !b => Ok(a),
                     _ => Err(()),
                 })
                 .ok();

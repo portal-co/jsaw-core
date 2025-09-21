@@ -5,6 +5,7 @@ use std::{
 
 use id_arena::{Arena, Id};
 use ssa_traits::{HasChainableValues, HasValues};
+use swc_tac::SpreadOr;
 
 use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
 
@@ -281,7 +282,7 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter().map(|(a,b)|a).cloned().chain({
+            Self::Tail { callee, args } => Box::new(args.iter().map(|SpreadOr(a,b)|a).cloned().chain({
                 let mut v = Vec::default();
                 callee.as_ref().map(&mut |a| {
                     v.push(*a);
@@ -319,7 +320,7 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter_mut().map(|(a,b)|a).chain({
+            Self::Tail { callee, args } => Box::new(args.iter_mut().map(|SpreadOr(a,b)|a).chain({
                 let mut v = Vec::default();
                 callee.as_mut().map(&mut |a| {
                     v.push(a);

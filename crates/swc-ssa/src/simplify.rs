@@ -5,7 +5,7 @@ use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
 pub use swc_tac::{Item, consts::ItemGetter};
-use swc_tac::{PropKey, PropVal, consts::ItemGetterExt};
+use swc_tac::{consts::ItemGetterExt, PropKey, PropVal, SpreadOr};
 pub type _Ident = Ident;
 
 impl SCfg {
@@ -225,7 +225,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
         semantics: &SemanticCfg,
         k: &(dyn SValGetter<I, B, F> + '_),
         pierce: bool,
-    ) -> Option<Vec<(I, bool)>> {
+    ) -> Option<Vec<SpreadOr<I>>> {
         match self {
             SValue::Param { block, idx, ty } if pierce => {
                 let mut i = k
@@ -250,11 +250,11 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             {
                                 match i.array_in(semantics, k, pierce) {
                                     None => None,
-                                    Some(a) => {  if a.iter().any(|(_, v)| *v) {
+                                    Some(a) => {  if a.iter().any(|SpreadOr(_, v)| *v) {
                                             return None;
                                         };a
                                         .get((n.value.round() as usize))
-                                        .and_then(|(a,_)| k.val(*a))
+                                        .and_then(|SpreadOr(a,_)| k.val(*a))
                                         .and_then(|a| a.array_in(semantics, k, pierce))},
                                 }
                             }
@@ -276,8 +276,8 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             match func.array_in(semantics, k, pierce) {
                                 Some(members) => match s.value.as_str() {
                                     "concat" => {
-                                        let mut members: Vec<(I, bool)> = members;
-                                        for (a,s) in args.iter().cloned() {
+                                        let mut members: Vec<SpreadOr<I>> = members;
+                                        for SpreadOr(a,s) in args.iter().cloned() {
                                             let a = k.val(a)?;
                                             let i = a.array_in(semantics, k, pierce)?;
                                             if s{
@@ -291,18 +291,18 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     "slice" => {
                                         let begin: Option<usize> = args
                                             .get(0)
-                                            .cloned().and_then(|(a,b)|b.then(move||a))
+                                            .cloned().and_then(|SpreadOr(a,b)|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
                                         let end: Option<usize> = args
                                             .get(1)
-                                            .cloned().and_then(|(a,b)|b.then(move||a))
+                                            .cloned().and_then(|SpreadOr(a,b)|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
-                                        let mut members: Vec<(I, bool)> = members;
-                                        if members.iter().any(|(_, v)| *v) {
+                                        let mut members: Vec<SpreadOr<I>> = members;
+                                        if members.iter().any(|SpreadOr(_, v)| *v) {
                                             return None;
                                         }
                                         members = match (begin, end) {
@@ -843,10 +843,10 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     None => None,
                                     Some(a) => a
                                         .iter()
-                                        .all(|(_, v)| !*v)
+                                        .all(|SpreadOr(_, v)| !*v)
                                         .then(|| {
                                             a.get((n.value.round() as usize))
-                                                .and_then(|(a,_)| k.val(*a))
+                                                .and_then(|SpreadOr(a,_)| k.val(*a))
                                                 .and_then(|a| a.const_in(semantics, k, pierce))
                                         })
                                         .flatten(),
@@ -878,7 +878,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                             i2 => {
                                                 i = i2;
                                                 std::iter::from_fn(|| {
-                                                    let (n,s) = i.next()?;
+                                                    let SpreadOr(n,s) = i.next()?;
                                                     let i = k
                                                         .val(*n)?
                                                         .const_in(semantics, k, pierce)?;
