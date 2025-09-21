@@ -487,13 +487,15 @@ impl TCfg {
             for k in self.blocks.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 if let TTerm::Jmp(a) = &self.blocks[k].post.term {
                     let a = *a;
-                    if self.blocks[a].stmts.iter().all(|s| s.nothrow())
-                        || &self.blocks[k].post.catch == &self.blocks[a].post.catch
-                    {
-                        let s = self.blocks[a].stmts.clone();
-                        self.blocks[k].stmts.extend(s);
-                        self.blocks[k].post.term = self.blocks[a].post.term.clone();
-                        continue 'a;
+                    if a != k {
+                        if self.blocks[a].stmts.iter().all(|s| s.nothrow())
+                            || &self.blocks[k].post.catch == &self.blocks[a].post.catch
+                        {
+                            let s = self.blocks[a].stmts.clone();
+                            self.blocks[k].stmts.extend(s);
+                            self.blocks[k].post.term = self.blocks[a].post.term.clone();
+                            continue 'a;
+                        }
                     }
                 }
             }
