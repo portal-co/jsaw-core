@@ -269,6 +269,18 @@ pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
         span: Option<Span>,
     },
 }
+impl<I, B, F> SValue<I, B, F> {
+    pub fn nothrow(&self) -> bool {
+        match self {
+            SValue::Param { block, idx, ty } => true,
+            SValue::Item { item, span } => item.nothrow(),
+            SValue::Assign { target, val } => target.nothrow(),
+            SValue::LoadId(_) => true,
+            SValue::StoreId { target, val } => true,
+            SValue::EdgeBlocker { value, span } => true,
+        }
+    }
+}
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
         match self {

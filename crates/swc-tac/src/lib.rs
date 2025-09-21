@@ -515,16 +515,26 @@ pub struct TStmt {
     pub right: Item,
     pub span: Span,
 }
-impl TStmt {
+impl<I, M> LId<I, M> {
     pub fn nothrow(&self) -> bool {
-        return match &self.left {
+        match self {
             LId::Id { id } => true,
             _ => false,
-        } && match &self.right {
+        }
+    }
+}
+impl<I, F> Item<I, F> {
+    pub fn nothrow(&self) -> bool {
+        match self {
             Item::Just { id } => true,
             Item::Arguments | Item::This | Item::Undef => true,
             _ => false,
-        };
+        }
+    }
+}
+impl TStmt {
+    pub fn nothrow(&self) -> bool {
+        return self.left.nothrow() && self.right.nothrow();
     }
 }
 #[derive(Clone, Default, Debug)]
