@@ -10,6 +10,9 @@ pub struct ToSSAConverter {
     pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
 }
 impl ToSSAConverter {
+    fn safe_to_carry(&self, target: Id<TBlock>, src: Id<TBlock>) -> bool {
+        dominates::<TFunc>(&self.domtree, Some(src), Some(target))
+    }
     // pub fn from_undef(undef: Id<SValueW>) -> Self {
     //     Self {
     //         map: Default::default(),
@@ -129,8 +132,7 @@ impl ToSSAConverter {
                     });
                     let b = *b;
                     // let d = self.domtree.get(&Some(*k)).cloned() == Some(Some(ok));
-                    let d = (dominates::<TFunc>(&self.domtree, Some(b), Some(k))
-                        || dominates::<TFunc>(&self.domtree, Some(k), Some(b)));
+                    let d = self.safe_to_carry(b, k);
                     let state2 = once(pat.clone())
                         .chain(
                             self.all
@@ -256,8 +258,7 @@ impl ToSSAConverter {
                 }
             }
             let params = |this: &Self, k2: Id<TBlock>| {
-                let d = (dominates::<TFunc>(&this.domtree, Some(k2), Some(k))
-                    || dominates::<TFunc>(&this.domtree, Some(k), Some(k2)));
+                let d = this.safe_to_carry(k2, k);
                 this.all
                     .iter()
                     .filter(|a| {
@@ -274,8 +275,7 @@ impl ToSSAConverter {
                     .collect::<Vec<_>>()
             };
             let dtc = |this: &Self, k2: Id<TBlock>| {
-                let d = (dominates::<TFunc>(&this.domtree, Some(k2), Some(k))
-                    || dominates::<TFunc>(&this.domtree, Some(k), Some(k2)));
+                let d = this.safe_to_carry(k2, k);
                 if d {
                     app.clone()
                         .into_iter()
