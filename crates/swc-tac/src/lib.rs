@@ -515,6 +515,14 @@ pub struct TStmt {
     pub right: Item,
     pub span: Span,
 }
+impl TStmt {
+    pub fn will_store(&self, i: &Ident) -> bool {
+        match &self.left {
+            LId::Id { id } if id == i => true,
+            _ => self.right.will_store(i),
+        }
+    }
+}
 impl<I, M> LId<I, M> {
     pub fn nothrow(&self) -> bool {
         match self {
@@ -528,6 +536,15 @@ impl<I, F> Item<I, F> {
         match self {
             Item::Just { id } => true,
             Item::Arguments | Item::This | Item::Undef => true,
+            _ => false,
+        }
+    }
+    pub fn will_store(&self, i: &Ident) -> bool {
+        match self {
+            Item::Call {
+                callee: TCallee::Eval,
+                args,
+            } => true,
             _ => false,
         }
     }

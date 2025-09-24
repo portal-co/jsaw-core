@@ -1,3 +1,5 @@
+use ssa_impls::dom::dominates;
+
 use crate::*;
 
 #[non_exhaustive]
@@ -5,7 +7,7 @@ pub struct ToSSAConverter {
     pub map: BTreeMap<Id<TBlock>, Id<SBlock>>,
     pub all: BTreeSet<Ident>,
     pub undef: Id<SValueW>,
-    pub domtree: BTreeMap<Option<Id<TBlock>>, Option<Id<TBlock>>>,
+    pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
 }
 impl ToSSAConverter {
     // pub fn from_undef(undef: Id<SValueW>) -> Self {
@@ -119,13 +121,16 @@ impl ToSSAConverter {
             let ok = k;
             let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
-                swc_tac::TCatch::Jump { pat, k } => {
+                swc_tac::TCatch::Jump { pat, k: b } => {
                     let a = o.blocks.alloc(SBlock {
                         params: vec![],
                         stmts: vec![],
                         postcedent: SPostcedent::default(),
                     });
-                    let d = self.domtree.get(&Some(*k)).cloned() == Some(Some(ok));
+                    let b = *b;
+                    // let d = self.domtree.get(&Some(*k)).cloned() == Some(Some(ok));
+                    let d = (dominates::<TFunc>(&self.domtree, Some(b), Some(k))
+                        || dominates::<TFunc>(&self.domtree, Some(k), Some(b)));
                     let state2 = once(pat.clone())
                         .chain(
                             self.all
@@ -133,10 +138,7 @@ impl ToSSAConverter {
                                 .filter(|a| {
                                     !d || i.blocks.iter().all(|k| {
                                         k.1.stmts.iter().all(|i| {
-                                            i.left
-                                                != LId::Id {
-                                                    id: a.clone().clone(),
-                                                }
+                                            !i.will_store(a)
                                                 || !i.flags.contains(ValFlags::SSA_LIKE)
                                         })
                                     })
@@ -160,7 +162,7 @@ impl ToSSAConverter {
                         block: self.trans(
                             i,
                             o,
-                            *k,
+                            b,
                             &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
                         )?,
                         args: p,
@@ -254,7 +256,8 @@ impl ToSSAConverter {
                 }
             }
             let params = |this: &Self, k2: Id<TBlock>| {
-                let d = this.domtree.get(&Some(k2)).cloned() == Some(Some(k));
+                let d = (dominates::<TFunc>(&this.domtree, Some(k2), Some(k))
+                    || dominates::<TFunc>(&this.domtree, Some(k), Some(k2)));
                 this.all
                     .iter()
                     .filter(|a| {
@@ -271,7 +274,8 @@ impl ToSSAConverter {
                     .collect::<Vec<_>>()
             };
             let dtc = |this: &Self, k2: Id<TBlock>| {
-                let d = this.domtree.get(&Some(k2)).cloned() == Some(Some(k));
+                let d = (dominates::<TFunc>(&this.domtree, Some(k2), Some(k))
+                    || dominates::<TFunc>(&this.domtree, Some(k), Some(k2)));
                 if d {
                     app.clone()
                         .into_iter()
@@ -390,7 +394,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let domtree = ssa_impls::dom::domtree(value)
             .into_iter()
-            .map(|(a, b)| (a, Some(b)))
+            // .map(|(a, b)| (a, Some(b)))
             .collect::<BTreeMap<_, _>>();
         let mut decls = value.cfg.decls.clone();
         let mut d = BTreeSet::new();

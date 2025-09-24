@@ -280,6 +280,13 @@ impl<I, B, F> SValue<I, B, F> {
             SValue::EdgeBlocker { value, span } => true,
         }
     }
+    pub fn will_store(&self, id: &Ident) -> bool {
+        match self {
+            SValue::StoreId { target, val } if target == id => true,
+            SValue::Item { item, span } if item.will_store(id) => true,
+            _ => false,
+        }
+    }
 }
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
