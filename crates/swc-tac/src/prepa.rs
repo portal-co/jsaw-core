@@ -1,4 +1,7 @@
-use std::mem::replace;
+use std::{
+    mem::replace,
+    sync::{OnceLock, atomic::AtomicUsize},
+};
 
 use portal_solutions_proxy_signs::PROXY_SIGNS;
 use swc_ecma_ast::{
@@ -11,14 +14,45 @@ use super::*;
 #[non_exhaustive]
 pub struct Prepa<'a> {
     pub semantics: &'a SemanticCfg,
+    pub resolver: Arc<dyn AtomResolver>,
     vars: BTreeSet<Ident>,
+    idx: AtomicUsize,
+    ctxt: OnceLock<SyntaxContext>,
 }
 impl<'a> Prepa<'a> {
-    pub fn new(semantics: &'a SemanticCfg) -> Self {
+    pub fn new(semantics: &'a SemanticCfg, resolver: Arc<dyn AtomResolver>) -> Self {
         Self {
             semantics,
             vars: Default::default(),
+            resolver,
+            idx: Default::default(),
+            ctxt: Default::default(),
         }
+    }
+    fn pull(&self) -> Ident {
+        (
+            self.resolver
+                .resolve(self.idx.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
+            *self
+                .ctxt
+                .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new())),
+        )
+    }
+}
+fn eq(mut left: &Expr, mut right: &Expr) -> bool {
+    loop {
+        return match (left, right) {
+            (Expr::Ident(i), Expr::Ident(j)) => i.to_id() == j.to_id(),
+            (Expr::Assign(a), b) => {
+                left = &a.right;
+                continue;
+            }
+            (b, Expr::Assign(a)) => {
+                right = &a.right;
+                continue;
+            }
+            _ => false,
+        };
     }
 }
 impl VisitMut for Prepa<'_> {
@@ -170,167 +204,196 @@ impl VisitMut for Prepa<'_> {
             }
         }
     }
+    fn visit_mut_seq_expr(&mut self, node: &mut SeqExpr) {
+        let mut again = true;
+        while take(&mut again) {
+            node.visit_mut_children_with(self);
+            node.exprs = node
+                .exprs
+                .drain(..)
+                .flat_map(|a| match *a {
+                    Expr::Seq(SeqExpr { span, exprs }) => {
+                        again = true;
+                        exprs
+                    }
+                    a => [Box::new(a)].into_iter().collect::<Vec<_>>(),
+                })
+                .collect();
+            let l = node.exprs.len();
+            for (i, e) in take(&mut node.exprs).into_iter().enumerate() {
+                if let Some(i) = node
+                    .exprs
+                    .last()
+                    .and_then(|a| a.as_assign())
+                    .and_then(|a| a.left.as_ident())
+                    && let Some(j) = e.as_ident()
+                {
+                    if i.to_id() == j.to_id() {
+                        again = true;
+                        continue;
+                    }
+                }
+                if i + 1 == l {
+                } else {
+                    if e.is_lit() {
+                        again = true;
+                        continue;
+                    }
+                }
+                node.exprs.push(e);
+            }
+        }
+        let l = node.exprs.len();
+        for (i, e) in take(&mut node.exprs).into_iter().enumerate() {
+            if i + 1 == l {
+            } else {
+                if e.is_ident() || e.is_lit() {
+                    // again = true;
+                    continue;
+                }
+            }
+            node.exprs.push(e);
+        }
+    }
     fn visit_mut_expr(&mut self, node: &mut Expr) {
-        node.visit_mut_children_with(self);
-        // let vp = |e: &Expr| match e {
-        //     Expr::Ident(i) => {
-        //         i.ctxt == Default::default()
-        //             && ["pan_eval", "$scramjet", "__uv", "__PortalEnterprise"]
-        //                 .contains(&i.sym.as_str())
-        //     }
-        //     _ => false,
-        // };
-        if self
-            .semantics
-            .flags
-            .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
-        {
-            for a in [(Atom::new("globalThis"), SyntaxContext::empty())] {
-                *node = match take(node) {
-                    Expr::Member(m) => {
-                        let b = (
-                            Atom::new("$"),
-                            SyntaxContext::empty().apply_mark(Mark::new()),
-                        );
-                        self.vars.insert(b.clone());
+        let mut again = true;
+        while take(&mut again) {
+            node.visit_mut_children_with(self);
+            *node = match take(node) {
+                Expr::Seq(SeqExpr { span, mut exprs }) if exprs.len() == 1 => {
+                    again = true;
+                    *exprs.remove(0)
+                }
+                Expr::Bin(BinExpr {
+                    span,
+                    op,
+                    left,
+                    right,
+                }) => match op {
+                    BinaryOp::LogicalOr => {
+                        again = true;
+                        let lhs = self.pull();
+                        self.vars.insert(lhs.clone());
                         Expr::Cond(CondExpr {
-                            span: m.span,
+                            span,
+                            test: Box::new(Expr::Assign(AssignExpr {
+                                span,
+                                op: AssignOp::Assign,
+                                left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                    lhs.clone().into(),
+                                )),
+                                right: left,
+                            })),
+                            cons: lhs.into(),
+                            alt: right,
+                        })
+                    }
+                    BinaryOp::LogicalAnd => {
+                        again = true;
+                        let lhs = self.pull();
+                        self.vars.insert(lhs.clone());
+                        Expr::Cond(CondExpr {
+                            span,
+                            test: Box::new(Expr::Assign(AssignExpr {
+                                span,
+                                op: AssignOp::Assign,
+                                left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                    lhs.clone().into(),
+                                )),
+                                right: left,
+                            })),
+                            cons: right,
+                            alt: lhs.into(),
+                        })
+                    }
+                    BinaryOp::NullishCoalescing => {
+                        let lhs = self.pull();
+                        self.vars.insert(lhs.clone());
+                        Expr::Cond(CondExpr {
+                            span,
                             test: Box::new(Expr::Bin(BinExpr {
-                                span: m.span,
+                                span,
                                 op: BinaryOp::EqEqEq,
                                 left: Box::new(Expr::Assign(AssignExpr {
-                                    span: m.span,
-                                    op: swc_ecma_ast::AssignOp::Assign,
-                                    left: swc_ecma_ast::AssignTarget::Simple(
-                                        SimpleAssignTarget::Ident(b.clone().into()),
-                                    ),
-                                    right: m.obj,
+                                    span,
+                                    op: AssignOp::Assign,
+                                    left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                        lhs.clone().into(),
+                                    )),
+                                    right: left,
                                 })),
-                                right: a.clone().into(),
+                                right: Expr::undefined(span),
                             })),
-                            cons: Box::new(Expr::Member(MemberExpr {
-                                span: m.span,
-                                obj: a.clone().into(),
-                                prop: m.prop.clone(),
-                            })),
-                            alt: Box::new(Expr::Member(MemberExpr {
-                                span: m.span,
-                                obj: b.clone().into(),
-                                prop: m.prop.clone(),
-                            })),
+                            cons: right,
+                            alt: lhs.into(),
                         })
                     }
-                    Expr::Bin(m)
-                        if m.op == BinaryOp::In
-                            && self.semantics.flags.contains(SemanticFlags::NO_CRAZY)
-                            && !m.left.is_private_name() =>
-                    {
-                        let b = (
-                            Atom::new("$"),
-                            SyntaxContext::empty().apply_mark(Mark::new()),
-                        );
-                        self.vars.insert(b.clone());
-                        let c = (
-                            Atom::new("$"),
-                            SyntaxContext::empty().apply_mark(Mark::new()),
-                        );
-                        self.vars.insert(c.clone());
-                        Expr::Cond(CondExpr {
-                            span: m.span,
-                            test: Box::new(Expr::Bin(BinExpr {
-                                span: m.span,
-                                op: BinaryOp::LogicalAnd,
-                                left: Box::new(Expr::Seq(SeqExpr {
-                                    span: m.span,
-                                    exprs: [
-                                        Box::new(Expr::Assign(AssignExpr {
-                                            span: m.span,
-                                            op: swc_ecma_ast::AssignOp::Assign,
-                                            left: swc_ecma_ast::AssignTarget::Simple(
-                                                SimpleAssignTarget::Ident(c.clone().into()),
-                                            ),
-                                            right: m.left,
-                                        })),
-                                        Box::new(
-                                            PROXY_SIGNS
-                                            .iter().cloned().chain(["chrome"])
-                                            .fold(
-                                                Expr::Lit(Lit::Bool(Bool {
-                                                    span: m.span,
-                                                    value: true,
-                                                })),
-                                                |e, s| {
-                                                    Expr::Bin(BinExpr {
-                                                        span: m.span,
-                                                        op: BinaryOp::LogicalOr,
-                                                        left: Box::new(e),
-                                                        right: match Box::new(Expr::Lit(Lit::Str(
-                                                            Str {
-                                                                span: m.span,
-                                                                value: Atom::new(s),
-                                                                raw: None,
-                                                            },
-                                                        ))) {
-                                                            s => if self.semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING){
-                                                                Box::new(Expr::Call(CallExpr{
-                                                                    span:m.span,
-                                                                    ctxt: Default::default(),
-                                                                    callee:Callee::Expr(Box::new(Expr::Member(MemberExpr { 
-                                                                        span: m.span, 
-                                                                        obj: c.clone().into(), 
-                                                                        prop: MemberProp::Ident(IdentName{
-                                                                            span: m.span, 
-                                                                            sym: Atom::new("startsWith")})
-                                                                         }))),
-                                                                    type_args:None,
-                                                                    args:vec![ExprOrSpread{spread:None,expr:s}]}))
-                                                            }else{
-                                                                Box::new(Expr::Bin(BinExpr {
-                                                                span: m.span,
-                                                                op: BinaryOp::EqEqEq,
-                                                                left: c.clone().into(),
-                                                                right: s,
-                                                            }))
-                                                            },
-                                                        },
-                                                    })
-                                                },
-                                            ),
-                                        ),
-                                    ]
-                                    .into_iter()
-                                    .collect(),
-                                })),
-                                right: Box::new(Expr::Bin(BinExpr {
-                                    span: m.span,
-                                    op: BinaryOp::EqEqEq,
-                                    left: Box::new(Expr::Assign(AssignExpr {
-                                        span: m.span,
-                                        op: swc_ecma_ast::AssignOp::Assign,
-                                        left: swc_ecma_ast::AssignTarget::Simple(
-                                            SimpleAssignTarget::Ident(b.clone().into()),
-                                        ),
-                                        right: m.right,
-                                    })),
-                                    right: a.clone().into(),
-                                })),
-                            })),
-                            cons: Box::new(Expr::Lit(Lit::Bool(Bool {
-                                span: m.span,
-                                value: false,
-                            }))),
-                            alt: Box::new(Expr::Bin(BinExpr {
-                                span: m.span,
-                                op: m.op,
-                                left: c.into(),
-                                right: b.into(),
-                            })),
-                        })
-                    }
+                    _ => Expr::Bin(BinExpr {
+                        span,
+                        op,
+                        left,
+                        right,
+                    }),
+                },
+                node => node,
+            };
+            // let vp = |e: &Expr| match e {
+            //     Expr::Ident(i) => {
+            //         i.ctxt == Default::default()
+            //             && ["pan_eval", "$scramjet", "__uv", "__PortalEnterprise"]
+            //                 .contains(&i.sym.as_str())
+            //     }
+            //     _ => false,
+            // };
+            if self
+                .semantics
+                .flags
+                .contains(SemanticFlags::BITWISE_OR_ABSENT_NAN)
+            {
+                *node = match take(node) {
+                    Expr::Bin(BinExpr {
+                        span,
+                        op,
+                        left,
+                        right,
+                    }) => match op {
+                        BinaryOp::EqEqEq | BinaryOp::EqEq if eq(&left, &right) => {
+                            again = true;
+                            Expr::Seq(SeqExpr {
+                                span,
+                                exprs: [
+                                    left,
+                                    right,
+                                    Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
+                                ]
+                                .into_iter()
+                                .collect(),
+                            })
+                        }
+                        BinaryOp::NotEqEq | BinaryOp::NotEq if eq(&left, &right) => {
+                            again = true;
+                            Expr::Seq(SeqExpr {
+                                span,
+                                exprs: [
+                                    left,
+                                    right,
+                                    Box::new(Expr::Lit(Lit::Bool(Bool { span, value: false }))),
+                                ]
+                                .into_iter()
+                                .collect(),
+                            })
+                        }
+                        op => Expr::Bin(BinExpr {
+                            span,
+                            op,
+                            left,
+                            right,
+                        }),
+                    },
                     node => node,
                 }
             }
+            portal_solutions_swibb::folding::CondFolding::default().visit_mut_expr(node);
         }
-        portal_solutions_swibb::folding::CondFolding::default().visit_mut_expr(node);
     }
 }
