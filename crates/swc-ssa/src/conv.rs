@@ -193,6 +193,7 @@ impl ToSSAConverter {
                 span: s,
             } in i.blocks[k].stmts.iter()
             {
+                let nothrow = b.nothrow();
                 let b = b.as_ref();
                 let b = 'a: {
                     let b = match b {
@@ -218,7 +219,7 @@ impl ToSSAConverter {
                             *f &= *flags;
                             let f = *f;
                             *a = b;
-                            if !f.contains(ValFlags::SSA_LIKE) && shim.is_some() {
+                            if !f.contains(ValFlags::SSA_LIKE) && shim.is_some() && !nothrow {
                                 let u = o.blocks.alloc(SBlock {
                                     params: vec![],
                                     stmts: vec![],
