@@ -21,8 +21,8 @@ use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
-    ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, Number, Param, Pat,
-    SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
+    Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 
 use swc_ecma_ast::Id as Ident;
@@ -1029,9 +1029,11 @@ pub enum Item<I = Ident, F = TFunc> {
         otherwise: I,
     },
     Arguments,
-    // Intrinsic {
-    //     value: Native<I>,
-    // },
+    Meta {
+        prop: MetaPropKind,
+    }, // Intrinsic {
+       //     value: Native<I>,
+       // },
 }
 impl<I> Item<I> {
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J>, E> {
@@ -1158,10 +1160,12 @@ impl<I, F> Item<I, F> {
                 wrapped,
                 keys: keys.iter().map(|a| a.as_ref()).collect(),
             },
+            Item::Meta { prop } => Item::Meta { prop: *prop },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
         match self {
+            Item::Meta { prop } => Item::Meta { prop: *prop },
             Item::Select {
                 cond,
                 then,
@@ -1290,6 +1294,7 @@ impl<I, F> Item<I, F> {
         g: &mut (dyn FnMut(&mut C, F) -> Result<G, E> + '_),
     ) -> Result<Item<J, G>, E> {
         Ok(match self {
+            Item::Meta { prop } => Item::Meta { prop },
             Item::Select {
                 cond,
                 then,
@@ -1512,7 +1517,9 @@ impl<I, F> Item<I, F> {
             )),
             swc_tac::Item::Yield { value, delegate } => Box::new(value.iter()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
-            swc_tac::Item::Undef | Item::This | Item::Arguments => Box::new(empty()),
+            swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
+                Box::new(empty())
+            }
             Item::Asm { value } => Box::new(value.refs()),
             Item::Class {
                 superclass,
@@ -1609,7 +1616,7 @@ impl<I, F> Item<I, F> {
             )),
             swc_tac::Item::Yield { value, delegate } => Box::new(value.iter_mut()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
-            swc_tac::Item::Undef | Item::This | Item::Arguments => Box::new(empty()),
+            swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta{..} => Box::new(empty()),
             Item::Asm { value } => Box::new(value.refs_mut()),
             Item::Class {
                 superclass,

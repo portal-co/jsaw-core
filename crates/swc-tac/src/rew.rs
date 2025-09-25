@@ -166,6 +166,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
         sf: &mut (dyn FnMut(&mut Cx, &F) -> Result<Function, E> + '_),
     ) -> Result<Box<Expr>, E> {
         let right = Box::new(match self {
+            Item::Meta { prop } => Expr::MetaProp(MetaPropExpr { span, kind: *prop }),
             Item::Arguments => Expr::Ident(swc_ecma_ast::Ident {
                 span,
                 ctxt: Default::default(),

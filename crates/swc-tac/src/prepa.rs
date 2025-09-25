@@ -235,24 +235,13 @@ impl VisitMut for Prepa<'_> {
                 }
                 if i + 1 == l {
                 } else {
-                    if e.is_lit() {
+                    if e.is_lit() || e.is_ident() {
                         again = true;
                         continue;
                     }
                 }
                 node.exprs.push(e);
             }
-        }
-        let l = node.exprs.len();
-        for (i, e) in take(&mut node.exprs).into_iter().enumerate() {
-            if i + 1 == l {
-            } else {
-                if e.is_ident() || e.is_lit() {
-                    // again = true;
-                    continue;
-                }
-            }
-            node.exprs.push(e);
         }
     }
     fn visit_mut_expr(&mut self, node: &mut Expr) {

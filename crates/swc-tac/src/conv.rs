@@ -2120,6 +2120,17 @@ impl ToTACConverter<'_> {
                 }
                 return Ok((r.context("in getting the last one")?, t));
             }
+            Expr::MetaProp(m) => {
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Meta { prop: m.kind },
+                    span: m.span(),
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
+            }
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
     }
