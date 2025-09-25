@@ -534,8 +534,9 @@ impl<I, M> LId<I, M> {
 impl<I, F> Item<I, F> {
     pub fn nothrow(&self) -> bool {
         match self {
-            Item::Just { id } => true,
-            Item::Arguments | Item::This | Item::Undef => true,
+            Item::Arguments | Item::This | Item::Undef | Item::Meta { .. } | Item::Just { .. } => {
+                true
+            }
             _ => false,
         }
     }
@@ -1616,7 +1617,9 @@ impl<I, F> Item<I, F> {
             )),
             swc_tac::Item::Yield { value, delegate } => Box::new(value.iter_mut()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
-            swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta{..} => Box::new(empty()),
+            swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
+                Box::new(empty())
+            }
             Item::Asm { value } => Box::new(value.refs_mut()),
             Item::Class {
                 superclass,
