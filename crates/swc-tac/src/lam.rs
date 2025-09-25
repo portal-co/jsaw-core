@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Index, IndexMut},
     sync::{Arc, OnceLock},
 };
@@ -24,6 +24,29 @@ impl AtomResolver for DefaultAtomResolver {
         Atom::new(format!("${len}"))
     }
 }
+#[derive(Debug)]
+pub struct Prepend<V, A> {
+    value: V,
+    resolver: A,
+}
+impl<V: Display + Debug, A: AtomResolver> AtomResolver for Prepend<V, A> {
+    fn resolve(&self, len: usize) -> Atom {
+        let r = self.resolver.resolve(len);
+        Atom::new(format!("{}{}", self.value, r))
+    }
+}
+pub trait AtomResolverExt: AtomResolver {
+    fn prepend<V>(self, value: V) -> Prepend<V, Self>
+    where
+        Self: Sized,
+    {
+        Prepend {
+            value,
+            resolver: self,
+        }
+    }
+}
+impl<T: AtomResolver + ?Sized> AtomResolverExt for T {}
 #[derive(Clone, Debug)]
 pub struct LAM<T> {
     map: HashMap<Id, T>,
