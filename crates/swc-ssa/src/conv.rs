@@ -410,6 +410,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             decls: d,
             generics: None,
             ts_retty: None,
+            resolver: value.cfg.regs.resolver.clone(),
         };
         let entry2 = cfg.blocks.alloc(Default::default());
         let params = value

@@ -3,6 +3,7 @@ use std::{
     convert::Infallible,
     iter::{empty, once},
     mem::take,
+    sync::Arc,
 };
 
 use anyhow::Context;
@@ -13,7 +14,10 @@ use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
-use swc_tac::{Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags};
+use swc_tac::{
+    Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags,
+    lam::{AtomResolver, DefaultAtomResolver},
+};
 use swc_tac::{LId, inlinable};
 pub mod consts;
 // pub mod idw;
@@ -122,7 +126,7 @@ impl SCfg {
         }
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SFunc {
     pub cfg: SCfg,
     pub entry: Id<SBlock>,
@@ -138,7 +142,7 @@ impl TryFrom<TFunc> for SFunc {
         TryFrom::try_from(&value)
     }
 }
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SCfg {
     pub blocks: Arena<SBlock>,
     pub values: Arena<SValueW>,
@@ -146,6 +150,20 @@ pub struct SCfg {
     pub decls: BTreeSet<Ident>,
     pub generics: Option<TsTypeParamDecl>,
     pub ts_retty: Option<TsTypeAnn>,
+    pub resolver: Arc<dyn AtomResolver>,
+}
+impl Default for SCfg {
+    fn default() -> Self {
+        Self {
+            blocks: Default::default(),
+            values: Default::default(),
+            ts: Default::default(),
+            decls: Default::default(),
+            generics: Default::default(),
+            ts_retty: Default::default(),
+            resolver: Arc::new(DefaultAtomResolver::default()),
+        }
+    }
 }
 impl SCfg {
     pub fn inputs(&self, block: Id<SBlock>, param: usize) -> impl Iterator<Item = Id<SValueW>> {
@@ -441,7 +459,7 @@ impl<I, B, F> SValue<I, B, F> {
     }
 }
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SValueW {
     pub value: SValue,
 }

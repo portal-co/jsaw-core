@@ -12,6 +12,7 @@ impl SFunc {
         let value = self;
         let mut cfg = TCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());
+        cfg.regs.resolver = self.cfg.resolver.clone();
         let mut rew = Rew {
             blocks: Default::default(),
             ctxt: Default::default(),
