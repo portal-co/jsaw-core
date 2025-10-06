@@ -502,6 +502,108 @@ impl TCfg {
             return;
         }
     }
+    pub fn splat_objects(&mut self, d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
+        let mut cont = true;
+        while take(&mut cont) {
+            self.remark_with_domtree(d.clone());
+            self.simplify_justs();
+            self.remark_with_domtree(d.clone());
+            let mut a = self
+                .decls
+                .clone()
+                .into_iter()
+                // .filter_map(|a|)
+                .filter_map(|a| match self.get_item(a.clone())? {
+                    Item::Obj { members } => {
+                        // let mut a = Vec::default();
+                        let mut m = BTreeMap::new();
+                        for (k, v) in members.clone().into_iter() {
+                            let PropVal::Item(v) = v else {
+                                return None;
+                            };
+                            let k = match k {
+                                PropKey::Lit(l) => l.0.clone(),
+                                PropKey::Computed(c) => match self.get_item(c)? {
+                                    Item::Lit { lit: Lit::Str(Str { span, value, raw }) } => value.clone(),
+                                    _ => return None,
+                                },
+                                _ => return None,
+                            };
+                            m.insert(k, (v, self.regs.alloc(())));
+                            // a.push((k.clone(), v.clone()));
+                        }
+                        Some((a.clone(), m))
+                    }
+                    _ => None,
+                })
+                .collect::<BTreeMap<_, _>>();
+            a = a
+                .into_iter()
+                .filter(|(a, _)| {
+                    !self.blocks.iter().any(|k| {
+                        k.1.stmts.iter().any(|s| s.will_ruin(a))
+                            || match &k.1.post.term {
+                                TTerm::Return(Some(b)) => b == a,
+                                TTerm::Throw(b) => b == a,
+                                _ => false,
+                            }
+                    })
+                })
+                .collect();
+            for ki in self.blocks.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
+                // let mut k = &mut;
+                's: for mut s in take(&mut self.blocks[ki].stmts) {
+                    if let LId::Id { id } = &s.left {
+                        if let Some(v) = a.get(id) {
+                            for (v, t) in v.values() {
+                                self.blocks[ki].stmts.push(TStmt {
+                                    left: LId::Id { id: t.clone() },
+                                    flags: Default::default(),
+                                    right: Item::Just { id: v.clone() },
+                                    span: s.span,
+                                });
+                                cont = true;
+                            }
+                            continue;
+                        }
+                    }
+                    'a: {
+                        if let LId::Member { obj, mem } = &s.left {
+                            if let Some(v) = a.get(obj) {
+                                if let Some(Item::Lit {
+                                    lit: Lit::Str(Str { span, value, raw }),
+                                }) = self.get_item(mem[0].clone())
+                                {
+                                    if let Some((_, w)) = v.get(value) {
+                                        s.left = LId::Id { id: w.clone() };
+                                        cont = true;
+                                        break 'a;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    'b: {
+                        if let Item::Mem { obj, mem } = &s.right {
+                            if let Some(v) = a.get(obj) {
+                                if let Some(Item::Lit {
+                                    lit: Lit::Str(Str { span, value, raw }),
+                                }) = self.get_item(mem.clone())
+                                {
+                                    if let Some((_, w)) = v.get(value) {
+                                        s.right = Item::Just { id: w.clone() };
+                                        cont = true;
+                                        break 'b;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.blocks[ki].stmts.push(s);
+                }
+            }
+        }
+    }
 }
 impl Externs<Ident> for TCfg {
     fn externs(&self) -> impl Iterator<Item = Ident> {
@@ -516,6 +618,9 @@ pub struct TStmt {
     pub span: Span,
 }
 impl TStmt {
+    pub fn will_ruin(&self, i: &Ident) -> bool {
+        self.right.will_ruin(i)
+    }
     pub fn will_store(&self, i: &Ident) -> bool {
         match &self.left {
             LId::Id { id } if id == i => true,
@@ -531,12 +636,31 @@ impl<I, M> LId<I, M> {
         }
     }
 }
+impl<I: PartialEq, F> Item<I, F> {
+    pub fn will_ruin(&self, i: &I) -> bool {
+        match self {
+            Item::Mem { obj, mem } => mem == i,
+            Item::Call {
+                callee: TCallee::Eval,
+                args,
+            } => true,
+            a => a.refs().any(|r| r == i),
+        }
+    }
+}
 impl<I, F> Item<I, F> {
     pub fn nothrow(&self) -> bool {
         match self {
-            Item::Arguments | Item::This | Item::Undef | Item::Meta { .. } | Item::Just { .. } => {
-                true
-            }
+            Item::Arguments
+            | Item::This
+            | Item::Undef
+            | Item::Meta { .. }
+            | Item::Just { .. }
+            | Item::Lit { .. } => true,
+            Item::Un {
+                op: UnaryOp::Void | UnaryOp::TypeOf,
+                ..
+            } => true,
             _ => false,
         }
     }
