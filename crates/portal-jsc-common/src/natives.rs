@@ -5,6 +5,28 @@ pub enum Primordial {
     GlobalThis,
     Object,
     Reflect,
+    Reflect_get,
+    Reflect_apply,
+    Reflect_set,
+}
+impl Primordial {
+    pub fn global(k: &str) -> Option<&'static Self> {
+        match k {
+            "globalThis" | "window" | "self" | "global" => Some(&Self::GlobalThis),
+            "Object" => Some(&Self::Object),
+            "Reflect" => Some(&Self::Reflect),
+            _ => None,
+        }
+    }
+    pub fn get_perfect(&self, k: &str) -> Option<&'static Self> {
+        match (self, k) {
+            (Self::GlobalThis, a) => Self::global(a),
+            (Self::Reflect, "get") => Some(&Self::Reflect_get),
+            (Self::Reflect, "set") => Some(&Self::Reflect_set),
+            (Self::Reflect, "apply") => Some(&Self::Reflect_apply),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
