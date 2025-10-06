@@ -4,7 +4,7 @@ use std::mem::take;
 
 use anyhow::Context;
 use id_arena::Id;
-use portal_jsc_common::Asm;
+use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
@@ -687,7 +687,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
             }
             crate::Item::Undef => *Expr::undefined(span),
             crate::Item::Asm { value } => match value {
-                portal_jsc_common::Asm::OrZero(a) => Expr::Bin(BinExpr {
+                Asm::OrZero(a) => Expr::Bin(BinExpr {
                     span,
                     op: BinaryOp::BitOr,
                     left: sr(cx, a)?,
@@ -1016,7 +1016,7 @@ impl Rew<'_> {
                             } =>
                         {
                             match value {
-                                portal_jsc_common::Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
+                                Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
                                     span,
                                     op: BinaryOp::BitOr,
                                     left: _sr(a, tcfg, state, span),

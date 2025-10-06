@@ -11,7 +11,7 @@ use either::Either;
 use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
-use portal_jsc_common::{Asm, natives::Native};
+use portal_jsc_common::{syntax::Asm, natives::Native};
 use portal_jsc_swc_util::brighten::Purity;
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
 use portal_solutions_swibb::ConstCollector;

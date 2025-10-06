@@ -9,7 +9,7 @@ use std::{
 use anyhow::Context;
 use cfg_traits::Term;
 use id_arena::{Arena, Id};
-use portal_jsc_common::Asm;
+use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
 use swc_common::Span;
