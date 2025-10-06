@@ -516,19 +516,42 @@ impl TCfg {
                 .filter_map(|a| match self.get_item(a.clone())? {
                     Item::Obj { members } => {
                         // let mut a = Vec::default();
-                        let mut m = BTreeMap::new();
+                        let mut m = HashMap::new();
                         for (k, v) in members.clone().into_iter() {
                             let PropVal::Item(v) = v else {
                                 return None;
                             };
-                            let k = match k {
-                                PropKey::Lit(l) => l.0.clone(),
+                            let mut k = match k {
+                                PropKey::Lit(l) => Lit::Str(Str {
+                                    span: Span::dummy_with_cmt(),
+                                    value: l.0.clone(),
+                                    raw: None,
+                                }),
                                 PropKey::Computed(c) => match self.get_item(c)? {
-                                    Item::Lit { lit: Lit::Str(Str { span, value, raw }) } => value.clone(),
+                                    Item::Lit { lit } => lit.clone(),
                                     _ => return None,
                                 },
                                 _ => return None,
                             };
+                            k.set_span(Span::dummy_with_cmt());
+                            m.insert(k, (v, self.regs.alloc(())));
+                            // a.push((k.clone(), v.clone()));
+                        }
+                        Some((a.clone(), m))
+                    }
+                    Item::Arr { members } => {
+                        let mut m = HashMap::new();
+                        for (i, v) in members.clone().into_iter().enumerate() {
+                            if v.is_spread {
+                                return None;
+                            };
+                            let v = v.value;
+                            let mut k = Lit::Num(Number {
+                                span: Span::dummy_with_cmt(),
+                                value: i as f64,
+                                raw: None,
+                            });
+                            k.set_span(Span::dummy_with_cmt());
                             m.insert(k, (v, self.regs.alloc(())));
                             // a.push((k.clone(), v.clone()));
                         }
@@ -570,11 +593,10 @@ impl TCfg {
                     'a: {
                         if let LId::Member { obj, mem } = &s.left {
                             if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit {
-                                    lit: Lit::Str(Str { span, value, raw }),
-                                }) = self.get_item(mem[0].clone())
-                                {
-                                    if let Some((_, w)) = v.get(value) {
+                                if let Some(Item::Lit { lit }) = self.get_item(mem[0].clone()) {
+                                    let mut lit = lit.clone();
+                                    lit.set_span(Span::dummy_with_cmt());
+                                    if let Some((_, w)) = v.get(&lit) {
                                         s.left = LId::Id { id: w.clone() };
                                         cont = true;
                                         break 'a;
@@ -586,11 +608,10 @@ impl TCfg {
                     'b: {
                         if let Item::Mem { obj, mem } = &s.right {
                             if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit {
-                                    lit: Lit::Str(Str { span, value, raw }),
-                                }) = self.get_item(mem.clone())
-                                {
-                                    if let Some((_, w)) = v.get(value) {
+                                if let Some(Item::Lit { lit }) = self.get_item(mem.clone()) {
+                                    let mut lit = lit.clone();
+                                    lit.set_span(Span::dummy_with_cmt());
+                                    if let Some((_, w)) = v.get(&lit) {
                                         s.right = Item::Just { id: w.clone() };
                                         cont = true;
                                         break 'b;
