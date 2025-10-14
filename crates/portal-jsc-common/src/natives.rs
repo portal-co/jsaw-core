@@ -8,6 +8,9 @@ pub enum Primordial {
     Reflect_get,
     Reflect_apply,
     Reflect_set,
+    Math,
+    Math_froumd,
+    Math_imul,
 }
 impl Primordial {
     pub fn global(k: &str) -> Option<&'static Self> {
@@ -15,6 +18,7 @@ impl Primordial {
             "globalThis" | "window" | "self" | "global" => Some(&Self::GlobalThis),
             "Object" => Some(&Self::Object),
             "Reflect" => Some(&Self::Reflect),
+            "Math" => Some(&Self::Math),
             _ => None,
         }
     }
@@ -24,6 +28,8 @@ impl Primordial {
             (Self::Reflect, "get") => Some(&Self::Reflect_get),
             (Self::Reflect, "set") => Some(&Self::Reflect_set),
             (Self::Reflect, "apply") => Some(&Self::Reflect_apply),
+            (Self::Math, "fround") => Some(&Self::Math_froumd),
+            (Self::Math, "imul") => Some(&Self::Math_imul),
             _ => None,
         }
     }
