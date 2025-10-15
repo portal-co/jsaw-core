@@ -17,7 +17,7 @@ use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFla
 use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
-use swc_cfg::{Block, Catch, Cfg, Func};
+// use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
