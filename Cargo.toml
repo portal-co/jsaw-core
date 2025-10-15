@@ -17,6 +17,10 @@ resolver = "3"
 
 [workspace.package]
 version = "0.8.0-pre.9"
+edition = "2024"
+license = "MPL-2.0"
+description = "ECMAScript IR"
+
 
 [workspace.dependencies]
 swc-cfg = { version = "^0.8.0-pre.9", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }

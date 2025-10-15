@@ -1,9 +1,9 @@
 [package]
 name = "portal-jsc-common"
 version.workspace = true
-edition = "2024"
-license = "MPL-2.0"
-description = "ECMAScript IR"
+edition.workspace = true     # = "2024"
+license.workspace = true     # = "MPL-2.0"
+description.workspace = true # = "ECMAScript IR"
 
 [dependencies]
 either = { version = "^1.15.0", default-features = false }
