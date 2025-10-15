@@ -4,8 +4,8 @@ use swc_atoms::Atom;
 use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
-pub use swc_tac::{Item, consts::ItemGetter};
-use swc_tac::{consts::ItemGetterExt, PropKey, PropVal, SpreadOr};
+pub use swc_tac::{Item, ItemGetter};
+use swc_tac::{ItemGetterExt, PropKey, PropVal, SpreadOr};
 pub type _Ident = Ident;
 
 impl SCfg {

@@ -695,6 +695,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-jsc-swc-ll-common"
+version = "0.8.0-pre.9"
+dependencies = [
+ "anyhow",
+ "arena-traits",
+ "bitflags",
+ "cfg-traits",
+ "either",
+ "id-arena",
+ "linearize",
+ "linearize-derive",
+ "portal-jsc-common",
+ "portal-jsc-simpl-js",
+ "portal-jsc-swc-cfg",
+ "portal-jsc-swc-util",
+ "portal-solutions-proxy-signs",
+ "portal-solutions-swibb",
+ "relooper",
+ "ssa-impls",
+ "ssa-reloop",
+ "swc_atoms",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_utils",
+ "swc_ecma_visit",
+]
+
+[[package]]
 name = "portal-jsc-swc-opt-ssa"
 version = "0.8.0-pre.9"
 dependencies = [
@@ -754,6 +782,7 @@ dependencies = [
  "portal-jsc-common",
  "portal-jsc-simpl-js",
  "portal-jsc-swc-cfg",
+ "portal-jsc-swc-ll-common",
  "portal-jsc-swc-util",
  "portal-solutions-proxy-signs",
  "portal-solutions-swibb",

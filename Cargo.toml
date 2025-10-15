@@ -7,7 +7,8 @@ members = [
     "crates/swc-tac",
     "crates/swc-util",
     "crates/portal-jsc-generator",
-    "crates/simpl-js"
+    "crates/simpl-js",
+    "crates/swc-ll-common"
 ]
 
 # "js-runtime-lib","swc-emit-rust","swc-waffle"
@@ -20,6 +21,7 @@ version = "0.8.0-pre.9"
 [workspace.dependencies]
 swc-cfg = { version = "^0.8.0-pre.9", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
 swc-tac = { version = "^0.8.0-pre.9", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
+swc-ll-common = { version = "^0.8.0-pre.9", path = "crates/swc-ll-common", package = "portal-jsc-swc-ll-common" }
 swc-ssa = { version = "^0.8.0-pre.9", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
 portal-jsc-swc-util = { version = "^0.8.0-pre.9", path = "crates/swc-util", features = [
     "ty",

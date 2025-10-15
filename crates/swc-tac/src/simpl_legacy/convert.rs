@@ -240,7 +240,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         left: &SimplPathId,
         ids: impl Iterator<Item = (&'a crate::Ident, impl Iterator<Item = &'b SimplPathId>)>,
         span: &Span,
-    ) -> crate::Item {
+    ) -> crate::Item<swc_ecma_ast::Id,TFunc> {
         let v = o.regs.alloc(());
         o.decls.insert(v.clone());
         o.blocks[n].stmts.push(TStmt {
@@ -343,7 +343,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             };
         }
         let left: LId = lid!(left);
-        let right: Item = match right {
+        let right: Item<swc_ecma_ast::Id,TFunc> = match right {
             SimplItem::Just { id } => Item::Just { id: path!(&id.0) },
             SimplItem::Bin { left, right, op } => Item::Bin {
                 left: path!(&left.0),

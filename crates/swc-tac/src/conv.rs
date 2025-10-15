@@ -318,7 +318,7 @@ impl ToTACConverter<'_> {
         b: Id<Block>,
         mut t: Id<TBlock>,
         call: &CallExpr,
-    ) -> anyhow::Result<(TCallee, Vec<SpreadOr<(Atom, SyntaxContext)>>, Id<TBlock>)> {
+    ) -> anyhow::Result<(TCallee<Ident>, Vec<SpreadOr<(Atom, SyntaxContext)>>, Id<TBlock>)> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -1033,7 +1033,7 @@ impl ToTACConverter<'_> {
         }
         let mut members: Vec<(
             MemberFlags,
-            PropKey,
+            PropKey<Ident>,
             PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
         )> = Default::default();
         let mut constructor: Option<TFunc> = Default::default();
@@ -1635,52 +1635,7 @@ impl ToTACConverter<'_> {
             Expr::Call(call) => {
                 let (c, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
                 t = t2;
-                match self
-                    .mapper
-                    .semantic
-                    .flags
-                    .contains(SemanticFlags::NO_MONKEYPATCHING)
-                    .then(|| {
-                        let mut i;
-                        match &c {
-                            TCallee::Member { func, member } => {
-                                match o.def(LId::Id { id: member.clone() })? {
-                                    Item::Lit { lit: Lit::Str(s) } => match o
-                                        .def(LId::Id { id: func.clone() })?
-                                    {
-                                        Item::Lit { lit } => ses_method(
-                                            lit,
-                                            &s.value,
-                                            &mut match args.iter() {
-                                                i2 => {
-                                                    i = i2;
-                                                    std::iter::from_fn(|| {
-                                                        let SpreadOr {
-                                                            value: n,
-                                                            is_spread: b,
-                                                        } = i.next()?;
-                                                        let false = b else { return None };
-                                                        let i = o.def(LId::Id { id: n.clone() })?;
-                                                        let Item::Lit { lit } = i else {
-                                                            return None;
-                                                        };
-                                                        Some(lit.clone())
-                                                    })
-                                                    .fuse()
-                                                }
-                                            },
-                                        ),
-                                        _ => None,
-                                    },
-                                    _ => None,
-                                }
-                            }
-                            _ => None,
-                        }
-                    })
-                    .flatten()
-                {
-                    None => {
+            
                         let tmp = o.regs.alloc(());
                         o.blocks[t].stmts.push(TStmt {
                             left: LId::Id { id: tmp.clone() },
@@ -1690,19 +1645,7 @@ impl ToTACConverter<'_> {
                         });
                         o.decls.insert(tmp.clone());
                         return Ok((tmp, t));
-                    }
-                    Some(l) => {
-                        let tmp = o.regs.alloc(());
-                        o.blocks[t].stmts.push(TStmt {
-                            left: LId::Id { id: tmp.clone() },
-                            flags: ValFlags::SSA_LIKE,
-                            right: Item::Lit { lit: l },
-                            span: call.span(),
-                        });
-                        o.decls.insert(tmp.clone());
-                        return Ok((tmp, t));
-                    }
-                }
+                    
             }
             Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op.clone()) {
                 (Expr::PrivateName(p), obj, BinaryOp::In) => {

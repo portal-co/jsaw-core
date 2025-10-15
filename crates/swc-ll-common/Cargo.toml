@@ -1,5 +1,5 @@
 [package]
-name = "portal-jsc-swc-tac"
+name = "portal-jsc-swc-ll-common"
 version .workspace = true
 edition = "2024"
 license = "MPL-2.0"
@@ -17,7 +17,6 @@ ssa-reloop.workspace = true
 relooper.workspace = true
 either = "1.13.0"
 id-arena.workspace = true
-swc-ll-common.workspace = true
 swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
 portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util" }
 portal-jsc-simpl-js = {workspace=true, optional = true }

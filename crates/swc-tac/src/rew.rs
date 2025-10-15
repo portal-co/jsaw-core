@@ -396,7 +396,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                         span: span,
                                         expr: sr(cx, c)?,
                                     })
-                                }
+                                },
+                                _ => todo!()
                             };
                             Box::new(match &a.1 {
                                 crate::PropVal::Item(i) => Prop::KeyValue(KeyValueProp {
@@ -431,6 +432,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                         function: Box::new(f),
                                     }
                                 }),
+                                _ => todo!()
                             })
                         }))
                     })
@@ -467,7 +469,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                             span: span,
                                             expr: sr(cx, c)?,
                                         })
-                                    }
+                                    },
+                                    _ => todo!()
                                 };
                                 match &a.2 {
                                     crate::PropVal::Item(i) => {
@@ -622,7 +625,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 is_override: false,
                                             })
                                         }
-                                    }
+                                    },
+                                    _ => todo!()
                                 }
                             })
                         })
@@ -784,7 +788,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                 .iter()
                                 .map(|k| {
                                     Ok(ObjectPatProp::KeyValue(KeyValuePatProp {
-                                        key: match &k {
+                                        key: match &*k {
                                             crate::PropKey::Lit(l) => {
                                                 swc_ecma_ast::PropName::Ident(
                                                     swc_ecma_ast::IdentName {
@@ -798,7 +802,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                     span: span,
                                                     expr: sr(cx, c)?,
                                                 })
-                                            }
+                                            },
+                                            _ => todo!()
                                         },
                                         value: Box::new(Pat::Ident(any().into())),
                                     }))
@@ -827,7 +832,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     .collect(),
                     type_args: None,
                 })
-            } // Item::Intrinsic { value } => {
+            },
+            _ =>todo!()
+             // Item::Intrinsic { value } => {
               //     let mut v = Vec::default();
               //     let x = value
               //         .as_ref()
