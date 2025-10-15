@@ -26,6 +26,7 @@ use swc_ecma_ast::{
 };
 
 use swc_ecma_ast::Id as Ident;
+pub mod fetch;
 bitflags! {
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
@@ -148,6 +149,7 @@ pub struct Private {
     pub ctxt: SyntaxContext,
     pub span: Span,
 }
+
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
 pub enum PropKey<I> {
