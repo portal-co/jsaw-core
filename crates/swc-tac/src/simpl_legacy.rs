@@ -5,7 +5,7 @@ use id_arena::{Arena, Id};
 use portal_jsc_simpl_js::{
     self as simpl_ast, Dialect, FuncId, SimplExpr, SimplPath, SimplPathId, SimplStmt,
 };
-use swc_cfg::Loop;
+use swc_cfg::to_cfg::Loop;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
 

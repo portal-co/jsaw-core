@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use id_arena::Id;
 
-use crate::{Block, Catch, Cfg, Term, ToCfgConversionCtx};
+use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 #[derive(Default)]
 pub struct Recfg {
     pub map: BTreeMap<Id<Block>, Id<Block>>,
@@ -36,7 +36,7 @@ impl Recfg {
             };
             let new_block_id = ctx.transform_all(
                 output_cfg,
-                input_cfg.blocks[block_id].stmts.clone(),
+                &input_cfg.blocks[block_id].stmts.clone(),
                 new_block_id,
             )?;
             let term = match &input_cfg.blocks[block_id].end.term {

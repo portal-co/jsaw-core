@@ -1848,10 +1848,10 @@ impl ToTACConverter<'_> {
                         pat: a,
                     })
                     .collect();
-                let mut k = swc_cfg::ToCfgConversionCtx::default();
+                let mut k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                 match a.body.as_ref() {
                     swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                        k.transform_all(&mut c.cfg, block_stmt.stmts.clone(), c.entry)?;
+                        k.transform_all(&mut c.cfg, &block_stmt.stmts.clone(), c.entry)?;
                     }
                     swc_ecma_ast::BlockStmtOrExpr::Expr(expr) => {
                         c.cfg.blocks[c.entry].end = swc_cfg::End {
@@ -1957,10 +1957,10 @@ impl ToTACConverter<'_> {
                                 swc_ecma_ast::Prop::Getter(getter_prop) => {
                                     let v = PropVal::Getter({
                                         let mut c = swc_cfg::Func::default();
-                                        let k = swc_cfg::ToCfgConversionCtx::default();
+                                        let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let k = k.transform_all(
                                             &mut c.cfg,
-                                            getter_prop
+                                            &getter_prop
                                                 .body
                                                 .as_ref()
                                                 .context("in getting the body")?
@@ -1980,10 +1980,10 @@ impl ToTACConverter<'_> {
                                             decorators: vec![],
                                             pat: *setter_prop.param.clone(),
                                         });
-                                        let k = swc_cfg::ToCfgConversionCtx::default();
+                                        let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let k = k.transform_all(
                                             &mut c.cfg,
-                                            setter_prop
+                                            &setter_prop
                                                 .body
                                                 .as_ref()
                                                 .context("in getting the body")?
