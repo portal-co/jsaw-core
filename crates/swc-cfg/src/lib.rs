@@ -44,6 +44,7 @@ impl TryFrom<Function> for Func {
             &mut cfg,
             &value.body.map(|a| a.stmts).unwrap_or_else(Vec::new),
             entry,
+            None,
         )?;
         cfg.blocks[exit].end.term = Term::Return(None);
         cfg.simplify();

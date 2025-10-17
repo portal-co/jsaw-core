@@ -11,7 +11,7 @@ pub struct ToCfgConversionCtx {
     pub cur_loop: Option<Loop>,
     pub labelled: HashMap<Ident, Loop>,
 }
-pub trait ToCfg{
+pub trait ToCfg {
     fn transform(
         &self,
         ctx: &ToCfgConversionCtx,
@@ -21,7 +21,7 @@ pub trait ToCfg{
         label: Option<Ident>,
     ) -> anyhow::Result<Id<Block>>;
 }
-impl<T: ToCfg> ToCfg for Vec<T>{
+impl<T: ToCfg> ToCfg for Vec<T> {
     fn transform(
         &self,
         ctx: &ToCfgConversionCtx,
@@ -30,13 +30,10 @@ impl<T: ToCfg> ToCfg for Vec<T>{
         mut current: Id<Block>,
         label: Option<Ident>,
     ) -> anyhow::Result<Id<Block>> {
-        for item in self{
-            current = item.transform(ctx, cfg, current, label.clone())?;
-        }
-        Ok(current)
+        return ctx.transform_all(cfg, &self, current, label);
     }
 }
-impl ToCfg for Stmt{
+impl ToCfg for Stmt {
     fn transform(
         &self,
         ctx: &ToCfgConversionCtx,
@@ -46,7 +43,7 @@ impl ToCfg for Stmt{
         label: Option<Ident>,
     ) -> anyhow::Result<Id<Block>> {
         let statement = self;
-          if let Stmt::Throw(throw_stmt) = statement {
+        if let Stmt::Throw(throw_stmt) = statement {
             cfg.blocks[current].end.orig_span = Some(throw_stmt.span());
             cfg.blocks[current].end.term = Term::Throw(*throw_stmt.arg.clone());
             return Ok(ctx.new_block(cfg));
@@ -64,17 +61,20 @@ impl ToCfg for Stmt{
                 Some(catch_clause) => Some({
                     let catch_block_id = ctx.new_block(cfg);
                     let catch_end_id =
-                        ctx.transform_all(cfg, &catch_clause.body.stmts, catch_block_id)?;
+                        ctx.transform_all(cfg, &catch_clause.body.stmts, catch_block_id, None)?;
                     cfg.blocks[catch_end_id].end.term = Term::Jmp(next);
                     (
-                        catch_clause.param.clone().unwrap_or(Pat::Ident(BindingIdent {
-                            id: Ident::new(
-                                Atom::new("_error"),
-                                catch_clause.span,
-                                SyntaxContext::default(),
-                            ),
-                            type_ann: None,
-                        })),
+                        catch_clause
+                            .param
+                            .clone()
+                            .unwrap_or(Pat::Ident(BindingIdent {
+                                id: Ident::new(
+                                    Atom::new("_error"),
+                                    catch_clause.span,
+                                    SyntaxContext::default(),
+                                ),
+                                type_ann: None,
+                            })),
                         catch_block_id,
                     )
                 }),
@@ -86,17 +86,17 @@ impl ToCfg for Stmt{
                     k: catch_block_id,
                 };
             };
-            let try_end_id = new.transform_all(cfg, &try_stmt.block.stmts, current)?;
+            let try_end_id = new.transform_all(cfg, &try_stmt.block.stmts, current, None)?;
             cfg.blocks[try_end_id].end.term = Term::Jmp(next);
             cfg.blocks[try_end_id].end.orig_span = Some(span);
             let next = match try_stmt.finalizer.as_ref() {
-                Some(finalizer) => ctx.transform_all(cfg, &finalizer.stmts, next)?,
+                Some(finalizer) => ctx.transform_all(cfg, &finalizer.stmts, next, None)?,
                 None => next,
             };
             return Ok(next);
         }
         if let Stmt::Block(block) = statement {
-            return ctx.transform_all(cfg, &block.stmts, current);
+            return ctx.transform_all(cfg, &block.stmts, current, None);
         }
         if let Stmt::If(if_stmt) = statement {
             let span = if_stmt.span();
@@ -147,11 +147,11 @@ impl ToCfg for Stmt{
                 match case.test.as_ref() {
                     None => {
                         default = cur;
-                        cur = target.transform_all(cfg, &case.cons, cur)?;
+                        cur = target.transform_all(cfg, &case.cons, cur, None)?;
                     }
                     Some(test) => {
                         blocks.insert(*test.clone(), cur);
-                        cur = target.transform_all(cfg, &case.cons, cur)?;
+                        cur = target.transform_all(cfg, &case.cons, cur, None)?;
                     }
                 }
             }
@@ -201,7 +201,12 @@ impl ToCfg for Stmt{
                     r#continue: cont,
                 },
             );
-            let k = new.transform(cfg, &*labeled_stmt.body, cont, Some(labeled_stmt.label.clone()))?;
+            let k = new.transform(
+                cfg,
+                &*labeled_stmt.body,
+                cont,
+                Some(labeled_stmt.label.clone()),
+            )?;
             cfg.blocks[k].end.term = Term::Jmp(next);
             return Ok(next);
         }
@@ -273,7 +278,8 @@ impl ToCfg for Stmt{
                             .into_iter()
                             .chain(
                                 for_stmt
-                                    .update.as_ref()
+                                    .update
+                                    .as_ref()
                                     .map(|a| {
                                         Box::new(Stmt::Expr(ExprStmt {
                                             span: a.span(),
@@ -292,7 +298,6 @@ impl ToCfg for Stmt{
         }
         cfg.blocks[current].stmts.push(statement.clone());
         Ok(current)
-    
     }
 }
 impl ToCfgConversionCtx {
@@ -309,11 +314,12 @@ impl ToCfgConversionCtx {
     pub fn transform_all(
         &self,
         cfg: &mut Cfg,
-        statements: &[Stmt],
+        statements: &[impl ToCfg],
         mut current: Id<Block>,
+        label: Option<Ident>,
     ) -> anyhow::Result<Id<Block>> {
         for statement in statements {
-            current = self.transform(cfg, statement, current, None)?;
+            current = self.transform(cfg, statement, current, label.clone())?;
         }
         Ok(current)
     }

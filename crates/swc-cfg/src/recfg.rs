@@ -38,6 +38,7 @@ impl Recfg {
                 output_cfg,
                 &input_cfg.blocks[block_id].stmts.clone(),
                 new_block_id,
+                None,
             )?;
             let term = match &input_cfg.blocks[block_id].end.term {
                 crate::Term::Jmp(id) => Term::Jmp(self.go(input_cfg, output_cfg, *id)?),

@@ -318,7 +318,11 @@ impl ToTACConverter<'_> {
         b: Id<Block>,
         mut t: Id<TBlock>,
         call: &CallExpr,
-    ) -> anyhow::Result<(TCallee<Ident>, Vec<SpreadOr<(Atom, SyntaxContext)>>, Id<TBlock>)> {
+    ) -> anyhow::Result<(
+        TCallee<Ident>,
+        Vec<SpreadOr<(Atom, SyntaxContext)>>,
+        Id<TBlock>,
+    )> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -1635,17 +1639,16 @@ impl ToTACConverter<'_> {
             Expr::Call(call) => {
                 let (c, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
                 t = t2;
-            
-                        let tmp = o.regs.alloc(());
-                        o.blocks[t].stmts.push(TStmt {
-                            left: LId::Id { id: tmp.clone() },
-                            flags: ValFlags::SSA_LIKE,
-                            right: Item::Call { callee: c, args },
-                            span: call.span(),
-                        });
-                        o.decls.insert(tmp.clone());
-                        return Ok((tmp, t));
-                    
+
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Call { callee: c, args },
+                    span: call.span(),
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
             }
             Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op.clone()) {
                 (Expr::PrivateName(p), obj, BinaryOp::In) => {
@@ -1851,7 +1854,7 @@ impl ToTACConverter<'_> {
                 let mut k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                 match a.body.as_ref() {
                     swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                        k.transform_all(&mut c.cfg, &block_stmt.stmts.clone(), c.entry)?;
+                        k.transform_all(&mut c.cfg, &block_stmt.stmts.clone(), c.entry, None)?;
                     }
                     swc_ecma_ast::BlockStmtOrExpr::Expr(expr) => {
                         c.cfg.blocks[c.entry].end = swc_cfg::End {
@@ -1967,6 +1970,7 @@ impl ToTACConverter<'_> {
                                                 .stmts
                                                 .clone(),
                                             c.entry,
+                                            None,
                                         )?;
                                         TFunc::try_from_with_mapper(&c, self.mapper.bud())?
                                     });
@@ -1990,6 +1994,7 @@ impl ToTACConverter<'_> {
                                                 .stmts
                                                 .clone(),
                                             c.entry,
+                                            None,
                                         )?;
                                         TFunc::try_from_with_mapper(&c, self.mapper.bud())?
                                     });
