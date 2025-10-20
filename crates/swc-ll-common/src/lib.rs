@@ -11,6 +11,7 @@ use either::Either;
 use id_arena::{Arena, Id};
 // use lam::LAM;
 use linearize::{StaticMap, static_map};
+use portal_jsc_common::natives::Primordial;
 use portal_jsc_common::{natives::Native, syntax::Asm};
 use portal_jsc_swc_util::brighten::Purity;
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
@@ -42,6 +43,23 @@ pub trait ItemGetter<I, F> {
 }
 
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
+    fn primordial(&self, i: I) -> Option<&'static Primordial>
+    where
+        I: Clone,
+    {
+        match self.get_ident(i.clone()) {
+            Some((a, _)) => Primordial::global(&a),
+            _ => match self.get_item(i)? {
+                Item::Mem { obj, mem } => match self.get_item(mem.clone())? {
+                    Item::Lit { lit: Lit::Str(s) } => {
+                        self.primordial(obj.clone())?.get_perfect(&s.value)
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+        }
+    }
     fn native_of(&self, mut i: I) -> Option<Native<I>>
     where
         I: Clone,
