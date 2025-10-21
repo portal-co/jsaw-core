@@ -1,3 +1,9 @@
+use anyhow::Context;
+use cfg_traits::Term;
+use id_arena::{Arena, Id};
+use portal_jsc_common::syntax::Asm;
+use portal_jsc_swc_util::SemanticCfg;
+use ssa_traits::HasChainableValues;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
@@ -5,13 +11,6 @@ use std::{
     mem::take,
     sync::Arc,
 };
-
-use anyhow::Context;
-use cfg_traits::Term;
-use id_arena::{Arena, Id};
-use portal_jsc_common::syntax::Asm;
-use portal_jsc_swc_util::SemanticCfg;
-use ssa_traits::HasChainableValues;
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
 use swc_tac::{
@@ -134,10 +133,8 @@ pub struct SFunc {
     pub is_async: bool,
     pub ts_params: Vec<Option<TsType>>,
 }
-
 impl TryFrom<TFunc> for SFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
@@ -260,7 +257,6 @@ impl<I, B> Default for SPostcedent<I, B> {
         }
     }
 }
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {

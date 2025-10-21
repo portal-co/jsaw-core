@@ -1,5 +1,4 @@
 use crate::*;
-
 pub trait ItemFetcher {
     type Function;
     fn fetch<'a>(&'a self) -> Option<Item<PropKey<&'a Self>, &'a Self::Function>>;
@@ -86,7 +85,6 @@ macro_rules! fetch {
 }
 impl ItemFetcher for Expr {
     type Function = Function;
-
     fn fetch<'a>(&'a self) -> Option<Item<PropKey<&'a Self>, &'a Self::Function>> {
         let p = |a: &'a Self| PropKey::Computed(a);
         return fetch!(p, self);

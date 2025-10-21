@@ -1,8 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
-
-use id_arena::Id;
-
 use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
+use id_arena::Id;
+use std::collections::{BTreeMap, HashMap};
 #[derive(Default)]
 pub struct Recfg {
     pub map: BTreeMap<Id<Block>, Id<Block>>,

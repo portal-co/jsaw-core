@@ -1,6 +1,5 @@
-use std::collections::BTreeSet;
-
 use id_arena::{Arena, Id};
+use std::collections::BTreeSet;
 use swc_ecma_ast::Lit;
 use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, simplify::SValGetter, sval_item};
 use swc_tac::Item;

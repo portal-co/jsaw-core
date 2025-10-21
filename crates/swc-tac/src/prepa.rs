@@ -1,16 +1,14 @@
+use super::*;
+use portal_solutions_proxy_signs::PROXY_SIGNS;
 use std::{
     mem::replace,
     sync::{OnceLock, atomic::AtomicUsize},
 };
-
-use portal_solutions_proxy_signs::PROXY_SIGNS;
 use swc_ecma_ast::{
     AssignExpr, BinExpr, CallExpr, CondExpr, Decl, ExprOrSpread, ExprStmt, IdentName, ModuleItem,
     PrivateName, SeqExpr, ThisExpr, VarDecl, VarDeclarator,
 };
 use swc_ecma_visit::{VisitMut, VisitMutWith};
-
-use super::*;
 #[non_exhaustive]
 pub struct Prepa<'a> {
     pub semantics: &'a SemanticCfg,

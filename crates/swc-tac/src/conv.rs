@@ -1,10 +1,8 @@
+use crate::*;
 use std::{cell::OnceCell, mem::replace};
-
 use swc_ecma_ast::{
     ArrayPat, AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp,
 };
-
-use crate::*;
 #[non_exhaustive]
 pub struct ToTACConverter<'a> {
     pub map: BTreeMap<Id<Block>, Id<TBlock>>,
@@ -62,7 +60,6 @@ impl ToTACConverter<'_> {
                     span,
                 });
                 o.decls.insert(tmp.clone());
-
                 return Ok((tmp, t));
             }
             (MemberProp::Computed(cons), alt) => {
@@ -309,7 +306,6 @@ impl ToTACConverter<'_> {
             }
         }
     }
-
     // Private helper for tail call conversion
     fn convert_call_expr(
         &mut self,
@@ -404,7 +400,6 @@ impl ToTACConverter<'_> {
             o.blocks[t].post.term = term;
         }
     }
-
     // Private helper for terminator conversion
     fn convert_terminator(
         &mut self,
@@ -486,7 +481,6 @@ impl ToTACConverter<'_> {
             swc_cfg::Term::Default => Ok(TTerm::Default),
         }
     }
-
     pub fn stmt(
         &mut self,
         i: &Cfg,
@@ -607,7 +601,6 @@ impl ToTACConverter<'_> {
             right: Item::Just { id: f.clone() },
             span: assign_pat.span(),
         });
-
         let eb = o.blocks.alloc(TBlock {
             stmts: Default::default(),
             post: pp.clone(),
@@ -648,7 +641,6 @@ impl ToTACConverter<'_> {
         let mut ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
         self.bind_array_contents(i, o, b, t, ps, p, f, decl)
     }
-
     pub fn bind_array_contents(
         &mut self,
         i: &Cfg,
@@ -1639,7 +1631,6 @@ impl ToTACConverter<'_> {
             Expr::Call(call) => {
                 let (c, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
                 t = t2;
-
                 let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
@@ -2136,7 +2127,6 @@ impl TFunc {
                             ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
                             i.id.clone().into()
                         }
-
                         p => {
                             ts_params.push(None);
                             let e2 = cfg.blocks.alloc(Default::default());

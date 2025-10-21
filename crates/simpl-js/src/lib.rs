@@ -6,7 +6,6 @@ use std::env::Args;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
-
 // use portal_jsc_swc_batch::ImportMapping;
 use portal_jsc_swc_util::BreakKind;
 use portal_jsc_swc_util::ModuleMapper;
@@ -30,7 +29,6 @@ use swc_ecma_ast::{
     ReturnStmt, SimpleAssignTarget, Stmt, WhileStmt,
 };
 use typenum::Same;
-
 pub trait Dialect {
     type Mark<T>: Extract<T>;
     type MarkSpanned<T: Spanned + Clone + Debug + Hash + Eq>: Same<Output = Self::Mark<T>>
@@ -49,7 +47,6 @@ pub trait Dialect {
         a: Self::MarkSpanned<T>,
     ) -> (Self::Mark<()>, T);
 }
-
 #[non_exhaustive]
 #[derive(Clone, Hash, Debug, PartialEq, Eq, Spanned)]
 pub enum SimplExpr<D: Dialect> {
@@ -173,13 +170,11 @@ pub struct SimplIf<D: Dialect> {
     pub cond: Box<SimplExpr<D>>,
     pub body: Vec<SimplStmt<D>>,
 }
-
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
 pub enum SimplIfKind<D: Dialect> {
     If { r#else: Vec<SimplStmt<D>> },
     While { label: Ident },
 }
-
 impl<D: Dialect> SimplStmt<D> {
     pub fn apply_label(&mut self, label: &Ident) {
         match self {
@@ -208,7 +203,6 @@ impl<D: Dialect> SimplStmt<D> {
         }
     }
 }
-
 impl<D: Dialect<Tag = Infallible>> From<SimplExpr<D>> for Expr {
     fn from(value: SimplExpr<D>) -> Self {
         match value {
@@ -566,7 +560,6 @@ pub trait ConvDialect: Dialect {
 }
 impl Conv for Expr {
     type Target<D: Dialect> = SimplExpr<D>;
-
     fn conv<D: ConvDialect>(&self, imports: &impl ConvCtx<D>) -> Result<Self::Target<D>, Error> {
         Ok(match self {
             Expr::Lit(l) => SimplExpr::Lit(l.clone()),
@@ -923,7 +916,6 @@ impl Conv for Expr {
 }
 impl Conv for Stmt {
     type Target<D: Dialect> = SimplStmt<D>;
-
     fn conv<D: ConvDialect>(&self, imports: &impl ConvCtx<D>) -> Result<Self::Target<D>, Error> {
         Ok(match self {
             Stmt::Break(b) => SimplStmt::Break(match b.label.as_ref().cloned() {

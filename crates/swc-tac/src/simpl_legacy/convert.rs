@@ -1,8 +1,6 @@
-use std::ops::Deref;
-
-use swc_ecma_ast::Ident;
-
 use super::*;
+use std::ops::Deref;
+use swc_ecma_ast::Ident;
 pub trait ConvTacDialect: TacDialect<Tag = Infallible> {}
 impl<D: TacDialect<Tag = Infallible>> ConvTacDialect for D {}
 pub struct SimplTacConverter<D: ConvTacDialect> {
@@ -240,7 +238,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         left: &SimplPathId,
         ids: impl Iterator<Item = (&'a crate::Ident, impl Iterator<Item = &'b SimplPathId>)>,
         span: &Span,
-    ) -> crate::Item<swc_ecma_ast::Id,TFunc> {
+    ) -> crate::Item<swc_ecma_ast::Id, TFunc> {
         let v = o.regs.alloc(());
         o.decls.insert(v.clone());
         o.blocks[n].stmts.push(TStmt {
@@ -311,7 +309,13 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                 func: self.convert_path(i, o, k, n, left, span),
                 member,
             },
-            args: [v].into_iter().map(|a|SpreadOr { value: a, is_spread: false }).collect(),
+            args: [v]
+                .into_iter()
+                .map(|a| SpreadOr {
+                    value: a,
+                    is_spread: false,
+                })
+                .collect(),
         }
     }
     fn convert_stmt(
@@ -343,7 +347,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             };
         }
         let left: LId = lid!(left);
-        let right: Item<swc_ecma_ast::Id,TFunc> = match right {
+        let right: Item<swc_ecma_ast::Id, TFunc> = match right {
             SimplItem::Just { id } => Item::Just { id: path!(&id.0) },
             SimplItem::Bin { left, right, op } => Item::Bin {
                 left: path!(&left.0),
@@ -353,7 +357,14 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             SimplItem::Lit { lit } => Item::Lit { lit: lit.clone() },
             SimplItem::CallStatic { r#fn, args } => Item::Call {
                 callee: TCallee::Val(path!(&r#fn.path.0)),
-                args: args.iter().map(|a| path!(&a.0)).map(|a|SpreadOr { value: a, is_spread: false }).collect(),
+                args: args
+                    .iter()
+                    .map(|a| path!(&a.0))
+                    .map(|a| SpreadOr {
+                        value: a,
+                        is_spread: false,
+                    })
+                    .collect(),
             },
             SimplItem::CallTag { tag, args } => match tag.path {},
             SimplItem::DiscriminantIn { value, ids } => self.discriminant(

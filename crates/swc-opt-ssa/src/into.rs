@@ -1,17 +1,14 @@
+use crate::{OptBlock, OptCfg, OptFunc, OptType, OptValue, OptValueW};
+use anyhow::Context;
+use id_arena::Id;
+use portal_jsc_swc_util::SemanticCfg;
 use std::{
     collections::{BTreeMap, HashMap},
     mem::swap,
 };
-
-use anyhow::Context;
-use id_arena::Id;
-use portal_jsc_swc_util::SemanticCfg;
 use swc_ecma_ast::{BinaryOp, UnaryOp};
 use swc_ssa::{SBlock, SCatch, SCfg, SFunc, STarget, STerm, SValue, simplify::SValGetter};
 use swc_tac::{Item, SpreadOr};
-
-use crate::{OptBlock, OptCfg, OptFunc, OptType, OptValue, OptValueW};
-
 pub struct Convert {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<OptType>>, Id<OptBlock>>>,
 }
@@ -120,7 +117,6 @@ impl Convert {
                     SValue::Item { item, span } => match item {
                         swc_tac::Item::Just { id } => {
                             let (a, b) = state.get(id).cloned().context("in getting the value")?;
-
                             (
                                 OptValue::Emit {
                                     val: SValue::Item {
@@ -426,21 +422,35 @@ impl Convert {
                             Some(OptType::Lit(lit.clone())),
                         ),
                         Item::Arr { members } if members.len() > 0 => {
-                            let SpreadOr { value: v0, is_spread: s0 } = &members[0];
+                            let SpreadOr {
+                                value: v0,
+                                is_spread: s0,
+                            } = &members[0];
                             let (x, ty) = state.get(v0).cloned().context("in getting the var")?;
                             let mut elem_tys = vec![];
-                            let members = [SpreadOr { value: x, is_spread: *s0 }]
-                                .into_iter()
-                                .map(Ok::<_,anyhow::Error>)
-                                .chain(members[1..].iter().map(|SpreadOr { value: a, is_spread: b }| {
+                            let members = [SpreadOr {
+                                value: x,
+                                is_spread: *s0,
+                            }]
+                            .into_iter()
+                            .map(Ok::<_, anyhow::Error>)
+                            .chain(members[1..].iter().map(
+                                |SpreadOr {
+                                     value: a,
+                                     is_spread: b,
+                                 }| {
                                     let (a, at) =
                                         state.get(a).cloned().context("in getting the val")?;
                                     // (a, x, at) = bi_id_deopt(out, k, a, at, x, ty.clone())?;
                                     // ty = at.clone();
                                     elem_tys.push(at.clone());
-                                    Ok(SpreadOr { value: a, is_spread: *b })
-                                }))
-                                .collect::<anyhow::Result<Vec<_>>>()?;
+                                    Ok(SpreadOr {
+                                        value: a,
+                                        is_spread: *b,
+                                    })
+                                },
+                            ))
+                            .collect::<anyhow::Result<Vec<_>>>()?;
                             let ty = Some(OptType::Object {
                                 nest: crate::ObjType::Array,
                                 extended: false,
@@ -695,14 +705,12 @@ impl Convert {
 }
 impl<'a> TryFrom<&'a SFunc> for OptFunc {
     type Error = anyhow::Error;
-
     fn try_from(mut value: &'a SFunc) -> Result<Self, Self::Error> {
         Self::try_from_ssa_with_semantic(value, &Default::default())
     }
 }
 impl TryFrom<SFunc> for OptFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: SFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }

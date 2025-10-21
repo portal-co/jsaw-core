@@ -1,6 +1,5 @@
-use portal_jsc_swc_util::SemanticCfg;
-
 use crate::*;
+use portal_jsc_swc_util::SemanticCfg;
 pub struct OptStub {
     map: BTreeMap<Id<SBlock>, Id<SBlock>>,
 }
@@ -18,7 +17,6 @@ impl OptStub {
             }
             let l = o.blocks.alloc(Default::default());
             self.map.insert(k, l);
-
             let baseline: BTreeMap<Id<SValueW>, Id<SValueW>> = i.blocks[k]
                 .params
                 .iter()

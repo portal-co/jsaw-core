@@ -1,5 +1,4 @@
 use crate::*;
-
 impl Cfg {
     pub fn simplify(&mut self) {
         for (_block_id, block_data) in self.blocks.iter_mut() {

@@ -1,16 +1,13 @@
-use std::{convert::Infallible, iter::once};
-
+use super::*;
 use portal_jsc_simpl_js::{
     SimplAssignment, SimplBinOp, SimplCallExpr, SimplIf, SimplIfKind, SimplSelectExpr,
     SimplSwitchStmt,
 };
 use portal_jsc_swc_util::{BreakKind, MakeSpanned};
 use relooper::ShapedBlock;
+use std::{convert::Infallible, iter::once};
 use swc_atoms::Atom;
 use swc_ecma_ast::{AssignOp, Bool, Number};
-
-use super::*;
-
 pub fn reloop<D: TacDialect>(
     cfg: &TSimplCfg<D>,
     shaped_block: &ShapedBlock<Id<TSimplBlock<D>>>,
@@ -299,7 +296,6 @@ pub fn reloop<D: TacDialect>(
             {
                 body.extend(reloop(cfg, &*a, span, cff));
             }
-
             body
         }
         ShapedBlock::Loop(loop_block) => {
@@ -323,7 +319,6 @@ pub fn reloop<D: TacDialect>(
             for a in [&loop_block.next].into_iter().flat_map(|a| a.as_ref()) {
                 body.extend(reloop(cfg, &*a, span, cff));
             }
-
             body
         }
         ShapedBlock::Multiple(multiple_block) => {
@@ -428,7 +423,6 @@ pub fn reloop<D: TacDialect>(
             //         })
             //     }
             // })
-
             body
         }
     }

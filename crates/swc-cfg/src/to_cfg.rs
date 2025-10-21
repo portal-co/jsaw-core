@@ -1,5 +1,4 @@
 use crate::*;
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Loop<T = Id<Block>> {
     pub r#break: T,

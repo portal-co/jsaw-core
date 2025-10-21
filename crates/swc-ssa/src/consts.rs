@@ -1,18 +1,15 @@
-use std::collections::HashMap;
-
+use crate::{simplify::default_ctx, *};
 use portal_jsc_swc_util::SemanticCfg;
+use std::collections::HashMap;
 use swc_common::Spanned;
 use swc_ecma_ast::Expr;
 use swc_ecma_utils::{ExprExt, Value};
 use swc_tac::SpreadOr;
-
-use crate::{simplify::default_ctx, *};
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub enum ConstVal {
     Lit(Lit),
     Undef,
 }
-
 pub struct ConstantInstantiator {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
 }
@@ -230,13 +227,21 @@ impl ConstantInstantiator {
                         .map(&mut |id| params.get(id).cloned().context("in getting a variable"))?,
                     args: args
                         .iter()
-                        .map(|SpreadOr { value: id, is_spread: b }| match *b {
-                            b => params
-                                .get(id)
-                                .cloned()
-                                .context("in getting a variable")
-                                .map(|c|SpreadOr { value: c, is_spread: b }),
-                        })
+                        .map(
+                            |SpreadOr {
+                                 value: id,
+                                 is_spread: b,
+                             }| match *b {
+                                b => params
+                                    .get(id)
+                                    .cloned()
+                                    .context("in getting a variable")
+                                    .map(|c| SpreadOr {
+                                        value: c,
+                                        is_spread: b,
+                                    }),
+                            },
+                        )
                         .collect::<Result<_, _>>()?,
                 },
                 STerm::Return(id) => STerm::Return(match id.as_ref() {

@@ -1,15 +1,12 @@
-use std::collections::BTreeMap;
-
 use bitflags::bitflags;
+use std::collections::BTreeMap;
 use swc_ecma_ast::Lit;
-
 bitflags! {
     #[derive(Default,Clone,Copy,Eq,PartialEq,Ord,PartialOrd,Hash,Debug)]
     pub struct ParentFlags: u64{
         const STRICT = 0x1;
     }
 }
-
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum ObjType {
@@ -104,7 +101,6 @@ impl OptType {
                                         extended: true,
                                         elem_tys,
                                     });
-
                                     // }
                                 }
                                 return Some(OptType::Array {

@@ -1,52 +1,41 @@
+use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
+use id_arena::{Arena, Id};
+use ssa_traits::{HasChainableValues, HasValues};
 use std::{
     convert::Infallible,
     iter::{empty, once},
 };
-
-use id_arena::{Arena, Id};
-use ssa_traits::{HasChainableValues, HasValues};
 use swc_tac::SpreadOr;
-
-use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
-
 impl cfg_traits::Func for SFunc {
     type Block = Id<SBlock>;
-
     type Blocks = Arena<SBlock>;
-
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
-
     fn blocks_mut(&mut self) -> &mut Self::Blocks {
         &mut self.cfg.blocks
     }
-
     fn entry(&self) -> Self::Block {
         self.entry
     }
 }
 impl cfg_traits::Block<SFunc> for SBlock {
     type Terminator = SPostcedent;
-
     fn term(&self) -> &Self::Terminator {
         &self.postcedent
     }
-
     fn term_mut(&mut self) -> &mut Self::Terminator {
         &mut self.postcedent
     }
 }
 impl cfg_traits::Term<SFunc> for SPostcedent {
     type Target = STarget;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         SFunc: 'a,
     {
         Box::new(self.term.targets().chain(self.catch.targets()))
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -56,7 +45,6 @@ impl cfg_traits::Term<SFunc> for SPostcedent {
 }
 impl cfg_traits::Term<SFunc> for STerm {
     type Target = STarget;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -76,7 +64,6 @@ impl cfg_traits::Term<SFunc> for STerm {
             STerm::Default | STerm::Tail { .. } => Box::new(empty()),
         }
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -99,7 +86,6 @@ impl cfg_traits::Term<SFunc> for STerm {
 }
 impl cfg_traits::Term<SFunc> for SCatch {
     type Target = STarget;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -109,7 +95,6 @@ impl cfg_traits::Term<SFunc> for SCatch {
             SCatch::Just { target } => Box::new(once(target)),
         }
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -122,14 +107,12 @@ impl cfg_traits::Term<SFunc> for SCatch {
 }
 impl cfg_traits::Term<SFunc> for STarget {
     type Target = STarget;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         SFunc: 'a,
     {
         Box::new(once(self))
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         SFunc: 'a,
@@ -141,20 +124,16 @@ impl cfg_traits::Target<SFunc> for STarget {
     fn block(&self) -> <SFunc as cfg_traits::Func>::Block {
         self.block
     }
-
     fn block_mut(&mut self) -> &mut <SFunc as cfg_traits::Func>::Block {
         &mut self.block
     }
 }
 impl ssa_traits::Func for SFunc {
     type Value = Id<SValueW>;
-
     type Values = Arena<SValueW>;
-
     fn values(&self) -> &Self::Values {
         &self.cfg.values
     }
-
     fn values_mut(&mut self) -> &mut Self::Values {
         &mut self.cfg.values
     }
@@ -166,7 +145,6 @@ impl ssa_traits::HasChainableValues<SFunc> for SValueW {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.value.vals()
     }
-
     fn values_chain_mut<'a>(
         &'a mut self,
         // g: &'a mut SFunc,
@@ -184,7 +162,6 @@ impl HasValues<SFunc> for SValueW {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
-
     fn values_mut<'a>(
         &'a mut self,
         g: &'a mut SFunc,
@@ -199,7 +176,6 @@ impl ssa_traits::Block<SFunc> for SBlock {
     fn insts(&self) -> impl Iterator<Item = <SFunc as ssa_traits::Func>::Value> {
         self.stmts.iter().cloned()
     }
-
     fn add_inst(
         func: &mut SFunc,
         key: <SFunc as cfg_traits::Func>::Block,
@@ -212,7 +188,6 @@ impl ssa_traits::Target<SFunc> for STarget {
     fn push_value(&mut self, v: <SFunc as ssa_traits::Func>::Value) {
         self.args.push(v);
     }
-
     fn from_values_and_block(
         a: impl Iterator<Item = <SFunc as ssa_traits::Func>::Value>,
         k: <SFunc as cfg_traits::Func>::Block,
@@ -229,7 +204,6 @@ impl HasChainableValues<SFunc> for STarget {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         Box::new(self.args.iter().cloned())
     }
-
     fn values_chain_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
@@ -246,7 +220,6 @@ impl HasValues<SFunc> for STarget {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
-
     fn values_mut<'a>(
         &'a mut self,
         g: &'a mut SFunc,
@@ -282,17 +255,26 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter().map(|SpreadOr { value: a, is_spread: b }|a).cloned().chain({
-                let mut v = Vec::default();
-                callee.as_ref().map(&mut |a| {
-                    v.push(*a);
-                    Ok::<_, Infallible>(())
-                });
-                v
-            })),
+            Self::Tail { callee, args } => Box::new(
+                args.iter()
+                    .map(
+                        |SpreadOr {
+                             value: a,
+                             is_spread: b,
+                         }| a,
+                    )
+                    .cloned()
+                    .chain({
+                        let mut v = Vec::default();
+                        callee.as_ref().map(&mut |a| {
+                            v.push(*a);
+                            Ok::<_, Infallible>(())
+                        });
+                        v
+                    }),
+            ),
         }
     }
-
     fn values_chain_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
@@ -320,14 +302,23 @@ impl HasChainableValues<SFunc> for STerm {
                 ),
             ),
             STerm::Default => Box::new(empty()),
-            Self::Tail { callee, args } => Box::new(args.iter_mut().map(|SpreadOr { value: a, is_spread: b }|a).chain({
-                let mut v = Vec::default();
-                callee.as_mut().map(&mut |a| {
-                    v.push(a);
-                    Ok::<_, Infallible>(())
-                });
-                v
-            })),
+            Self::Tail { callee, args } => Box::new(
+                args.iter_mut()
+                    .map(
+                        |SpreadOr {
+                             value: a,
+                             is_spread: b,
+                         }| a,
+                    )
+                    .chain({
+                        let mut v = Vec::default();
+                        callee.as_mut().map(&mut |a| {
+                            v.push(a);
+                            Ok::<_, Infallible>(())
+                        });
+                        v
+                    }),
+            ),
         }
     }
 }
@@ -340,7 +331,6 @@ impl HasChainableValues<SFunc> for SCatch {
             SCatch::Just { target } => target.values_chain(),
         }
     }
-
     fn values_chain_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
@@ -359,7 +349,6 @@ impl HasChainableValues<SFunc> for SPostcedent {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         Box::new(self.term.values_chain().chain(self.catch.values_chain()))
     }
-
     fn values_chain_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
@@ -380,7 +369,6 @@ impl HasValues<SFunc> for STerm {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
-
     fn values_mut<'a>(
         &'a mut self,
         g: &'a mut SFunc,
@@ -398,7 +386,6 @@ impl HasValues<SFunc> for SCatch {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
-
     fn values_mut<'a>(
         &'a mut self,
         g: &'a mut SFunc,
@@ -416,7 +403,6 @@ impl HasValues<SFunc> for SPostcedent {
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
-
     fn values_mut<'a>(
         &'a mut self,
         g: &'a mut SFunc,
@@ -429,7 +415,6 @@ impl HasValues<SFunc> for SPostcedent {
 }
 impl ssa_traits::TypedFunc for SFunc {
     type Ty = ();
-
     fn add_blockparam(&mut self, k: Self::Block, y: Self::Ty) -> Self::Value {
         self.cfg.add_blockparam(k)
     }

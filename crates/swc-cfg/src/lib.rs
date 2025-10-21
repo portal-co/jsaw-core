@@ -1,8 +1,7 @@
-use std::{collections::HashMap, iter::once};
-
 use anyhow::Context;
 use id_arena::{Arena, Id};
 use relooper::ShapedBlock;
+use std::{collections::HashMap, iter::once};
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
@@ -36,7 +35,6 @@ impl Default for Func {
 }
 impl TryFrom<Function> for Func {
     type Error = anyhow::Error;
-
     fn try_from(value: Function) -> Result<Self, Self::Error> {
         let mut cfg = Cfg::default();
         let entry = cfg.blocks.alloc(Default::default());
@@ -80,7 +78,6 @@ impl Into<Function> for Func {
         };
     }
 }
-
 #[derive(Clone, Default)]
 pub struct Cfg {
     pub blocks: Arena<Block>,
@@ -382,40 +379,30 @@ impl Cfg {
         }
     }
 }
-
 impl cfg_traits::Func for Func {
     type Block = Id<Block>;
-
     type Blocks = Arena<Block>;
-
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
-
     fn blocks_mut(&mut self) -> &mut Self::Blocks {
         &mut self.cfg.blocks
     }
-
     fn entry(&self) -> Self::Block {
         self.entry
     }
 }
-
 impl cfg_traits::Block<Func> for Block {
     type Terminator = End;
-
     fn term(&self) -> &Self::Terminator {
         &self.end
     }
-
     fn term_mut(&mut self) -> &mut Self::Terminator {
         &mut self.end
     }
 }
-
 impl cfg_traits::Term<Func> for End {
     type Target = Id<Block>;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         Func: 'a,
@@ -445,7 +432,6 @@ impl cfg_traits::Term<Func> for End {
             ),
         )
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         Func: 'a,
@@ -476,17 +462,14 @@ impl cfg_traits::Term<Func> for End {
         )
     }
 }
-
 impl cfg_traits::Term<Func> for Id<Block> {
     type Target = Id<Block>;
-
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         Func: 'a,
     {
         Box::new(once(self))
     }
-
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
     where
         Func: 'a,
@@ -494,17 +477,14 @@ impl cfg_traits::Term<Func> for Id<Block> {
         Box::new(once(self))
     }
 }
-
 impl cfg_traits::Target<Func> for Id<Block> {
     fn block(&self) -> <Func as cfg_traits::Func>::Block {
         *self
     }
-
     fn block_mut(&mut self) -> &mut <Func as cfg_traits::Func>::Block {
         self
     }
 }
-
 #[derive(Default, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>,

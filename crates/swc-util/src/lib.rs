@@ -1,15 +1,13 @@
-use std::{collections::BTreeMap, mem::take};
-
 use bitflags::bitflags;
 pub use portal_jsc_common as common;
 use portal_jsc_common::natives::Native;
-pub use portal_jsc_common::{syntax::ImportMap, semantic::SemanticFlags, semantic::SemanticTarget};
+pub use portal_jsc_common::{semantic::SemanticFlags, semantic::SemanticTarget, syntax::ImportMap};
 use portal_solutions_swibb::ConstCollector;
+use std::{collections::BTreeMap, mem::take};
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Bool, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp, ModuleItem};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
-
 pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) -> Option<Lit> {
     match b {
         "startsWith" if a.is_str() => {
@@ -24,7 +22,6 @@ pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) 
         _ => None,
     }
 }
-
 #[derive(Default, Clone)]
 #[non_exhaustive]
 pub struct SemanticCfg {
@@ -150,24 +147,20 @@ impl VisitMut for InlineHintInliner<'_> {
     }
 }
 pub mod brighten;
-
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Natives {
     pub all: BTreeMap<Atom, Id>,
 }
-
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct MakeSpanned<T> {
     pub value: T,
     pub span: Span,
 }
-
 impl<T> Spanned for MakeSpanned<T> {
     fn span(&self) -> Span {
         self.span
     }
 }
-
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum ImportOr<T> {
     NotImport(T),
@@ -182,7 +175,6 @@ impl<T: Default> Default for ImportOr<T> {
         Self::NotImport(T::default())
     }
 }
-
 impl<T> AsRef<T> for ImportOr<T> {
     fn as_ref(&self) -> &T {
         match self {
@@ -240,7 +232,6 @@ impl<T: AsRef<T> + AsMut<T>> Extract<T> for T {
     }
 }
 // impl<T, U: Into<T> + AsRef<T> + AsMut<T>> Extract<T> for U {}
-
 pub fn mangle((a, b): &Id) -> Atom {
     Atom::new(format!("{}${a}", b.as_u32()))
 }
@@ -268,7 +259,6 @@ pub enum BreakKind {
 // pub fn cli_load(cm: &Lrc<SourceMap>, fm: &Lrc<SourceFile>) -> Module {
 //     // let cm: Lrc<SourceMap> = Default::default();
 //     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
-
 //     // Real usage
 //     // let fm = cm
 //     //     .load_file(Path::new("test.js"))
@@ -285,13 +275,10 @@ pub enum BreakKind {
 //         StringInput::from(&**fm),
 //         None,
 //     );
-
 //     let mut parser = Parser::new_from(lexer);
-
 //     for e in parser.take_errors() {
 //         e.into_diagnostic(&handler).emit();
 //     }
-
 //     let mut module = parser
 //         .parse_module()
 //         .map_err(|mut e| {

@@ -1,7 +1,5 @@
-use ssa_impls::dom::dominates;
-
 use crate::*;
-
+use ssa_impls::dom::dominates;
 #[non_exhaustive]
 pub struct ToSSAConverter {
     pub map: BTreeMap<Id<TBlock>, Id<SBlock>>,
@@ -101,7 +99,6 @@ impl ToSSAConverter {
     ) -> anyhow::Result<Id<SBlock>> {
         self.convert_block(i, o, k, app)
     }
-
     // Private helper for block/term conversion
     fn convert_block(
         &mut self,
@@ -391,7 +388,6 @@ impl ToSSAConverter {
 }
 impl<'a> TryFrom<&'a TFunc> for SFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let domtree = ssa_impls::dom::domtree(value)
             .into_iter()

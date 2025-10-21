@@ -1,6 +1,5 @@
-use std::mem::replace;
-
 use crate::*;
+use std::mem::replace;
 impl TFunc {
     pub fn splatted(&self, map: Mapper<'_>) -> TFunc {
         let mut s = Splatting::default();
@@ -149,7 +148,6 @@ impl Splatting {
                                                 }
                                             }
                                         }
-
                                         // if {
                                         let mut d = output.blocks.alloc(Default::default());
                                         output.blocks[d].post.catch =
@@ -324,7 +322,6 @@ impl Splatting {
                                     }
                                 };
                             }
-
                             let mut value = func.clone();
                             'a: loop {
                                 if !self.stack.contains(&value) {

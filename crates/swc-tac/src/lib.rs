@@ -1,9 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::Infallible;
-use std::iter::{empty, once};
-use std::mem::take;
-use std::sync::Arc;
-
 use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
@@ -11,33 +5,34 @@ use either::Either;
 use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
-use portal_jsc_common::{syntax::Asm, natives::Native};
+use portal_jsc_common::{natives::Native, syntax::Asm};
 use portal_jsc_swc_util::brighten::Purity;
 use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
 use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::convert::Infallible;
+use std::iter::{empty, once};
+use std::mem::take;
+use std::sync::Arc;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
+use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
     AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
     ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
-
-use swc_ecma_ast::Id as Ident;
-
 // use crate::consts::{ItemGetter, ItemGetterExt};
-pub use swc_ll_common::*;
 use crate::lam::{AtomResolver, DefaultAtomResolver};
-
+pub use swc_ll_common::*;
 pub mod consts;
 pub mod conv;
 pub mod lam;
 pub mod prepa;
 pub mod rew;
 pub mod splat;
-
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
 pub enum LId<I = Ident, M = [I; 1]> {
@@ -114,16 +109,13 @@ where
         })
     }
 }
-
 #[cfg(feature = "simpl-legacy")]
 pub mod simpl_legacy;
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, linearize::Linearize)]
 #[non_exhaustive]
 pub enum ImportMapperReq {
     // Native,
 }
-
 pub fn imp(a: MemberProp) -> Expr {
     match a {
         swc_ecma_ast::MemberProp::Ident(ident_name) => {
@@ -147,7 +139,6 @@ bitflags! {
         const SSA_LIKE = 0x1;
     }
 }
-
 #[derive(Clone, Debug)]
 pub struct TFunc {
     pub cfg: TCfg,
@@ -189,24 +180,20 @@ impl<'a> Mapper<'a> {
         }
     }
 }
-
 impl<'a> TryFrom<&'a Func> for TFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: &'a Func) -> Result<Self, Self::Error> {
         mapped(|m| TFunc::try_from_with_mapper(value, m))
     }
 }
 impl TryFrom<Func> for TFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: Func) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
 }
 impl TryFrom<Function> for TFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: Function) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
         return a.try_into();
@@ -272,13 +259,11 @@ impl TCfg {
                             }
                         }
                     }
-
                     *a.entry(s.left.clone()).or_default() += 1usize;
                 }
             }
         }
         // let d =
-
         for s in self.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
             if match &s.left {
                 LId::Id { id } => !self.decls.contains(&id),
@@ -350,7 +335,7 @@ impl TCfg {
             }
         }
     }
-    pub fn def(&self, i: LId<Ident>) -> Option<&Item<Ident,TFunc>> {
+    pub fn def(&self, i: LId<Ident>) -> Option<&Item<Ident, TFunc>> {
         self.blocks.iter().flat_map(|a| &a.1.stmts).find_map(|a| {
             if a.left == i && a.flags.contains(ValFlags::SSA_LIKE) {
                 Some(&a.right)
@@ -359,7 +344,7 @@ impl TCfg {
             }
         })
     }
-    pub fn def_mut(&mut self, i: LId<Ident>) -> Option<&mut Item<Ident,TFunc>> {
+    pub fn def_mut(&mut self, i: LId<Ident>) -> Option<&mut Item<Ident, TFunc>> {
         self.blocks
             .iter_mut()
             .flat_map(|a| &mut a.1.stmts)
@@ -624,7 +609,7 @@ impl Externs<Ident> for TCfg {
 pub struct TStmt {
     pub left: LId,
     pub flags: ValFlags,
-    pub right: Item<Ident,TFunc>,
+    pub right: Item<Ident, TFunc>,
     pub span: Span,
 }
 impl TStmt {
@@ -646,7 +631,6 @@ impl<I, M> LId<I, M> {
         }
     }
 }
-
 impl TStmt {
     pub fn nothrow(&self) -> bool {
         return self.left.nothrow() && self.right.nothrow();
@@ -734,7 +718,6 @@ pub enum TTerm<B = Id<TBlock>, I = Ident> {
     // #[default]
     Default,
 }
-
 impl<I: Eq, M> LId<I, M> {
     pub fn taints_object(&self, a: &I) -> bool {
         match self {

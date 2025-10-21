@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
-
 use id_arena::Id;
-
 use crate::{SBlock, SCatch, SCfg};
-
 pub struct Idw {
     pub map: BTreeMap<Id<SBlock>, Id<SBlock>>,
 }

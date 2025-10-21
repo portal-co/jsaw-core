@@ -1,22 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
-
+use crate::*;
 use arena_traits::{Arena as TArena, IndexAlloc};
 use id_arena::{Arena, Id};
 use portal_jsc_simpl_js::{
     self as simpl_ast, Dialect, FuncId, SimplExpr, SimplPath, SimplPathId, SimplStmt,
 };
+use std::collections::{BTreeMap, BTreeSet};
 use swc_cfg::to_cfg::Loop;
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
-
-use crate::*;
-
 pub mod convert;
 pub mod impls;
 pub mod reloop;
-
 pub trait TacDialect: Dialect<Mark<()>: Clone + Default> {}
-
 pub struct TSimplCfg<D: TacDialect> {
     pub regs: LAM<()>,
     pub blocks: Arena<TSimplBlock<D>>,
@@ -211,7 +206,6 @@ impl<D: TacDialect, P: Clone> Clone for SimplItem<D, P> {
         }
     }
 }
-
 pub enum TSimplTerm<D: TacDialect> {
     Return(SimplRef<D, SimplPathId>),
     // Throw(Ident),
@@ -274,7 +268,6 @@ pub trait Bake<D: TacDialect> {
 }
 impl<D: TacDialect> Bake<D> for SimplExpr<D> {
     type Res = SimplRef<D, SimplPathId>;
-
     fn bake(
         &self,
         labels: &(dyn Fn(Ident) -> Loop<Id<TSimplBlock<D>>> + '_),
@@ -453,7 +446,6 @@ impl<D: TacDialect> Bake<D> for SimplExpr<D> {
 }
 impl<D: TacDialect, B: Bake<D>> Bake<D> for Vec<B> {
     type Res = Vec<B::Res>;
-
     fn bake(
         &self,
         labels: &(dyn Fn(Ident) -> Loop<Id<TSimplBlock<D>>> + '_),
@@ -472,7 +464,6 @@ impl<D: TacDialect, B: Bake<D>> Bake<D> for Vec<B> {
 }
 impl<D: TacDialect> Bake<D> for SimplStmt<D> {
     type Res = ();
-
     fn bake(
         &self,
         labels: &(dyn Fn(Ident) -> Loop<Id<TSimplBlock<D>>> + '_),

@@ -7,7 +7,6 @@ use swc_ecma_utils::{ExprCtx, ExprExt, Value};
 pub use swc_tac::{Item, ItemGetter};
 use swc_tac::{ItemGetterExt, PropKey, PropVal, SpreadOr};
 pub type _Ident = Ident;
-
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
         for (k, kd) in self.blocks.iter_mut() {
@@ -67,7 +66,6 @@ impl SCfg {
         }
     }
 }
-
 pub trait SValGetter<I: Copy, B, F = SFunc>: ItemGetter<I, F> {
     fn val(&self, id: I) -> Option<&SValue<I, B, F>>;
     fn val_mut(&mut self, id: I) -> Option<&mut SValue<I, B, F>>;
@@ -191,7 +189,6 @@ impl SValGetter<Id<SValueW>, Id<SBlock>> for SCfg {
     fn val(&self, id: Id<SValueW>) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
         Some(&self.values[id].value)
     }
-
     fn val_mut(&mut self, id: Id<SValueW>) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
         Some(&mut self.values[id].value)
     }
@@ -240,89 +237,100 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                 }
                 Some(n)
             }
-            SValue::Item { item, span } => match item {
-                Item::Arr { members } => Some(members.clone()),
-                Item::Mem { obj, mem } => {
-                    match k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce)) {
-                        Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i)
-                                if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
-                            {
-                                match i.array_in(semantics, k, pierce) {
-                                    None => None,
-                                    Some(a) => {  if a.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
+            SValue::Item { item, span } => {
+                match item {
+                    Item::Arr { members } => Some(members.clone()),
+                    Item::Mem { obj, mem } => {
+                        match k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce)) {
+                            Some(Lit::Num(n)) => match k.val(*obj) {
+                                Some(i)
+                                    if semantics
+                                        .flags
+                                        .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                                {
+                                    match i.array_in(semantics, k, pierce) {
+                                        None => None,
+                                        Some(a) => {
+                                            if a.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
                                             return None;
-                                        };a
+                                        };
+                                            a
                                         .get((n.value.round() as usize))
                                         .and_then(|SpreadOr { value: a, is_spread: _ }| k.val(*a))
-                                        .and_then(|a| a.array_in(semantics, k, pierce))},
-                                }
-                            }
-                            _ => None,
-                        },
-                        _ => None,
-                    }
-                }
-                Item::Call { callee, args }
-                    if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
-                {
-                    match callee {
-                        TCallee::Member { func, member } => {
-                            let member = k.val(*member)?.const_in(semantics, k, pierce)?;
-                            let Lit::Str(s) = member else {
-                                return None;
-                            };
-                            let func = k.val(*func)?;
-                            match func.array_in(semantics, k, pierce) {
-                                Some(members) => match s.value.as_str() {
-                                    "concat" => {
-                                        let mut members: Vec<SpreadOr<I>> = members;
-                                        for SpreadOr { value: a, is_spread: s } in args.iter().cloned() {
-                                            let a = k.val(a)?;
-                                            let i = a.array_in(semantics, k, pierce)?;
-                                            if s{
-                                                return None;
-                                            }else{
-                                            members.extend(i);
-                                            }
+                                        .and_then(|a| a.array_in(semantics, k, pierce))
                                         }
-                                        Some(members)
                                     }
-                                    "slice" => {
-                                        let begin: Option<usize> = args
+                                }
+                                _ => None,
+                            },
+                            _ => None,
+                        }
+                    }
+                    Item::Call { callee, args }
+                        if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                    {
+                        match callee {
+                            TCallee::Member { func, member } => {
+                                let member = k.val(*member)?.const_in(semantics, k, pierce)?;
+                                let Lit::Str(s) = member else {
+                                    return None;
+                                };
+                                let func = k.val(*func)?;
+                                match func.array_in(semantics, k, pierce) {
+                                    Some(members) => match s.value.as_str() {
+                                        "concat" => {
+                                            let mut members: Vec<SpreadOr<I>> = members;
+                                            for SpreadOr {
+                                                value: a,
+                                                is_spread: s,
+                                            } in args.iter().cloned()
+                                            {
+                                                let a = k.val(a)?;
+                                                let i = a.array_in(semantics, k, pierce)?;
+                                                if s {
+                                                    return None;
+                                                } else {
+                                                    members.extend(i);
+                                                }
+                                            }
+                                            Some(members)
+                                        }
+                                        "slice" => {
+                                            let begin: Option<usize> = args
                                             .get(0)
                                             .cloned().and_then(|SpreadOr { value: a, is_spread: b }|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
-                                        let end: Option<usize> = args
+                                            let end: Option<usize> = args
                                             .get(1)
                                             .cloned().and_then(|SpreadOr { value: a, is_spread: b }|(!b).then(move||a))
                                             .and_then(|a| k.val(a))
                                             .and_then(|v| v.const_in(semantics, k, pierce))
                                             .and_then(|v| v.as_num().map(|a| a.value as usize));
-                                        let mut members: Vec<SpreadOr<I>> = members;
-                                        if members.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
+                                            let mut members: Vec<SpreadOr<I>> = members;
+                                            if members.iter().any(|SpreadOr { value: _, is_spread: v }| *v) {
                                             return None;
                                         }
-                                        members = match (begin, end) {
-                                            (Some(a), Some(b)) => members.drain(a..b).collect(),
-                                            (None, None) => members,
-                                            (None, Some(a)) => members.drain(..a).collect(),
-                                            (Some(a), None) => members.drain(a..).collect(),
-                                        };
-                                        Some(members)
-                                    }
+                                            members = match (begin, end) {
+                                                (Some(a), Some(b)) => members.drain(a..b).collect(),
+                                                (None, None) => members,
+                                                (None, Some(a)) => members.drain(..a).collect(),
+                                                (Some(a), None) => members.drain(a..).collect(),
+                                            };
+                                            Some(members)
+                                        }
+                                        _ => None,
+                                    },
                                     _ => None,
-                                },
-                                _ => None,
+                                }
                             }
+                            _ => None,
                         }
-                        _ => None,
                     }
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             _ => None,
         }
     }
@@ -415,7 +423,6 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 (left, right)
                             }
                         },
-
                         (left_val, right_val) => {
                             let left = left_val.const_in(semantics, k, pierce);
                             let right = right_val.const_in(semantics, k, pierce);
@@ -680,7 +687,6 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                         op!("<=") => bop2!(left => {<=} right),
                         op!(">") => bop2!(left => {>} right),
                         op!(">=") => bop2!(left => {>=} right),
-
                         op!("===") => Some(Lit::Bool(Bool {
                             span: left.span(),
                             value: left.eq_ignore_span(&right),
@@ -835,11 +841,14 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             },
                             _ => None,
                         },
-                        Some(Lit::Num(n)) => match k.val(*obj) {
-                            Some(i)
-                                if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
-                            {
-                                match i.array_in(semantics, k, pierce) {
+                        Some(Lit::Num(n)) => {
+                            match k.val(*obj) {
+                                Some(i)
+                                    if semantics
+                                        .flags
+                                        .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                                {
+                                    match i.array_in(semantics, k, pierce) {
                                     None => None,
                                     Some(a) => a
                                         .iter()
@@ -851,9 +860,10 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                         })
                                         .flatten(),
                                 }
+                                }
+                                _ => None,
                             }
-                            _ => None,
-                        },
+                        }
                         _ => None,
                     }
                 }
@@ -878,7 +888,10 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                             i2 => {
                                                 i = i2;
                                                 std::iter::from_fn(|| {
-                                                    let SpreadOr { value: n, is_spread: s } = i.next()?;
+                                                    let SpreadOr {
+                                                        value: n,
+                                                        is_spread: s,
+                                                    } = i.next()?;
                                                     let i = k
                                                         .val(*n)?
                                                         .const_in(semantics, k, pierce)?;

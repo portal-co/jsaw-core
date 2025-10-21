@@ -1,12 +1,10 @@
-use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
-
+use crate::{SBlock, SFunc, STarget, STerm, SValue, SValueW};
 use id_arena::Id;
+use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
 use swc_atoms::Atom;
 use swc_common::{Mark, Span, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
 use swc_tac::{Item, LId, TBlock, TCatch, TCfg, TFunc, TStmt, TTerm, ValFlags};
-
-use crate::{SBlock, SFunc, STarget, STerm, SValue, SValueW};
 impl SFunc {
     pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
         let value = self;
@@ -36,7 +34,6 @@ impl SFunc {
         }
         cfg.ts_retty = value.cfg.ts_retty.clone();
         cfg.generics = value.cfg.generics.clone();
-
         Ok(TFunc {
             cfg,
             entry,
@@ -49,7 +46,6 @@ impl SFunc {
 }
 impl<'a> TryFrom<&'a SFunc> for TFunc {
     type Error = anyhow::Error;
-
     fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
         value.try_into_with_prefix(Default::default())
     }
@@ -67,7 +63,6 @@ pub struct Rew {
     pub ctxt: OnceLock<SyntaxContext>,
     pub prefix: Atom,
 }
-
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq)]
 pub enum BlockEntry {
     Block(Id<SBlock>),
@@ -225,7 +220,6 @@ impl Rew {
                         },
                         &mut |this, a| Ok(mangle_value(this.prefix.clone(), ctxt, func, *a)),
                     )?;
-
                     cfg.blocks[new_block_id].post.term = term;
                 }
                 BlockEntry::Target(starget, val) => {

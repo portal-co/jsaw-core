@@ -1,11 +1,10 @@
+use arena_traits::{IndexAlloc, IndexIter};
 use std::{
     collections::HashMap,
     fmt::{Debug, Display},
     ops::{Index, IndexMut},
     sync::{Arc, OnceLock},
 };
-
-use arena_traits::{IndexAlloc, IndexIter};
 use swc_atoms::Atom;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::Id;
@@ -71,7 +70,6 @@ impl<T: Default> Default for LAM<T> {
 }
 impl<T> Index<Id> for LAM<T> {
     type Output = T;
-
     fn index(&self, index: Id) -> &Self::Output {
         match self.map.get(&index) {
             Some(value) => value,

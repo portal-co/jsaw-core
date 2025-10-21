@@ -1,14 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::Infallible;
-use std::iter::{empty, once};
-use std::mem::take;
-use std::sync::Arc;
-
 use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
 use either::Either;
 use id_arena::{Arena, Id};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::convert::Infallible;
+use std::iter::{empty, once};
+use std::mem::take;
+use std::sync::Arc;
 // use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::natives::Primordial;
@@ -20,13 +19,12 @@ use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 // use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
+use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
     AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
     ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
-
-use swc_ecma_ast::Id as Ident;
 pub mod fetch;
 bitflags! {
     #[repr(transparent)]
@@ -41,7 +39,6 @@ pub trait ItemGetter<I, F> {
     fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I, F>>;
     fn get_ident(&self, i: I) -> Option<Ident>;
 }
-
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
     fn primordial(&self, i: I) -> Option<&'static Primordial>
     where
@@ -160,21 +157,18 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
     }
 }
 impl<T: ItemGetter<I, F> + ?Sized, I, F> ItemGetterExt<I, F> for T {}
-
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Private {
     pub sym: Atom,
     pub ctxt: SyntaxContext,
     pub span: Span,
 }
-
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
 pub enum PropKey<I> {
     Lit(Ident),
     Computed(I),
 }
-
 impl<I> PropKey<I> {
     pub fn as_ref(&self) -> PropKey<&I> {
         match self {

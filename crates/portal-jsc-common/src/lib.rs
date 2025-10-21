@@ -1,10 +1,9 @@
 #![no_std]
 use core::{iter::once, mem::take, ops::Deref};
-pub use portal_pc_asm_common as asm;
-
 use either::Either;
-pub mod semantic;
+pub use portal_pc_asm_common as asm;
 pub mod natives;
+pub mod semantic;
 pub mod syntax;
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum RefOrMut<'a, T: ?Sized> {
@@ -13,7 +12,6 @@ pub enum RefOrMut<'a, T: ?Sized> {
 }
 impl<'a, T: ?Sized> Deref for RefOrMut<'a, T> {
     type Target = T;
-
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Ref(a) => &**a,
@@ -47,5 +45,3 @@ macro_rules! ref_or_mut_sub {
         }
     };
 }
-
-

@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
-use std::convert::Infallible;
-use std::mem::take;
-
+use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TCallee, TCfg, TFunc};
 use anyhow::Context;
 use id_arena::Id;
 use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
+use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
+use std::mem::take;
 use swc_atoms::Atom;
 use swc_cfg::{Block, Cfg};
 use swc_cfg::{Func, Term};
@@ -32,8 +32,6 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
-
-use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TCallee, TCfg, TFunc};
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct Options<'a> {
@@ -115,21 +113,18 @@ impl TFunc {
 }
 impl<'a> TryFrom<&'a TFunc> for Func {
     type Error = anyhow::Error;
-
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         Options::bud(|opts| value.to_func_with_options(opts))
     }
 }
 impl TryFrom<TFunc> for Func {
     type Error = anyhow::Error;
-
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
 }
 impl<'a> TryFrom<&'a TFunc> for Function {
     type Error = anyhow::Error;
-
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
         return Ok(a.into());
@@ -137,7 +132,6 @@ impl<'a> TryFrom<&'a TFunc> for Function {
 }
 impl TryFrom<TFunc> for Function {
     type Error = anyhow::Error;
-
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
@@ -183,7 +177,6 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     // let mut b = true;
                     let mut i = 0;
                     let temp = || swc_ecma_ast::Ident::new_private(Atom::new("temp"), span);
-
                     Box::new(Expr::Seq(SeqExpr {
                         span,
                         exprs: match [cond, then, otherwise]
@@ -396,8 +389,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                         span: span,
                                         expr: sr(cx, c)?,
                                     })
-                                },
-                                _ => todo!()
+                                }
+                                _ => todo!(),
                             };
                             Box::new(match &a.1 {
                                 crate::PropVal::Item(i) => Prop::KeyValue(KeyValueProp {
@@ -432,7 +425,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                         function: Box::new(f),
                                     }
                                 }),
-                                _ => todo!()
+                                _ => todo!(),
                             })
                         }))
                     })
@@ -469,8 +462,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                             span: span,
                                             expr: sr(cx, c)?,
                                         })
-                                    },
-                                    _ => todo!()
+                                    }
+                                    _ => todo!(),
                                 };
                                 match &a.2 {
                                     crate::PropVal::Item(i) => {
@@ -625,8 +618,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 is_override: false,
                                             })
                                         }
-                                    },
-                                    _ => todo!()
+                                    }
+                                    _ => todo!(),
                                 }
                             })
                         })
@@ -770,7 +763,6 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     type_args: None,
                 })
             }
-
             Item::StaticSubObject { wrapped, keys } => {
                 let rest = swc_ecma_ast::Ident::new_private(Atom::new("rest"), span);
                 let any = || swc_ecma_ast::Ident::new_private(Atom::new("ignored"), span);
@@ -802,8 +794,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                     span: span,
                                                     expr: sr(cx, c)?,
                                                 })
-                                            },
-                                            _ => todo!()
+                                            }
+                                            _ => todo!(),
                                         },
                                         value: Box::new(Pat::Ident(any().into())),
                                     }))
@@ -832,51 +824,49 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     .collect(),
                     type_args: None,
                 })
-            },
-            _ =>todo!()
-             // Item::Intrinsic { value } => {
-              //     let mut v = Vec::default();
-              //     let x = value
-              //         .as_ref()
-              //         .map(&mut |a| Ok::<_, Infallible>(v.push(sr(a))))
-              //         .unwrap();
-              //     Expr::Call(CallExpr {
-              //         span,
-              //         ctxt: Default::default(),
-              //         callee: swc_ecma_ast::Callee::Expr(Box::new(Expr::Member(
-              //             MemberExpr {
-              //                 span,
-              //                 obj: Box::new(Expr::Ident(ident(
-              //                     &(Atom::new("globalThis"), Default::default()),
-              //                     span,
-              //                 ))),
-              //                 prop: swc_ecma_ast::MemberProp::Computed(ComputedPropName {
-              //                     span,
-              //                     expr: Box::new(Expr::Lit(Lit::Str(Str {
-              //                         span,
-              //                         raw: None,
-              //                         value: Atom::new(x.key()),
-              //                     }))),
-              //                 }),
-              //             },
-              //         ))),
-              //         args: v
-              //             .into_iter()
-              //             .map(|a| ExprOrSpread {
-              //                 expr: a,
-              //                 spread: None,
-              //             })
-              //             .collect(),
-              //         type_args: None,
-              //     })
-              // }
+            }
+            _ => todo!(), // Item::Intrinsic { value } => {
+                          //     let mut v = Vec::default();
+                          //     let x = value
+                          //         .as_ref()
+                          //         .map(&mut |a| Ok::<_, Infallible>(v.push(sr(a))))
+                          //         .unwrap();
+                          //     Expr::Call(CallExpr {
+                          //         span,
+                          //         ctxt: Default::default(),
+                          //         callee: swc_ecma_ast::Callee::Expr(Box::new(Expr::Member(
+                          //             MemberExpr {
+                          //                 span,
+                          //                 obj: Box::new(Expr::Ident(ident(
+                          //                     &(Atom::new("globalThis"), Default::default()),
+                          //                     span,
+                          //                 ))),
+                          //                 prop: swc_ecma_ast::MemberProp::Computed(ComputedPropName {
+                          //                     span,
+                          //                     expr: Box::new(Expr::Lit(Lit::Str(Str {
+                          //                         span,
+                          //                         raw: None,
+                          //                         value: Atom::new(x.key()),
+                          //                     }))),
+                          //                 }),
+                          //             },
+                          //         ))),
+                          //         args: v
+                          //             .into_iter()
+                          //             .map(|a| ExprOrSpread {
+                          //                 expr: a,
+                          //                 spread: None,
+                          //             })
+                          //             .collect(),
+                          //         type_args: None,
+                          //     })
+                          // }
         });
         return Ok(right);
     }
 }
 impl<I, F> Render<I, F> for LId<I> {
     type Result = AssignTarget;
-
     fn render<Cx, E>(
         &self,
         mark: &mut bool,
