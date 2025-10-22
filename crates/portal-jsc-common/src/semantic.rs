@@ -10,6 +10,7 @@ bitflags::bitflags! {
         const NO_CRAZY = 0x10;
         const NATIVES = 0x20;
         const ALL_OBJECTS_FROZEN = 0x40;
+        const FUNCTION_PROPERTIES_SEALED = 0x80;
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
