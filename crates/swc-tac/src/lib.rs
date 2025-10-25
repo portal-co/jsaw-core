@@ -476,6 +476,69 @@ impl TCfg {
             return;
         }
     }
+    pub fn stripe(&mut self) {
+        let mut decls = self.decls.clone();
+        let mut d = BTreeMap::new();
+        for e in self.externs().collect::<BTreeSet<_>>() {
+            decls.remove(&e);
+            d.insert(e, 0usize);
+        }
+        for (k, l) in self.blocks.iter_mut() {
+            let mut pi = 0usize;
+            for _ in l.stmts.splice(
+                0..0,
+                d.iter_mut().map(|(a, b)| {
+                    *b += 1;
+                    pi += 1;
+                    TStmt {
+                        left: LId::Id {
+                            id: (Atom::new(format!("_{}${b}", &a.0)), a.1),
+                        },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Just { id: a.clone() },
+                        span: l.post.orig_span.unwrap_or_default(),
+                    }
+                }),
+            ) {}
+            for s in l.stmts.iter_mut().skip(pi) {
+                s.right = s
+                    .right
+                    .as_ref()
+                    .map2(
+                        &mut (),
+                        &mut |_, a| {
+                            Ok(match d.get(a) {
+                                None => a.clone(),
+                                Some(b) => (Atom::new(format!("_{}${b}", &a.0)), a.1),
+                            })
+                        },
+                        &mut |a, b| {
+                            Ok::<_, Infallible>({
+                                let mut b = b.clone();
+                                b.cfg.stripe();
+                                b
+                            })
+                        },
+                    )
+                    .unwrap();
+                if let LId::Id { id } = &mut s.left {
+                    if let Some(b) = d.get_mut(id) {
+                        *b += 1;
+                        id.0 = Atom::new(format!("_{}${b}", &id.0));
+                    }
+                }
+            }
+            for (a, b) in d.iter() {
+                let t = Atom::new(format!("_{}${b}", &a.0));
+                l.stmts.push(TStmt {
+                    left: LId::Id { id: a.clone() },
+                    flags: ValFlags::empty(),
+                    right: Item::Just { id: (t, a.1) },
+                    span: l.post.orig_span.unwrap_or_default(),
+                });
+            }
+        }
+    }
     pub fn splat_objects(&mut self, d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
         let mut cont = true;
         while take(&mut cont) {
