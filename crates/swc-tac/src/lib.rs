@@ -807,7 +807,15 @@ impl TCfg {
                                                                 .map(|a| SpreadOr {
                                                                     value: a,
                                                                     is_spread: false,
-                                                                })
+                                                                }) .skip(
+                                                            if semantic.flags.contains(
+                                                                SemanticFlags::NO_MONKEYPATCHING,
+                                                            ) {
+                                                                0
+                                                            } else {
+                                                                1
+                                                            },
+                                                        )
                                                                 .collect(),
                                                         },
                                                         span: span,
@@ -900,6 +908,15 @@ impl TCfg {
                                                             value: tmp2,
                                                         }]
                                                         .into_iter()
+                                                        .skip(
+                                                            if semantic.flags.contains(
+                                                                SemanticFlags::NO_MONKEYPATCHING,
+                                                            ) {
+                                                                0
+                                                            } else {
+                                                                1
+                                                            },
+                                                        )
                                                         .collect(),
                                                     }
                                                 } else {
