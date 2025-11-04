@@ -566,7 +566,7 @@ impl TCfg {
                             key.clone(),
                             PropVal::Getter({
                                 let mut f = TFunc::default();
-                                f.cfg.regs = regs.clone();
+                                f.cfg.regs.resolver = regs.resolver.clone();
                                 f.cfg.blocks[f.entry].post.term = TTerm::Return(Some(w.clone()));
                                 f
                             }),
@@ -575,7 +575,7 @@ impl TCfg {
                             key.clone(),
                             PropVal::Setter({
                                 let mut f = TFunc::default();
-                                f.cfg.regs = regs.clone();
+                                f.cfg.regs.resolver = regs.resolver.clone();
                                 let p = f.cfg.regs.alloc(());
                                 f.params.push(p.clone());
                                 f.cfg.blocks[f.entry].stmts.push(TStmt {
