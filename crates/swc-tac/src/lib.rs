@@ -633,7 +633,8 @@ impl TCfg {
                                 PropVal::Getter(g)
                                     if semantic
                                         .flags
-                                        .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                                        .contains(SemanticFlags::NO_MONKEYPATCHING)
+                                        || !g.cfg.has_this() =>
                                 {
                                     let PropKind::Prop { getter, setter } =
                                         m.entry(k).or_insert_with(|| PropKind::Prop {
@@ -648,7 +649,8 @@ impl TCfg {
                                 PropVal::Setter(s)
                                     if semantic
                                         .flags
-                                        .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                                        .contains(SemanticFlags::NO_MONKEYPATCHING)
+                                        || !s.cfg.has_this() =>
                                 {
                                     let PropKind::Prop { getter, setter } =
                                         m.entry(k).or_insert_with(|| PropKind::Prop {
@@ -790,9 +792,15 @@ impl TCfg {
                                                         left: LId::Id { id: stub.clone() },
                                                         flags: ValFlags::default(),
                                                         right: Item::Call {
-                                                            callee: TCallee::Member {
-                                                                func: tmp,
-                                                                member: tmp3,
+                                                            callee: if semantic.flags.contains(
+                                                                SemanticFlags::NO_MONKEYPATCHING,
+                                                            ) {
+                                                                TCallee::Member {
+                                                                    func: tmp,
+                                                                    member: tmp3,
+                                                                }
+                                                            } else {
+                                                                TCallee::Val(tmp)
                                                             },
                                                             args: [tmp2, stub]
                                                                 .into_iter()
@@ -877,9 +885,15 @@ impl TCfg {
                                                         span: s.span,
                                                     });
                                                     s.right = Item::Call {
-                                                        callee: TCallee::Member {
-                                                            func: tmp,
-                                                            member: tmp3,
+                                                        callee: if semantic.flags.contains(
+                                                            SemanticFlags::NO_MONKEYPATCHING,
+                                                        ) {
+                                                            TCallee::Member {
+                                                                func: tmp,
+                                                                member: tmp3,
+                                                            }
+                                                        } else {
+                                                            TCallee::Val(tmp)
                                                         },
                                                         args: [SpreadOr {
                                                             is_spread: false,
