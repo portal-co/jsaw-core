@@ -153,7 +153,7 @@ impl Cfg {
                             left: Ident::new(Atom::new("cff"), span, ctxt).into(),
                             right: Box::new(Expr::Lit(Lit::Str(Str {
                                 span,
-                                value: Atom::new(k.index().to_string()),
+                                value: Atom::new(k.index().to_string()).into(),
                                 raw: None,
                             }))),
                         })),
@@ -337,7 +337,7 @@ impl Cfg {
                                                     spread: None,
                                                     expr: Box::new(Expr::Lit(Lit::Str(Str {
                                                         span,
-                                                        value: Atom::new(l.index().to_string()),
+                                                        value: Atom::new(l.index().to_string()).into(),
                                                         raw: None,
                                                     }))),
                                                 })

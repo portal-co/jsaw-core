@@ -277,7 +277,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 };
                                 let func = k.val(*func)?;
                                 match func.array_in(semantics, k, pierce) {
-                                    Some(members) => match s.value.as_str() {
+                                    Some(members) => match s.value.as_str()? {
                                         "concat" => {
                                             let mut members: Vec<SpreadOr<I>> = members;
                                             for SpreadOr {
@@ -493,7 +493,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                                         span: span
                                                             .clone()
                                                             .unwrap_or(Span::dummy_with_cmt()),
-                                                        value: l.0.clone(),
+                                                        value: l.0.clone().into(),
                                                         raw: None,
                                                     }),
                                                     PropKey::Computed(c) => {
@@ -608,7 +608,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                             ) {
                                 (Value::Known(k), Value::Known(l)) => Some(Lit::Str(Str {
                                     span: left.span(),
-                                    value: Atom::new(format!("{k}{l}")),
+                                    value: Atom::new(format!("{k}{l}")).into(),
                                     raw: None,
                                 })),
                                 _ => match (
@@ -777,7 +777,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                 let l2 = match &i.0 {
                                     PropKey::Lit(l) => Lit::Str(Str {
                                         span: span.clone().unwrap_or(Span::dummy_with_cmt()),
-                                        value: l.0.clone(),
+                                        value: l.0.clone().into(),
                                         raw: None,
                                     }),
                                     PropKey::Computed(c) => {
@@ -808,7 +808,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                         _ => {}
                     }
                     match k.val(*mem).and_then(|m| m.const_in(semantics, k, pierce)) {
-                        Some(Lit::Str(s)) => match &*s.value {
+                        Some(Lit::Str(s)) => match s.value.as_str()? {
                             "length" => match k.val(*obj) {
                                 Some(i)
                                     if semantics
@@ -883,7 +883,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     let mut i;
                                     let ses = ses_method(
                                         &func,
-                                        &s.value,
+                                        s.value.as_str()?,
                                         &mut match args.iter() {
                                             i2 => {
                                                 i = i2;

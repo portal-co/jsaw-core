@@ -40,7 +40,7 @@ impl ToTACConverter<'_> {
                         right: Item::Lit {
                             lit: Lit::Str(Str {
                                 span: v.span,
-                                value: v.sym.clone(),
+                                value: v.sym.clone().into(),
                                 raw: None,
                             }),
                         },
@@ -284,7 +284,7 @@ impl ToTACConverter<'_> {
             MemberProp::Ident(ident_name) => {
                 let lit = Lit::Str(Str {
                     span: ident_name.span,
-                    value: ident_name.sym.clone(),
+                    value: ident_name.sym.clone().into(),
                     raw: None,
                 });
                 let tmp = o.regs.alloc(());
@@ -808,7 +808,7 @@ impl ToTACConverter<'_> {
                         right: Item::Lit {
                             lit: Lit::Str(Str {
                                 span: assign_pat_prop.span,
-                                value: assign_pat_prop.key.sym.clone(),
+                                value: assign_pat_prop.key.sym.clone().into(),
                                 raw: None,
                             }),
                         },
@@ -1009,7 +1009,7 @@ impl ToTACConverter<'_> {
                                 v,
                             ),
                             swc_ecma_ast::PropName::Str(s) => {
-                                ((w, PropKey::Lit((s.value.clone(), Default::default())), v))
+                                ((w, PropKey::Lit((s.value.as_atom().cloned().unwrap(), Default::default())), v))
                             }
                             swc_ecma_ast::PropName::Num(number) => {
                                 anyhow::bail!("todo: {}:{}", file!(), line!())
@@ -1911,7 +1911,7 @@ impl ToTACConverter<'_> {
                                             v,
                                         )),
                                         swc_ecma_ast::PropName::Str(s) => Some((
-                                            PropKey::Lit((s.value.clone(), Default::default())),
+                                            PropKey::Lit((s.value.as_atom().cloned().unwrap(), Default::default())),
                                             v,
                                         )),
                                         swc_ecma_ast::PropName::Num(number) => {

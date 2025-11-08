@@ -16,7 +16,7 @@ use std::convert::Infallible;
 use std::iter::{empty, once};
 use std::mem::take;
 use std::sync::Arc;
-use swc_atoms::Atom;
+use swc_atoms::{Atom, Wtf8Atom};
 use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
@@ -122,7 +122,7 @@ pub fn imp(a: MemberProp) -> Expr {
         swc_ecma_ast::MemberProp::Ident(ident_name) => {
             let e = Expr::Lit(Lit::Str(Str {
                 span: ident_name.span,
-                value: ident_name.sym,
+                value: ident_name.sym.into(),
                 raw: None,
             }));
             e
@@ -616,7 +616,7 @@ impl TCfg {
                             let mut k = match k {
                                 PropKey::Lit(l) => Lit::Str(Str {
                                     span: Span::dummy_with_cmt(),
-                                    value: l.0.clone(),
+                                    value: l.0.clone().into(),
                                     raw: None,
                                 }),
                                 PropKey::Computed(c) => match self.get_item(c)? {
@@ -752,7 +752,7 @@ impl TCfg {
                                                                     b.clone().to_render(
                                                                         PropKey::Lit(match a {
                                                                             Lit::Str(s) => (
-                                                                                s.value.clone(),
+                                                                                (&*s.value.clone().to_atom_lossy()).clone(),
                                                                                 Default::default(),
                                                                             ),
                                                                             _ => todo!(),
@@ -779,7 +779,7 @@ impl TCfg {
                                                         right: Item::Lit {
                                                             lit: Lit::Str(Str {
                                                                 span: s.span,
-                                                                value: Atom::new("call"),
+                                                                value: Wtf8Atom::new("call"),
                                                                 raw: None,
                                                             }),
                                                         },
@@ -859,7 +859,7 @@ impl TCfg {
                                                                     b.clone().to_render(
                                                                         PropKey::Lit(match a {
                                                                             Lit::Str(s) => (
-                                                                                s.value.clone(),
+                                                                                (&*s.value.to_atom_lossy()).clone(),
                                                                                 Default::default(),
                                                                             ),
                                                                             _ => todo!(),
@@ -886,7 +886,7 @@ impl TCfg {
                                                         right: Item::Lit {
                                                             lit: Lit::Str(Str {
                                                                 span: s.span,
-                                                                value: Atom::new("call"),
+                                                                value: Wtf8Atom::new("call"),
                                                                 raw: None,
                                                             }),
                                                         },

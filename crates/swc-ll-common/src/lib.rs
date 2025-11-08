@@ -49,7 +49,7 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
             _ => match self.get_item(i)? {
                 Item::Mem { obj, mem } => match self.get_item(mem.clone())? {
                     Item::Lit { lit: Lit::Str(s) } => {
-                        self.primordial(obj.clone())?.get_perfect(&s.value)
+                        self.primordial(obj.clone())?.get_perfect(s.value.as_str()?)
                     }
                     _ => None,
                 },
@@ -88,7 +88,7 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
             let n = loop {
                 let id = match self.get_item(member.clone())? {
                     Item::Lit { lit: Lit::Str(s) } => {
-                        if let Some(m) = s.value.strip_prefix("~Natives_") {
+                        if let Some(m) = s.value.as_str().and_then(|s|s.strip_prefix("~Natives_")) {
                             if let Some(m) = Native::of(m) {
                                 break m;
                             }

@@ -227,7 +227,7 @@ impl Splatting {
                                     match $func {
                                         func => match $arrow {
                                             arrow => {
-                                                if method.value.as_str() == "call" {
+                                                if method.value.as_str().unwrap_or("nope") == "call" {
                                                     let mut args_itet = args
                                                         .iter()
                                                         .cloned()

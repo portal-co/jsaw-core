@@ -158,7 +158,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                                 right: Item::Lit {
                                     lit: Lit::Str(Str {
                                         span: *span,
-                                        value: b.clone(),
+                                        value: b.clone().into(),
                                         raw: None,
                                     }),
                                 },
@@ -183,7 +183,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                     right: Item::Lit {
                         lit: Lit::Str(Str {
                             span: *span,
-                            value: k.clone(),
+                            value: k.clone().into(),
                             raw: None,
                         }),
                     },
@@ -211,7 +211,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                 right: Item::Lit {
                     lit: Lit::Str(Str {
                         span: *span,
-                        value: b.clone(),
+                        value: b.clone().into(),
                         raw: None,
                     }),
                 },
@@ -247,7 +247,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             right: Item::Lit {
                 lit: Lit::Str(Str {
                     span: *span,
-                    value: Atom::new("$match"),
+                    value: Wtf8Atom::new("$match"),
                     raw: None,
                 }),
             },

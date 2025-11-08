@@ -16,7 +16,7 @@ pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) 
             let arg = arg.as_str()?;
             Some(Lit::Bool(Bool {
                 span: a.span,
-                value: a.value.starts_with(arg.value.as_str()),
+                value: a.value.starts_with(arg.value.as_str()?),
             }))
         }
         _ => None,
@@ -44,7 +44,7 @@ impl ResolveNatives for Expr {
         fn prop<'a>(c: &'a CallExpr, p: &'a Expr) -> Option<Native<&'a Expr>> {
             match p {
                 Expr::Lit(Lit::Str(s)) => {
-                    let s = s.value.strip_prefix("~Natives_")?;
+                    let s = s.value.as_str()?.strip_prefix("~Natives_")?;
                     let n = Native::of(s)?;
                     let mut a = c.args.iter();
                     n.map(&mut |_| {
