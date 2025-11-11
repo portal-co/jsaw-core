@@ -9,14 +9,40 @@
 //! In SSA form:
 //! - Each variable is assigned exactly once (static single assignment)
 //! - Variables are versioned when they would be reassigned in non-SSA form
-//! - Control flow merges use φ-functions (represented as block parameters here)
+//! - Control flow merges use block parameters instead of φ-functions
 //! - Enables more powerful dataflow analysis and optimizations
+//!
+//! # Block Parameters Instead of Phi Nodes
+//!
+//! This SSA representation uses **block parameters** instead of traditional φ-functions.
+//! Basic blocks take parameters just like functions, and predecessors pass arguments
+//! when jumping to them. This approach:
+//! - Makes SSA construction and transformation easier to reason about
+//! - Avoids edge cases that occur with φ-nodes (e.g., critical edges)
+//! - Provides a cleaner representation for optimization passes
+//! - Naturally handles multiple values being merged at the same point
+//!
+//! For example, instead of:
+//! ```text
+//! block:
+//!   x = φ(x1 from pred1, x2 from pred2)
+//! ```
+//!
+//! We use:
+//! ```text
+//! block(x):        // x is a block parameter
+//!   ...
+//! pred1:
+//!   jump block(x1) // pass x1 as argument
+//! pred2:
+//!   jump block(x2) // pass x2 as argument
+//! ```
 //!
 //! # Key Types
 //!
 //! - [`SFunc`]: A function in SSA form
 //! - [`SCfg`]: The SSA control flow graph
-//! - [`SBlock`]: A basic block with parameters (φ-functions)
+//! - [`SBlock`]: A basic block with parameters (replacing φ-functions)
 //! - [`SValue`]: An SSA value (operation, parameter, load, store, etc.)
 //! - [`SValueW`]: A wrapper around `SValue` for arena storage
 //! - [`STerm`]: Block terminator with target blocks and arguments
@@ -26,9 +52,10 @@
 //!
 //! The primary entry point is converting from TAC to SSA form. This involves:
 //! 1. Identifying variables that need versioning
-//! 2. Creating block parameters for φ-functions at control flow merges
+//! 2. Creating block parameters at control flow merges (instead of φ-functions)
 //! 3. Threading SSA values through the control flow graph
 //! 4. Converting assignments to SSA form
+//! 5. Passing appropriate arguments when jumping to blocks
 //!
 //! # Modules
 //!
@@ -322,14 +349,18 @@ impl SCfg {
 /// An SSA basic block with parameters.
 ///
 /// Unlike TAC blocks which only contain statements, SSA blocks have parameters
-/// that serve as φ-functions for control flow merges. When control flow jumps
-/// to this block from different predecessors, each predecessor provides arguments
-/// that are bound to these parameters.
+/// that replace traditional φ-functions. When control flow jumps to this block
+/// from different predecessors, each predecessor provides arguments that are
+/// bound to these parameters.
+///
+/// This design makes SSA construction and transformation easier by avoiding the
+/// edge cases that occur with φ-nodes, such as critical edges and the ordering
+/// of φ-functions at block entry.
 ///
 /// # Structure
 ///
 /// ```text
-/// Block(param1, param2, ...):
+/// Block(param1, param2, ...):    // Parameters replace φ-functions
 ///   stmt1
 ///   stmt2
 ///   ...
@@ -338,7 +369,7 @@ impl SCfg {
 ///
 /// # Fields
 ///
-/// - `params`: Block parameters (φ-functions for incoming values)
+/// - `params`: Block parameters (replace φ-functions for merging values)
 /// - `stmts`: SSA value computations in this block
 /// - `postcedent`: Terminator specifying control flow and exception handling
 #[derive(Default, Clone, Debug, PartialEq, Eq)]

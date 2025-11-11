@@ -1,3 +1,26 @@
+//! Low-level common utilities for TAC and SSA representations.
+//!
+//! This crate provides shared types and utilities used across the TAC and SSA
+//! intermediate representations. It defines the `Item` enum which represents
+//! operations and values in both TAC and SSA forms.
+//!
+//! # Key Types
+//!
+//! - [`Item`]: The core operation/value type used in both TAC and SSA
+//! - [`TCallee`]: Call target specification (function, member, etc.)
+//! - [`PropKey`] and [`PropVal`]: Object property keys and values
+//! - [`SpreadOr`]: A value that may or may not be spread
+//! - [`Private`]: Private field identifier
+//!
+//! # Traits
+//!
+//! - [`ItemGetter`]: Trait for resolving item references
+//! - [`ItemGetterExt`]: Extended functionality for item resolution
+//!
+//! # Modules
+//!
+//! - [`fetch`]: Utilities for fetching and resolving items
+
 use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
@@ -27,18 +50,35 @@ use swc_ecma_ast::{
 };
 pub mod fetch;
 bitflags! {
+    /// Flags for class members (properties and methods).
+    ///
+    /// These flags track whether a member is static (class-level) or private.
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
     pub struct MemberFlags: u64{
+        /// Member is static (belongs to the class, not instances)
         const STATIC = 0x1;
+        /// Member is private (using JavaScript private field syntax)
         const PRIVATE = 0x2;
     }
 }
+/// Trait for getting items and identifiers from a data structure.
+///
+/// This trait provides a uniform interface for resolving item references
+/// in both TAC and SSA forms.
 pub trait ItemGetter<I, F> {
+    /// Get an immutable reference to an item
     fn get_item(&self, i: I) -> Option<&Item<I, F>>;
+    /// Get a mutable reference to an item
     fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I, F>>;
+    /// Get an identifier from a reference
     fn get_ident(&self, i: I) -> Option<Ident>;
 }
+
+/// Extension trait providing higher-level item resolution operations.
+///
+/// This trait builds on `ItemGetter` to provide more complex queries like
+/// resolving primordial objects and native functions.
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
     fn primordial(&self, i: I) -> Option<&'static Primordial>
     where

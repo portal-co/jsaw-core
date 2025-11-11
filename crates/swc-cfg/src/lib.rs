@@ -1,3 +1,38 @@
+//! Control Flow Graph (CFG) representation for JavaScript.
+//!
+//! This crate provides a CFG representation of JavaScript code, serving as an
+//! intermediate layer between the Abstract Syntax Tree (AST) and lower-level
+//! intermediate representations like TAC and SSA.
+//!
+//! # Control Flow Graph
+//!
+//! A CFG represents a program as a directed graph where:
+//! - Nodes are basic blocks of sequential statements
+//! - Edges represent possible control flow paths
+//! - Each block has one entry point and one exit point (terminator)
+//!
+//! # Key Types
+//!
+//! - [`Func`]: A function represented as a CFG
+//! - [`Cfg`]: The control flow graph structure
+//! - [`Block`]: A basic block containing statements
+//! - [`Term`]: A terminator (return, jump, branch, etc.)
+//! - [`Catch`]: Exception handler specification
+//!
+//! # Conversion
+//!
+//! This crate converts SWC's JavaScript AST into CFG form, handling:
+//! - Loops (for, while, do-while)
+//! - Conditionals (if-else, switch)
+//! - Exception handling (try-catch-finally)
+//! - Labels and break/continue statements
+//!
+//! # Modules
+//!
+//! - [`recfg`]: CFG restructuring and transformation
+//! - [`simplify`]: CFG simplification passes
+//! - [`to_cfg`]: Conversion from AST to CFG
+
 use anyhow::Context;
 use id_arena::{Arena, Id};
 use relooper::ShapedBlock;
@@ -12,12 +47,29 @@ use swc_ecma_ast::{
 };
 pub mod recfg;
 pub mod simplify;
+/// A function represented as a control flow graph.
+///
+/// This is the CFG representation of a JavaScript/TypeScript function, including
+/// its parameters, control flow structure, and metadata.
+///
+/// # Fields
+///
+/// - `cfg`: The control flow graph containing all basic blocks
+/// - `entry`: The entry block where execution begins
+/// - `params`: Function parameters (as SWC AST `Param` nodes)
+/// - `is_generator`: Whether this is a generator function
+/// - `is_async`: Whether this is an async function
 #[derive(Clone)]
 pub struct Func {
+    /// The control flow graph
     pub cfg: Cfg,
+    /// The entry block identifier
     pub entry: Id<Block>,
+    /// Function parameters
     pub params: Vec<Param>,
+    /// Whether this is a generator function (function*)
     pub is_generator: bool,
+    /// Whether this is an async function
     pub is_async: bool,
 }
 impl Default for Func {
@@ -78,10 +130,23 @@ impl Into<Function> for Func {
         };
     }
 }
+/// A control flow graph containing basic blocks.
+///
+/// The CFG is the core data structure representing a function's control flow.
+/// It contains an arena of blocks that are connected through their terminators.
+///
+/// # Fields
+///
+/// - `blocks`: Arena of all basic blocks in the CFG
+/// - `generics`: Optional generic type parameters (for TypeScript)
+/// - `ts_retty`: Optional return type annotation (for TypeScript)
 #[derive(Clone, Default)]
 pub struct Cfg {
+    /// Arena containing all basic blocks
     pub blocks: Arena<Block>,
+    /// Generic type parameters (TypeScript)
     pub generics: Option<TsTypeParamDecl>,
+    /// Return type annotation (TypeScript)
     pub ts_retty: Option<TsTypeAnn>,
 }
 impl Cfg {
@@ -485,41 +550,92 @@ impl cfg_traits::Target<Func> for Id<Block> {
         self
     }
 }
+/// A basic block in the control flow graph.
+///
+/// A basic block contains a sequence of statements with no internal control flow,
+/// followed by a terminator that specifies how control exits the block.
+///
+/// # Fields
+///
+/// - `stmts`: Sequential statements in this block (as SWC AST `Stmt` nodes)
+/// - `end`: The block's terminator and exception handler
 #[derive(Default, Clone)]
 pub struct Block {
+    /// Statements executed sequentially in this block
     pub stmts: Vec<Stmt>,
+    /// Terminator and exception handler
     pub end: End,
 }
+
+/// The end (exit point) of a basic block.
+///
+/// Similar to TAC's `TPostecedent` and SSA's `SPostcedent`, this specifies
+/// both normal control flow (terminator) and exception handling.
+///
+/// # Fields
+///
+/// - `catch`: Exception handler specification
+/// - `term`: Normal control flow terminator
+/// - `orig_span`: Original source location
 #[derive(Default, Clone)]
 pub struct End {
+    /// Exception handler
     pub catch: Catch,
+    /// Normal control flow terminator
     pub term: Term,
+    /// Original source span for debugging
     pub orig_span: Option<Span>,
 }
+/// Exception handler specification for CFG blocks.
+///
+/// Specifies what happens when an exception is thrown during block execution.
+/// Similar to TAC's `TCatch` but uses SWC AST types.
 #[derive(Clone, Default)]
 pub enum Catch {
+    /// No exception handler - propagate to caller
     #[default]
     Throw,
+    /// Jump to catch handler, binding exception to pattern
     Jump {
+        /// Pattern to bind the exception value to
         pat: Pat,
+        /// The catch handler block
         k: Id<Block>,
     },
 }
+
+/// A block terminator specifying control flow.
+///
+/// Each basic block ends with exactly one terminator that determines where
+/// control flow goes next. This is similar to TAC's `TTerm` but uses SWC AST
+/// expression nodes for values.
 #[derive(Default, Clone)]
 pub enum Term {
+    /// Return from function, optionally with a value
     Return(Option<Expr>),
+    /// Throw an exception with the given expression
     Throw(Expr),
+    /// Unconditional jump to another block
     Jmp(Id<Block>),
+    /// Conditional jump based on a boolean expression
     CondJmp {
+        /// The condition expression
         cond: Expr,
+        /// Block to jump to if condition is truthy
         if_true: Id<Block>,
+        /// Block to jump to if condition is falsy
         if_false: Id<Block>,
     },
+    /// Multi-way branch (switch statement)
     Switch {
+        /// The expression being switched on
         x: Expr,
+        /// Map from case values to target blocks
         blocks: HashMap<Expr, Id<Block>>,
+        /// Default block if no case matches
         default: Id<Block>,
     },
+    /// Placeholder or unreachable terminator
     #[default]
     Default,
 }
