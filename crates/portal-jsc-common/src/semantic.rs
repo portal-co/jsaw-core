@@ -28,10 +28,12 @@ bitflags::bitflags! {
         /// assumptions don't apply.
         const NO_JIT = 0x2;
 
-        /// Bitwise OR with zero converts to integer, NaN becomes 0.
+        /// Asserts that any value equals itself (x === x is always true).
         ///
-        /// The `(x | 0)` idiom is used to convert values to 32-bit integers.
-        /// This flag affects how NaN is handled in such conversions.
+        /// In standard JavaScript, NaN is the only value where `x === x` is false.
+        /// When this flag is set, the compiler can assume NaN is absent from the
+        /// program, allowing it to use `x === x` checks and optimizations that
+        /// would otherwise be incorrect in the presence of NaN.
         const BITWISE_OR_ABSENT_NAN = 0x4;
 
         /// Treats `~` plugin imports specially.

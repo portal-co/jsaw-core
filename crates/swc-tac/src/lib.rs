@@ -1,3 +1,43 @@
+//! Three-Address Code (TAC) intermediate representation for JavaScript.
+//!
+//! This crate provides a TAC representation for JavaScript/ECMAScript code, serving as an
+//! intermediate layer between the Control Flow Graph (CFG) and Static Single Assignment (SSA)
+//! forms in the compilation pipeline.
+//!
+//! # Three-Address Code
+//!
+//! TAC is a linear intermediate representation where each statement performs at most one
+//! operation and uses at most three operands (typically: two sources and one destination).
+//! This form makes data flow analysis and optimization easier than working directly with
+//! the AST or CFG.
+//!
+//! # Key Types
+//!
+//! - [`TFunc`]: A complete function in TAC form, including its control flow graph
+//! - [`TCfg`]: The control flow graph containing basic blocks and metadata
+//! - [`TBlock`]: A single basic block containing a sequence of statements
+//! - [`TStmt`]: A single statement assigning a value to a left-hand side identifier
+//! - [`TTerm`]: A block terminator (return, jump, conditional branch, etc.)
+//! - [`Item`]: The right-hand side of an assignment (operation, literal, call, etc.)
+//! - [`LId`]: A left-hand side identifier (simple variable, member access, or private field)
+//!
+//! # Example Flow
+//!
+//! JavaScript code is transformed through these stages:
+//! 1. Parse to AST (using SWC)
+//! 2. Convert to CFG (using `swc-cfg`)
+//! 3. Lower to TAC (this crate)
+//! 4. Transform to SSA (using `swc-ssa`)
+//!
+//! # Modules
+//!
+//! - [`consts`]: Constant evaluation and propagation
+//! - [`conv`]: Conversion from CFG to TAC
+//! - [`lam`]: Lambda (function) handling and atom resolution
+//! - [`prepa`]: Preparation and preprocessing passes
+//! - [`rew`]: Rewriting and transformation passes
+//! - [`splat`]: Object and array spreading operations
+
 use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
@@ -34,11 +74,38 @@ pub mod lam;
 pub mod prepa;
 pub mod rew;
 pub mod splat;
+/// A left-hand side identifier in an assignment statement.
+///
+/// In TAC, the left-hand side of an assignment can be:
+/// - A simple variable identifier
+/// - A member access (e.g., `obj.property` or `obj[computed]`)
+/// - A private field access (using JavaScript private field syntax)
+///
+/// # Type Parameters
+///
+/// - `I`: The identifier type (defaults to SWC's `Ident`)
+/// - `M`: The member name type (defaults to a single-element array `[I; 1]`)
+///
+/// # Examples
+///
+/// ```ignore
+/// // Simple assignment: x = ...
+/// LId::Id { id: x }
+///
+/// // Member assignment: obj.prop = ...
+/// LId::Member { obj, mem: [prop] }
+///
+/// // Private field: obj.#private = ...
+/// LId::Private { obj, id: private_symbol }
+/// ```
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
 pub enum LId<I = Ident, M = [I; 1]> {
+    /// A simple variable identifier
     Id { id: I },
+    /// A member access (property or computed member)
     Member { obj: I, mem: M },
+    /// A private field access
     Private { obj: I, id: Private },
     // SplitOff { head: I, tail: I },
 }
@@ -134,19 +201,48 @@ pub fn imp(a: MemberProp) -> Expr {
     }
 }
 bitflags! {
+    /// Flags associated with values in TAC statements.
+    ///
+    /// These flags track properties of values that are useful for optimization
+    /// and analysis.
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
     pub struct ValFlags: u64{
+        /// Indicates this value is in SSA-like form.
+        ///
+        /// When set, this value is assigned exactly once and dominates all its uses,
+        /// similar to SSA form. This allows certain optimizations that rely on
+        /// single-assignment semantics.
         const SSA_LIKE = 0x1;
     }
 }
+/// A function in Three-Address Code (TAC) form.
+///
+/// This represents a complete function with its control flow graph, parameters,
+/// and metadata. The function consists of basic blocks connected by control flow,
+/// with one designated entry block.
+///
+/// # Fields
+///
+/// - `cfg`: The control flow graph containing all basic blocks
+/// - `entry`: The entry block where execution begins
+/// - `params`: Function parameter identifiers
+/// - `ts_params`: Optional TypeScript type annotations for parameters
+/// - `is_generator`: Whether this is a generator function
+/// - `is_async`: Whether this is an async function
 #[derive(Clone, Debug)]
 pub struct TFunc {
+    /// The control flow graph containing all basic blocks
     pub cfg: TCfg,
+    /// The entry block identifier (where execution starts)
     pub entry: Id<TBlock>,
+    /// Function parameter identifiers
     pub params: Vec<Ident>,
+    /// Optional TypeScript type annotations for parameters
     pub ts_params: Vec<Option<TsType>>,
+    /// Whether this is a generator function (function*)
     pub is_generator: bool,
+    /// Whether this is an async function
     pub is_async: bool,
 }
 #[derive(Clone)]
@@ -214,13 +310,32 @@ impl Default for TFunc {
         }
     }
 }
+/// The Control Flow Graph (CFG) for a function in TAC form.
+///
+/// Contains all the basic blocks that make up a function, along with metadata
+/// about variables, types, and register allocation.
+///
+/// # Fields
+///
+/// - `blocks`: Arena of all basic blocks in the function
+/// - `regs`: Register allocator/manager (LAM - Local Allocation Map)
+/// - `decls`: Set of all declared variables in the function
+/// - `type_annotations`: TypeScript type annotations for variables
+/// - `generics`: Optional generic type parameters for the function
+/// - `ts_retty`: Optional TypeScript return type annotation
 #[derive(Default, Clone, Debug)]
 pub struct TCfg {
+    /// Arena containing all basic blocks
     pub blocks: Arena<TBlock>,
+    /// Register allocator/manager for temporary values
     pub regs: LAM<()>,
+    /// Set of all declared variables in this function
     pub decls: BTreeSet<Ident>,
+    /// TypeScript type annotations for variables
     pub type_annotations: BTreeMap<Ident, TsType>,
+    /// Generic type parameters (if this is a generic function)
     pub generics: Option<TsTypeParamDecl>,
+    /// TypeScript return type annotation
     pub ts_retty: Option<TsTypeAnn>,
 }
 pub trait Externs<I> {
@@ -942,11 +1057,36 @@ impl Externs<Ident> for TCfg {
         TCfg::externs(self)
     }
 }
+/// A statement in Three-Address Code (TAC) form.
+///
+/// Each statement represents a single operation that assigns a value to a
+/// left-hand side identifier. This is the basic unit of computation in TAC.
+///
+/// # Structure
+///
+/// ```text
+/// left = right
+/// ```
+///
+/// Where:
+/// - `left` is an [`LId`] (identifier, member access, or private field)
+/// - `right` is an [`Item`] (operation, literal, call, etc.)
+///
+/// # Fields
+///
+/// - `left`: The target of the assignment
+/// - `flags`: Properties of this value (e.g., SSA_LIKE)
+/// - `right`: The value being computed and assigned
+/// - `span`: Source location information for error reporting
 #[derive(Clone, Debug)]
 pub struct TStmt {
+    /// The left-hand side (target) of the assignment
     pub left: LId,
+    /// Flags indicating properties of this value
     pub flags: ValFlags,
+    /// The right-hand side (value) being assigned
     pub right: Item<Ident, TFunc>,
+    /// Source span for debugging and error reporting
     pub span: Span,
 }
 impl TStmt {
@@ -973,15 +1113,57 @@ impl TStmt {
         return self.left.nothrow() && self.right.nothrow();
     }
 }
+/// A basic block in the control flow graph.
+///
+/// A basic block is a sequence of statements with a single entry point (the first
+/// statement) and a single exit point (the terminator). Control flow can only
+/// enter at the beginning and leave at the end.
+///
+/// # Structure
+///
+/// ```text
+/// Block:
+///   stmt1
+///   stmt2
+///   ...
+///   stmtN
+///   terminator (return, jump, conditional, etc.)
+/// ```
+///
+/// # Fields
+///
+/// - `stmts`: Sequence of statements executed in order
+/// - `post`: The postcedent (terminator and exception handler) that ends the block
 #[derive(Clone, Default, Debug)]
 pub struct TBlock {
+    /// Statements in this basic block, executed sequentially
     pub stmts: Vec<TStmt>,
+    /// The postcedent (terminator and exception handling)
     pub post: TPostecedent,
 }
+/// The postcedent (exit point) of a basic block.
+///
+/// Each basic block ends with a postcedent that specifies:
+/// 1. How control flow continues (the terminator)
+/// 2. How exceptions are handled (the catch handler)
+///
+/// # Type Parameters
+///
+/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `I`: Identifier type (defaults to `Ident`)
+///
+/// # Fields
+///
+/// - `catch`: Exception handler for this block
+/// - `term`: The terminator specifying normal control flow
+/// - `orig_span`: Original source span for debugging
 #[derive(Clone, Debug)]
 pub struct TPostecedent<B = Id<TBlock>, I = Ident> {
+    /// Exception handler specification
     pub catch: TCatch<B, I>,
+    /// Normal control flow terminator
     pub term: TTerm<B, I>,
+    /// Original source location
     pub orig_span: Option<Span>,
 }
 impl<B, I> Default for TPostecedent<B, I> {
@@ -994,11 +1176,32 @@ impl<B, I> Default for TPostecedent<B, I> {
     }
 }
 pub mod impls;
+/// Exception handling specification for a basic block.
+///
+/// Specifies what happens when an exception is thrown during execution of
+/// the basic block's statements.
+///
+/// # Type Parameters
+///
+/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `I`: Identifier type (defaults to `Ident`)
+///
+/// # Variants
+///
+/// - `Throw`: Propagate the exception to the caller (no catch handler)
+/// - `Jump`: Jump to a catch handler block, binding the exception to a pattern
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TCatch<B = Id<TBlock>, I = Ident> {
     // #[default]
+    /// No exception handler - throw to caller
     Throw,
-    Jump { pat: I, k: B },
+    /// Jump to a catch block, binding exception to `pat`
+    Jump {
+        /// Pattern (identifier) to bind the exception value to
+        pat: I,
+        /// The catch handler block to jump to
+        k: B,
+    },
 }
 impl<B, I> Default for TCatch<B, I> {
     fn default() -> Self {
@@ -1033,26 +1236,61 @@ impl<B, I> TCatch<B, I> {
         })
     }
 }
+/// A block terminator specifying control flow.
+///
+/// Every basic block ends with exactly one terminator that determines where
+/// control flow goes next. Terminators represent all the ways control can
+/// leave a block: returns, throws, jumps, and branches.
+///
+/// # Type Parameters
+///
+/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `I`: Identifier type (defaults to `Ident`)
+///
+/// # Variants
+///
+/// - `Return`: Return from the function (optionally with a value)
+/// - `Tail`: Tail call optimization - call and return in one step
+/// - `Throw`: Throw an exception
+/// - `Jmp`: Unconditional jump to another block
+/// - `CondJmp`: Conditional branch (if-then-else)
+/// - `Switch`: Multi-way branch based on a value
+/// - `Default`: Placeholder/unreachable terminator
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
+    /// Return from function, optionally with a value
     Return(Option<I>),
+    /// Tail call - call function and immediately return its result
     Tail {
+        /// The function being called
         callee: TCallee<I>,
+        /// Arguments to the function call
         args: Vec<SpreadOr<I>>,
     },
+    /// Throw an exception with the given value
     Throw(I),
+    /// Unconditional jump to a block
     Jmp(B),
+    /// Conditional jump based on a boolean condition
     CondJmp {
+        /// The condition value (should be boolean)
         cond: I,
+        /// Block to jump to if condition is true
         if_true: B,
+        /// Block to jump to if condition is false
         if_false: B,
     },
+    /// Multi-way branch (switch statement)
     Switch {
+        /// The value being switched on
         x: I,
+        /// List of (case_value, target_block) pairs
         blocks: Vec<(I, B)>,
+        /// Default block if no case matches
         default: B,
     },
     // #[default]
+    /// Placeholder or unreachable terminator
     Default,
 }
 impl<I: Eq, M> LId<I, M> {
