@@ -1,3 +1,22 @@
+//! JavaScript simplification and desugaring transformations.
+//!
+//! This crate provides transformations to simplify and desugar JavaScript code,
+//! converting complex language features into simpler equivalents. This makes
+//! subsequent compilation stages easier by normalizing the input.
+//!
+//! # Simplification
+//!
+//! The simplification process includes:
+//! - Desugaring complex syntax (for-of loops, destructuring, etc.)
+//! - Normalizing control flow constructs
+//! - Expanding syntactic sugar
+//! - Converting to a more uniform representation
+//!
+//! # Dialects
+//!
+//! The crate supports different JavaScript dialects/targets through the
+//! `Dialect` trait, allowing customization of the simplification process.
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -29,6 +48,12 @@ use swc_ecma_ast::{
     ReturnStmt, SimpleAssignTarget, Stmt, WhileStmt,
 };
 use typenum::Same;
+
+/// Trait for defining JavaScript dialect-specific behavior.
+///
+/// Different JavaScript variants or compilation targets may require different
+/// simplification strategies. This trait allows customization of how types
+/// and constructs are handled.
 pub trait Dialect {
     type Mark<T>: Extract<T>;
     type MarkSpanned<T: Spanned + Clone + Debug + Hash + Eq>: Same<Output = Self::Mark<T>>

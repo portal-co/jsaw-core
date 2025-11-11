@@ -1,10 +1,42 @@
+//! Portal JSC code generator.
+//!
+//! This binary is the main code generation tool for the Portal JavaScript Compiler.
+//! It generates TypeScript/JavaScript intrinsics and runtime support files.
+//!
+//! # Usage
+//!
+//! ```bash
+//! portal-jsc-generator <source-root>
+//! ```
+//!
+//! Where `<source-root>` is the root directory of the project. The generator
+//! will create necessary intrinsic files in the `packages/` directory.
+//!
+//! # Generated Files
+//!
+//! - `packages/jsaw-intrinsics-base/index.ts`: Base intrinsic functions for
+//!   fast operations and type assertions
+
 use itertools::Itertools;
+
+/// Main entry point for the generator.
+///
+/// Takes the source root directory as an argument and generates intrinsic files.
 fn main() {
     let mut args = std::env::args();
     args.next();
     let root = args.next().expect("the source root");
     emit_base_intrinsics(&root);
 }
+/// Emits the base intrinsics TypeScript file.
+///
+/// Generates TypeScript declarations for native/intrinsic functions that can be
+/// recognized and optimized by the compiler. These include fast arithmetic
+/// operations and type assertions.
+///
+/// # Arguments
+///
+/// * `a` - The source root directory path
 fn emit_base_intrinsics(a: &str) {
     std::fs::write(
         format!("{a}/packages/jsaw-intrinsics-base/index.ts"),
