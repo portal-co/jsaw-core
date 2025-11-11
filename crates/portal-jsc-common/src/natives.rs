@@ -1,18 +1,55 @@
+//! Native functions and primordial objects for JavaScript runtime.
+//!
+//! This module defines intrinsic functions and global objects that are built into
+//! the JavaScript runtime. These are used during compilation to recognize and
+//! optimize calls to well-known functions like `Math.imul` or `Reflect.get`.
+
 use crate::*;
+
+/// Primordial (built-in) JavaScript objects and functions.
+///
+/// These represent global objects and their methods that are part of the JavaScript
+/// specification and can be specially handled by the compiler for optimization.
+///
+/// Note: Some variant names use snake_case (e.g., `Reflect_get`) to represent
+/// the hierarchical relationship (object.method). These may be renamed in future
+/// versions to use a more idiomatic representation.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[non_exhaustive]
 pub enum Primordial {
+    /// The global `this` object (also available as `window`, `self`, or `global`)
     GlobalThis,
+    /// The `Object` constructor
     Object,
+    /// The `Reflect` namespace object
     Reflect,
+    /// `Reflect.get` method
+    // TODO: Consider renaming to ReflectGet for consistency
     Reflect_get,
+    /// `Reflect.apply` method
+    // TODO: Consider renaming to ReflectApply for consistency
     Reflect_apply,
+    /// `Reflect.set` method
+    // TODO: Consider renaming to ReflectSet for consistency
     Reflect_set,
+    /// The `Math` namespace object
     Math,
+    /// `Math.fround` method (note: currently misspelled as "froumd")
+    // TODO: Consider renaming to MathFround for consistency and fixing typo
     Math_froumd,
+    /// `Math.imul` method (32-bit integer multiplication)
+    // TODO: Consider renaming to MathImul for consistency
     Math_imul,
 }
 impl Primordial {
+    /// Looks up a primordial by its global name.
+    ///
+    /// Returns a static reference to the corresponding `Primordial` variant if the
+    /// name matches a known global object, or `None` if not found.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The global name to look up (e.g., "globalThis", "Object", "Math")
     pub fn global(k: &str) -> Option<&'static Self> {
         match k {
             "globalThis" | "window" | "self" | "global" => Some(&Self::GlobalThis),
@@ -22,6 +59,21 @@ impl Primordial {
             _ => None,
         }
     }
+
+    /// Looks up a method on this primordial object.
+    ///
+    /// For namespace objects like `Reflect` and `Math`, this resolves method names
+    /// to their corresponding primordial variants. For `GlobalThis`, it recursively
+    /// looks up global names.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The method or property name to look up
+    ///
+    /// # Returns
+    ///
+    /// A static reference to the primordial representing the method, or `None` if
+    /// the method is not a recognized primordial.
     pub fn get_perfect(&self, k: &str) -> Option<&'static Self> {
         match (self, k) {
             (Self::GlobalThis, a) => Self::global(a),
@@ -34,19 +86,50 @@ impl Primordial {
         }
     }
 }
+/// Native (intrinsic) functions recognized by the compiler.
+///
+/// These represent special compiler-recognized functions that can be optimized
+/// or have special semantics. They are typically exposed through a runtime library
+/// and recognized by name during compilation.
+///
+/// The type parameter `E` represents the expression type used for arguments,
+/// allowing this enum to be generic over different IR representations.
+///
+/// # Type Assertions
+///
+/// `AssertString`, `AssertNumber`, and `AssertStaticFn` variants are type assertions
+/// that can be either runtime checks or compile-time only (when `comptime` is true).
+///
+/// # Fast Operations
+///
+/// `Fast*` variants represent optimized versions of JavaScript operations that
+/// assume certain type constraints, allowing for more efficient code generation.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum Native<E> {
+    /// Assert that a value is a string (runtime or compile-time)
     AssertString { value: E, comptime: bool },
+    /// Assert that a value is a number (runtime or compile-time)
     AssertNumber { value: E, comptime: bool },
+    /// Assert that a value is a static function (runtime or compile-time)
     AssertStaticFn { value: E, comptime: bool },
+    /// Fast addition operation (assumes numeric operands)
     FastAdd { lhs: E, rhs: E },
+    /// Fast logical AND operation
     FastAnd { lhs: E, rhs: E },
+    /// Fast logical OR operation
     FastOr { lhs: E, rhs: E },
+    /// Fast equality comparison
     FastEq { lhs: E, rhs: E },
+    /// Fast subtraction operation (assumes numeric operands)
     FastSub { lhs: E, rhs: E },
+    /// Fast multiplication operation
+    /// When `imul` is true, uses 32-bit integer multiplication semantics
     FastMul { lhs: E, rhs: E, imul: bool },
+    /// Fast left shift operation (assumes integer operands)
     FastShl { lhs: E, rhs: E },
+    /// Marker for functions that should be inlined
+    /// `n` optionally specifies the inlining depth or count
     InlineMe { n: Option<E> },
 }
 impl Native<()> {
