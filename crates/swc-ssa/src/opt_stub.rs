@@ -1,6 +1,34 @@
+//! Optimization stub framework for SSA.
+//!
+//! This module provides a framework for implementing optimization passes on
+//! SSA form. It handles the boilerplate of traversing the CFG while maintaining
+//! SSA invariants.
+//!
+//! # Optimization Framework
+//!
+//! The `OptStub` provides:
+//! - Block-by-block traversal maintaining mappings
+//! - Automatic handling of block parameters
+//! - Preservation of control flow structure
+//! - Support for value transformations
+//!
+//! Optimization passes can extend this framework to implement specific
+//! transformations while the stub handles the structural details.
+//!
+//! # Key Type
+//!
+//! [`OptStub`] - The optimization stub maintaining transformation state
+
 use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
+
+/// Optimization stub for SSA transformations.
+///
+/// Provides a framework for implementing optimization passes on SSA form,
+/// handling the traversal and structural transformation while allowing
+/// custom logic for value transformations.
 pub struct OptStub {
+    /// Mapping from input blocks to output blocks
     map: BTreeMap<Id<SBlock>, Id<SBlock>>,
 }
 impl OptStub {

@@ -1,3 +1,17 @@
+//! Trait implementations for SSA types.
+//!
+//! This module implements external traits from the `cfg-traits` and `ssa-traits`
+//! crates for SSA types, allowing them to work with generic control flow and
+//! SSA analysis algorithms.
+//!
+//! # Implemented Traits
+//!
+//! - `cfg_traits::Func` for `SFunc`
+//! - `cfg_traits::Block` for `SBlock`
+//! - `cfg_traits::Term` for `SPostcedent`
+//! - `cfg_traits::Target` for `STarget`
+//! - `ssa_traits::HasValues` and `ssa_traits::HasChainableValues` for SSA types
+
 use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
 use id_arena::{Arena, Id};
 use ssa_traits::{HasChainableValues, HasValues};

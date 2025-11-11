@@ -1,3 +1,20 @@
+//! Object and array spreading/splatting transformations.
+//!
+//! This module handles the transformation of object and array spread operations
+//! into explicit property accesses and assignments. This is part of lowering
+//! high-level JavaScript features into simpler TAC representations.
+//!
+//! # Splatting
+//!
+//! Splatting refers to expanding spread operations:
+//! - Object spread: `{...obj}` → explicit property copying
+//! - Array spread: `[...arr]` → explicit element iteration
+//! - Function argument spread: `f(...args)` → explicit argument passing
+//!
+//! # Key Type
+//!
+//! [`Splatting`] - The transformation state for spreading operations
+
 use crate::*;
 use std::mem::replace;
 impl TFunc {
@@ -15,12 +32,30 @@ impl TFunc {
         }
     }
 }
+
+/// State for object and array splatting transformations.
+///
+/// Maintains context while transforming spread operations into explicit
+/// operations in the TAC representation.
+///
+/// # Fields
+///
+/// - `cache`: Mapping from input blocks to output blocks
+/// - `catch`: Current exception handler
+/// - `ret`: Optional return target information
+/// - `this_val`: Optional `this` binding
+/// - `stack`: Set of identifiers on the stack
 #[derive(Default)]
 pub struct Splatting {
+    /// Cache mapping input to output blocks
     pub cache: BTreeMap<Id<TBlock>, Id<TBlock>>,
+    /// Current exception handler
     pub catch: TCatch,
+    /// Optional return target (left-hand side, block, identifier)
     pub ret: Option<(LId, Id<TBlock>, Ident)>,
+    /// Optional `this` value binding
     pub this_val: Option<Ident>,
+    /// Set of identifiers currently on the stack
     pub stack: BTreeSet<Ident>,
 }
 impl Splatting {
