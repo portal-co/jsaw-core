@@ -255,14 +255,14 @@ pub struct Mapper<'a> {
     pub vars: Arc<dyn AtomResolver>,
     pub to_cfg: &'a (dyn Fn(&Function) -> anyhow::Result<Func> + 'a),
 }
-pub fn mapped<T>(a: impl FnOnce(Mapper<'_>) -> T) -> T {
-    return a(Mapper {
+pub fn mapped<T>(mapper_fn: impl FnOnce(Mapper<'_>) -> T) -> T {
+    return mapper_fn(Mapper {
         import_mapper: static_map! {_ => None},
         semantic: &SemanticCfg::default(),
         privates: &BTreeMap::new(),
         consts: None,
         vars: Arc::new(DefaultAtomResolver {}),
-        to_cfg: &|a| a.clone().try_into(),
+        to_cfg: &|func| func.clone().try_into(),
     });
 }
 impl<'a> Mapper<'a> {
