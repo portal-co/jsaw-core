@@ -184,15 +184,15 @@ pub mod simpl_legacy;
 pub enum ImportMapperReq {
     // Native,
 }
-pub fn imp(a: MemberProp) -> Expr {
-    match a {
+pub fn imp(member_prop: MemberProp) -> Expr {
+    match member_prop {
         swc_ecma_ast::MemberProp::Ident(ident_name) => {
-            let e = Expr::Lit(Lit::Str(Str {
+            let expr = Expr::Lit(Lit::Str(Str {
                 span: ident_name.span,
                 value: ident_name.sym.into(),
                 raw: None,
             }));
-            e
+            expr
         }
         swc_ecma_ast::MemberProp::PrivateName(private_name) => {
             todo!()
