@@ -1,3 +1,9 @@
+//! Trait implementations for optimized SSA types.
+//!
+//! This module implements external traits from `cfg-traits` and `ssa-traits`
+//! for the optimized SSA types, enabling them to work with generic control
+//! flow and SSA analysis algorithms.
+
 use crate::*;
 use id_arena::{Arena, Id};
 use ssa_traits::{Func, HasChainableValues, HasValues};

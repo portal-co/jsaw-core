@@ -87,12 +87,16 @@ pub enum SemanticTarget {
 
 /// Version information for MuJSC target.
 ///
+/// MuJSC is a JavaScript engine implementation: <https://github.com/tsoding/mujsc/tree/main>
+///
 /// Currently has no versions defined (the enum is empty and `#[non_exhaustive]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum MuJSCVersion {}
 
 /// Version information for Porffor target.
+///
+/// Porffor is a JavaScript engine and compiler: <https://github.com/CanadaHonk/porffor>
 ///
 /// Currently has no versions defined (the enum is empty and `#[non_exhaustive]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

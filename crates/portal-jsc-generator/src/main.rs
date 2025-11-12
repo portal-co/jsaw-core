@@ -36,10 +36,10 @@ fn main() {
 ///
 /// # Arguments
 ///
-/// * `a` - The source root directory path
-fn emit_base_intrinsics(a: &str) {
+/// * `source_root` - The source root directory path
+fn emit_base_intrinsics(source_root: &str) {
     std::fs::write(
-        format!("{a}/packages/jsaw-intrinsics-base/index.ts"),
+        format!("{source_root}/packages/jsaw-intrinsics-base/index.ts"),
         format!(
             "
 {}

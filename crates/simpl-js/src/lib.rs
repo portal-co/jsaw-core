@@ -1,21 +1,26 @@
-//! JavaScript simplification and desugaring transformations.
+//! Legacy "Simpl" dialect AST implementation.
 //!
-//! This crate provides transformations to simplify and desugar JavaScript code,
-//! converting complex language features into simpler equivalents. This makes
-//! subsequent compilation stages easier by normalizing the input.
+//! This crate provides the AST (Abstract Syntax Tree) implementation for the legacy
+//! "Simpl" JavaScript dialect, a simplified subset of JavaScript with reduced
+//! syntactic complexity and notable differences from standard JavaScript.
 //!
-//! # Simplification
+//! # Simpl Dialect
 //!
-//! The simplification process includes:
-//! - Desugaring complex syntax (for-of loops, destructuring, etc.)
-//! - Normalizing control flow constructs
-//! - Expanding syntactic sugar
-//! - Converting to a more uniform representation
+//! Simpl is a simplified JavaScript dialect with:
+//! - Reduced syntactic complexity compared to standard JavaScript
+//! - Subdialects defined by the `Dialect` trait
+//! - Notable semantic and syntactic differences from standard JavaScript
+//! - Easier compilation to lower-level targets
 //!
 //! # Dialects
 //!
-//! The crate supports different JavaScript dialects/targets through the
-//! `Dialect` trait, allowing customization of the simplification process.
+//! The `Dialect` trait allows customization of how different Simpl subdialects
+//! are handled, providing flexibility for different compilation targets.
+//!
+//! # Note
+//!
+//! For JavaScript simplification and desugaring transformations that prepare
+//! standard JavaScript for compilation, see `swc-tac/src/prepa.rs` instead.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;

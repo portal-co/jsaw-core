@@ -129,7 +129,10 @@ pub enum Native<E> {
     /// Fast left shift operation (assumes integer operands)
     FastShl { lhs: E, rhs: E },
     /// Marker for functions that should be inlined
-    /// `n` optionally specifies the inlining depth or count
+    /// 
+    /// `n` controls inlining depth:
+    /// - If `n` is specified and non-zero: inline the function and replace references to `n` with `n - 1`
+    /// - If `n` is specified and zero, or not specified: remove the marker while inlining
     InlineMe { n: Option<E> },
 }
 impl Native<()> {

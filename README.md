@@ -58,15 +58,16 @@ The project is organized as a Cargo workspace with several crates, each handling
   - Shared types for lower-level IRs
   - Fetching and resolution helpers
 
-- **`simpl-js`**: JavaScript simplification passes
-  - Desugaring complex JavaScript features
-  - Normalization transformations
+- **`simpl-js`**: Legacy Simpl dialect AST package
+  - Legacy AST implementation for the "Simpl" JavaScript subset
+  - Provides dialect-specific AST types and transformations
 
 ### Applications
 
-- **`portal-jsc-generator`**: Command-line tool for code generation
-  - Entry point for the compiler pipeline
-  - Configuration and driver logic
+- **`portal-jsc-generator`**: Native bindings generator
+  - Generates TypeScript/JavaScript bindings for native functions
+  - Creates intrinsics based on definitions in `portal-jsc-common/src/natives.rs`
+  - Does not depend on or use most of the compilation pipeline
 
 ## Building
 
@@ -89,8 +90,10 @@ The typical compilation flow:
 2. Convert to CFG using `swc-cfg`
 3. Lower to TAC using `swc-tac`
 4. Transform to SSA using `swc-ssa`
-5. Optimize using `swc-opt-ssa`
+5. Optimize using `swc-opt-ssa` (optional - can be skipped for different optimization strategies)
 6. Generate target code
+
+**Note on `swc-opt-ssa`**: This stage can be skipped if different optimizations are needed. Most generic optimizations are already implemented in `swc-tac` and `swc-ssa`. Pipelines targeting JavaScript output may benefit from skipping `swc-opt-ssa` as it can currently increase code size.
 
 Example using the generator:
 
@@ -123,7 +126,7 @@ SSA form ensures each variable is assigned exactly once:
 ## Key Features
 
 - **Multiple IR Levels**: Gradual lowering from high-level to low-level representations
-- **Type Preservation**: Optional TypeScript type annotations preserved through pipeline
+- **Type Preservation**: Optional TypeScript type annotations preserved through pipeline (work-in-progress)
 - **Optimization Infrastructure**: Framework for implementing analyses and transformations
 - **Extensible**: Designed to support multiple compilation targets
 - **No Unsafe**: Safe Rust throughout (as per project requirements)

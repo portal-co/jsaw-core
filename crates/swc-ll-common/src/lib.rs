@@ -197,16 +197,28 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
     }
 }
 impl<T: ItemGetter<I, F> + ?Sized, I, F> ItemGetterExt<I, F> for T {}
+/// Private field identifier (JavaScript private class fields).
+///
+/// Represents a private field name using the `#field` syntax in JavaScript classes.
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Private {
+    /// The symbol/name of the private field
     pub sym: Atom,
+    /// Syntax context for hygiene
     pub ctxt: SyntaxContext,
+    /// Source span
     pub span: Span,
 }
+
+/// Object property key.
+///
+/// Represents either a literal identifier key or a computed (dynamic) key expression.
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
 pub enum PropKey<I> {
+    /// Literal identifier key (e.g., `obj.foo`)
     Lit(Ident),
+    /// Computed/dynamic key (e.g., `obj[expr]`)
     Computed(I),
 }
 impl<I> PropKey<I> {
@@ -229,12 +241,19 @@ impl<I> PropKey<I> {
         })
     }
 }
+/// Object property value.
+///
+/// Represents the different kinds of object property values in JavaScript.
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
 pub enum PropVal<I, F> {
+    /// Regular value property
     Item(I),
+    /// Getter function
     Getter(F),
+    /// Setter function
     Setter(F),
+    /// Method function
     Method(F),
 }
 impl<I, F> PropVal<I, F> {
@@ -268,13 +287,22 @@ impl<I, F> PropVal<I, F> {
         })
     }
 }
+/// Call target specification.
+///
+/// Represents the different ways a function can be called in JavaScript.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TCallee<I> {
+    /// Direct value call (e.g., `fn()`)
     Val(I),
+    /// Member call (e.g., `obj.method()`)
     Member { func: I, member: I },
+    /// Private member call (e.g., `obj.#privateMethod()`)
     PrivateMember { func: I, member: Private },
+    /// Dynamic import (e.g., `import(...)`)
     Import,
+    /// Super call (e.g., `super()`)
     Super,
+    /// Eval call (e.g., `eval(...)`)
     Eval,
     // Static(Ident),
 }
@@ -382,91 +410,142 @@ impl<I: Eq, F> Item<I, F> {
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
     tcfg.inlinable(d)
 }
+/// A value that may or may not be spread.
+///
+/// Used in array literals and function arguments to represent both
+/// regular values and spread values (e.g., `...arr`).
 #[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub struct SpreadOr<I> {
+    /// The value (either a single value or what's being spread)
     pub value: I,
+    /// Whether this is a spread operation
     pub is_spread: bool,
 }
+
+/// Core operation/value type for TAC and SSA.
+///
+/// The `Item` enum represents all operations and values in the TAC and SSA
+/// intermediate representations. Each variant corresponds to a JavaScript
+/// operation or construct.
+///
+/// # Type Parameters
+///
+/// - `I`: Identifier type (varies by IR - `Ident` for TAC, `Id<SValueW>` for SSA)
+/// - `F`: Function type (varies by IR - `TFunc` for TAC, `SFunc` for SSA)
+///
+/// # Variants
+///
+/// This enum has many variants covering JavaScript operations:
+/// - Literals, identifiers, and references
+/// - Binary and unary operations
+/// - Property access (regular and private)
+/// - Function calls and construction
+/// - Object and array literals
+/// - Control flow (yield, await, select)
+/// - Special values (this, arguments, undefined)
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Item<I, F> {
+    /// Reference to another identifier/value
     Just {
         id: I,
     },
+    /// Binary operation (e.g., `a + b`, `x === y`)
     Bin {
         left: I,
         right: I,
         op: BinaryOp,
     },
+    /// Unary operation (e.g., `!x`, `-y`, `typeof z`)
     Un {
         arg: I,
         op: UnaryOp,
     },
+    /// Member/property access (e.g., `obj.prop` or `obj[key]`)
     Mem {
         obj: I,
         mem: I,
     },
+    /// Private member access (e.g., `obj.#private`)
     PrivateMem {
         obj: I,
         mem: Private,
     },
+    /// Check if object has private member (e.g., `#private in obj`)
     HasPrivateMem {
         obj: I,
         mem: Private,
     },
+    /// Function literal (regular function or arrow function)
     Func {
         func: F,
         arrow: bool,
     },
+    /// Literal value (number, string, boolean, null, etc.)
     Lit {
         lit: Lit,
     },
+    /// Function call
     Call {
         callee: TCallee<I>,
         args: Vec<SpreadOr<I>>,
     },
+    /// Constructor call with `new`
     New {
         class: I,
         args: Vec<I>,
     },
+    /// Object literal
     Obj {
         members: Vec<(PropKey<I>, PropVal<I, F>)>,
     },
+    /// Class definition
     Class {
         superclass: Option<I>,
         members: Vec<(MemberFlags, PropKey<I>, PropVal<Option<I>, F>)>,
         constructor: Option<F>,
     },
+    /// Array literal
     Arr {
         members: Vec<SpreadOr<I>>,
     },
+    /// Static array slice (optimization for known slice operations)
     StaticSubArray {
         begin: usize,
         end: usize,
         wrapped: I,
     },
+    /// Static object subset (optimization for known property access)
     StaticSubObject {
         wrapped: I,
         keys: Vec<PropKey<I>>,
     },
+    /// Yield expression (in generators)
     Yield {
         value: Option<I>,
         delegate: bool,
     },
+    /// Await expression (in async functions)
     Await {
         value: I,
     },
+    /// Inline assembly operation
     Asm {
         value: Asm<I>,
     },
+    /// Undefined value
     Undef,
+    /// `this` reference
     This,
+    /// Ternary/conditional operator (e.g., `cond ? then : else`)
     Select {
         cond: I,
         then: I,
         otherwise: I,
     },
+    /// `arguments` object
     Arguments,
+    /// Meta property (e.g., `import.meta`, `new.target`)
     Meta {
         prop: MetaPropKind,
     }, // Intrinsic {

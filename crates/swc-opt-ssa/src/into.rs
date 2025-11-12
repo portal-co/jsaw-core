@@ -1,3 +1,12 @@
+//! Conversion from basic SSA to optimized SSA.
+//!
+//! This module handles the transformation from standard SSA form to the
+//! optimized SSA form with type information. The conversion process:
+//! - Adds type annotations to values
+//! - Inserts type assertions where needed
+//! - Prepares for type-based optimizations
+//! - Handles deoptimization paths
+
 use crate::{OptBlock, OptCfg, OptFunc, OptType, OptValue, OptValueW};
 use anyhow::Context;
 use id_arena::Id;
@@ -9,6 +18,8 @@ use std::{
 use swc_ecma_ast::{BinaryOp, UnaryOp};
 use swc_ssa::{SBlock, SCatch, SCfg, SFunc, STarget, STerm, SValue, simplify::SValGetter};
 use swc_tac::{Item, SpreadOr};
+
+/// Conversion state for SSA to optimized SSA transformation.
 pub struct Convert {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<OptType>>, Id<OptBlock>>>,
 }

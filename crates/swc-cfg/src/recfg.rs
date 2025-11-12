@@ -1,6 +1,15 @@
+//! CFG restructuring and reconstruction.
+//!
+//! This module provides functionality to restructure and rebuild control flow graphs,
+//! typically used for transformations that need to create a new CFG from an existing one.
+
 use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 use id_arena::Id;
 use std::collections::{BTreeMap, HashMap};
+
+/// CFG restructuring state.
+///
+/// Maintains mapping from input blocks to output blocks during CFG reconstruction.
 #[derive(Default)]
 pub struct Recfg {
     pub map: BTreeMap<Id<Block>, Id<Block>>,
