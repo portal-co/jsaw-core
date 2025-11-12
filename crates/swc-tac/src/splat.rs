@@ -1,19 +1,33 @@
-//! Object and array spreading/splatting transformations.
+//! Function inlining transformation for TAC.
 //!
-//! This module handles the transformation of object and array spread operations
-//! into explicit property accesses and assignments. This is part of lowering
-//! high-level JavaScript features into simpler TAC representations.
+//! This module performs function inlining, replacing function calls with the
+//! function body when the callee is statically known. This optimization:
+//! - Eliminates call overhead
+//! - Enables further optimizations on the inlined code
+//! - Handles argument binding and parameter passing
+//! - Preserves `this` binding semantics for methods
 //!
-//! # Splatting
+//! # Inlining Process
 //!
-//! Splatting refers to expanding spread operations:
-//! - Object spread: `{...obj}` → explicit property copying
-//! - Array spread: `[...arr]` → explicit element iteration
-//! - Function argument spread: `f(...args)` → explicit argument passing
+//! The inlining transformation:
+//! 1. Identifies calls to statically-known functions (direct calls or via constants)
+//! 2. Binds call arguments to function parameters
+//! 3. Inlines the function's CFG into the caller
+//! 4. Handles return values by redirecting returns to the call site
+//! 5. Manages `this` binding for arrow functions vs regular functions
+//! 6. Supports `.call()` method inlining for explicit `this` binding
+//!
+//! # Suggested Name Changes
+//!
+//! This module should be renamed to better reflect its purpose:
+//! - **Recommended**: `inline.rs` - clearly indicates function inlining
+//! - **Alternative**: `inline_functions.rs` - more explicit
+//! - Type `Splatting` → `Inliner` or `FunctionInliner`
+//! - Method `splatted()` → `inlined()` or `with_inlining()`
 //!
 //! # Key Type
 //!
-//! [`Splatting`] - The transformation state for spreading operations
+//! [`Splatting`] - The inlining transformation state (should be renamed to `Inliner`)
 
 use crate::*;
 use std::mem::replace;
@@ -33,29 +47,35 @@ impl TFunc {
     }
 }
 
-/// State for object and array splatting transformations.
+/// State for function inlining transformations.
 ///
-/// Maintains context while transforming spread operations into explicit
-/// operations in the TAC representation.
+/// Maintains context while inlining function calls into the caller's TAC.
+/// Tracks block mappings, exception handlers, return targets, and recursion
+/// prevention.
+///
+/// # Suggested Rename
+///
+/// This type should be renamed to `Inliner` or `FunctionInliner` to better
+/// reflect its purpose.
 ///
 /// # Fields
 ///
-/// - `cache`: Mapping from input blocks to output blocks
-/// - `catch`: Current exception handler
-/// - `ret`: Optional return target information
-/// - `this_val`: Optional `this` binding
-/// - `stack`: Set of identifiers on the stack
+/// - `cache`: Mapping from input blocks to output blocks (for memoization)
+/// - `catch`: Current exception handler context
+/// - `ret`: Return target for the inlined function (left-hand side, continuation block, arguments object)
+/// - `this_val`: The `this` binding for the inlined function
+/// - `stack`: Set of function identifiers currently being inlined (prevents infinite recursion)
 #[derive(Default)]
 pub struct Splatting {
-    /// Cache mapping input to output blocks
+    /// Cache mapping input blocks to output blocks (for memoization)
     pub cache: BTreeMap<Id<TBlock>, Id<TBlock>>,
-    /// Current exception handler
+    /// Current exception handler context
     pub catch: TCatch,
-    /// Optional return target (left-hand side, block, identifier)
+    /// Return target for inlined function: (result variable, continuation block, arguments array)
     pub ret: Option<(LId, Id<TBlock>, Ident)>,
-    /// Optional `this` value binding
+    /// The `this` binding for the inlined function
     pub this_val: Option<Ident>,
-    /// Set of identifiers currently on the stack
+    /// Functions currently being inlined (prevents infinite recursion)
     pub stack: BTreeSet<Ident>,
 }
 impl Splatting {
