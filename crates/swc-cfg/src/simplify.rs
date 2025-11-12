@@ -1,3 +1,10 @@
+//! CFG simplification passes.
+//!
+//! This module implements simplification transformations on the CFG, such as:
+//! - Constant folding in conditional branches
+//! - Dead code elimination
+//! - Basic block merging
+
 use crate::*;
 impl Cfg {
     pub fn simplify(&mut self) {

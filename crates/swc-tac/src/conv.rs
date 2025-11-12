@@ -1,14 +1,51 @@
+//! Conversion from CFG (Control Flow Graph) to TAC (Three-Address Code).
+//!
+//! This module handles the transformation from the higher-level CFG representation
+//! (which uses SWC AST expressions) to the lower-level TAC representation (which
+//! uses simple identifiers and operations).
+//!
+//! # Conversion Process
+//!
+//! The conversion process:
+//! 1. Transforms SWC AST expressions into TAC items
+//! 2. Breaks down complex expressions into simple assignments
+//! 3. Allocates temporary registers for intermediate values
+//! 4. Preserves control flow structure (blocks, jumps, branches)
+//! 5. Handles pattern destructuring and complex assignments
+//!
+//! # Key Type
+//!
+//! [`ToTACConverter`] - The main converter struct that maintains state during conversion
+
 use crate::*;
 use std::{cell::OnceCell, mem::replace};
 use swc_ecma_ast::{
     ArrayPat, AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp,
 };
+
+/// Converter for transforming CFG to TAC representation.
+///
+/// This struct maintains the conversion state as it transforms blocks from
+/// CFG format (with SWC AST expressions) to TAC format (with simple identifiers).
+///
+/// # Fields
+///
+/// - `map`: Mapping from CFG blocks to TAC blocks
+/// - `ret_to`: Optional return target for transformation
+/// - `recatch`: Exception handler for the current context
+/// - `this`: Optional `this` binding identifier
+/// - `mapper`: Configuration and utilities for the conversion
 #[non_exhaustive]
 pub struct ToTACConverter<'a> {
+    /// Mapping from CFG block IDs to TAC block IDs
     pub map: BTreeMap<Id<Block>, Id<TBlock>>,
+    /// Optional return target (identifier and block)
     pub ret_to: Option<(Ident, Id<TBlock>)>,
+    /// Exception handler for current context
     pub recatch: TCatch,
+    /// Optional `this` binding
     pub this: Option<Ident>,
+    /// Mapper providing conversion utilities
     pub mapper: Mapper<'a>,
 }
 impl ToTACConverter<'_> {

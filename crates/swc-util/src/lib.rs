@@ -1,3 +1,21 @@
+//! Utilities for working with SWC (Speedy Web Compiler) ASTs.
+//!
+//! This crate provides helper functions and traits for working with SWC's JavaScript
+//! AST, including semantic analysis, native function resolution, and import mapping.
+//!
+//! # Key Features
+//!
+//! - Semantic configuration for controlling compilation behavior
+//! - Native function recognition and resolution
+//! - Import mapping for module resolution
+//! - Constant evaluation for SES (Secure ECMAScript) methods
+//!
+//! # Main Types
+//!
+//! - [`SemanticCfg`]: Configuration for semantic analysis
+//! - [`ResolveNatives`]: Trait for resolving native/intrinsic functions
+//! - [`ImportMapper`]: Trait for custom import resolution
+
 use bitflags::bitflags;
 pub use portal_jsc_common as common;
 use portal_jsc_common::natives::Native;
@@ -22,13 +40,38 @@ pub fn ses_method(a: &Lit, b: &str, args: &mut (dyn Iterator<Item = Lit> + '_)) 
         _ => None,
     }
 }
+/// Semantic configuration for compilation.
+///
+/// Combines semantic flags and target information to control how JavaScript
+/// code is analyzed and compiled.
+///
+/// # Fields
+///
+/// - `flags`: Semantic flags controlling optimization assumptions
+/// - `target`: The target JavaScript engine or variant
 #[derive(Default, Clone)]
 #[non_exhaustive]
 pub struct SemanticCfg {
+    /// Semantic flags (see `SemanticFlags` in portal-jsc-common)
     pub flags: SemanticFlags,
+    /// Target JavaScript engine/variant
     pub target: SemanticTarget,
 }
+
+/// Trait for resolving native/intrinsic functions in expressions.
+///
+/// This trait allows types (typically AST expressions) to be queried for
+/// whether they represent a call to a recognized native function.
 pub trait ResolveNatives {
+    /// Attempts to resolve this expression as a native function call.
+    ///
+    /// Returns `Some(native)` if this expression is a recognized native function
+    /// call, or `None` otherwise.
+    ///
+    /// # Arguments
+    ///
+    /// - `cfg`: Semantic configuration
+    /// - `import_map`: Import mapper for resolving module imports
     fn resolve_natives(
         &self,
         cfg: &SemanticCfg,

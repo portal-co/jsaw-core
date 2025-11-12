@@ -1,4 +1,11 @@
+//! Fetching and converting expressions to Item representation.
+//!
+//! This module provides utilities to convert SWC AST expressions into the
+//! `Item` representation used in TAC and SSA forms.
+
 use crate::*;
+
+/// Trait for types that can be fetched/converted to Item representation.
 pub trait ItemFetcher {
     type Function;
     fn fetch<'a>(&'a self) -> Option<Item<PropKey<&'a Self>, &'a Self::Function>>;

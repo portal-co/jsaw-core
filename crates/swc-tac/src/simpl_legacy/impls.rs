@@ -1,3 +1,8 @@
+//! Trait implementations for Simpl TAC types.
+//!
+//! This module implements the `cfg-traits` traits for Simpl dialect TAC types,
+//! enabling them to work with generic control flow analysis algorithms.
+
 use super::*;
 use cfg_traits::{Block, Func, Target, Term};
 use std::iter::{empty, once};

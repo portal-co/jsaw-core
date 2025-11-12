@@ -1,3 +1,24 @@
+//! Simplification and optimization passes for SSA.
+//!
+//! This module provides various simplification and optimization transformations
+//! on SSA form. These passes:
+//! - Simplify conditional branches with constant conditions
+//! - Eliminate redundant loads and stores
+//! - Perform constant propagation
+//! - Simplify operations with known values
+//!
+//! # Optimization Passes
+//!
+//! The simplifications work on the SSA CFG to:
+//! - Reduce code size
+//! - Eliminate dead code
+//! - Constant fold operations
+//! - Remove redundant memory operations
+//!
+//! # Key Traits
+//!
+//! - [`SValGetter`]: Trait for getting SSA value information
+
 use crate::*;
 use portal_jsc_swc_util::{SemanticCfg, SemanticFlags, ses_method};
 use swc_atoms::Atom;

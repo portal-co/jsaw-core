@@ -1,3 +1,13 @@
+//! Structured control flow reconstruction (relooping).
+//!
+//! This module implements relooping, which reconstructs structured control flow
+//! (if-else, loops) from a CFG. This is necessary when generating Simpl dialect
+//! code from TAC, as Simpl expects structured control flow rather than arbitrary
+//! jumps.
+//!
+//! The relooping algorithm uses the Relooper library to analyze the CFG and
+//! produce structured constructs.
+
 use super::*;
 use portal_jsc_simpl_js::{
     SimplAssignment, SimplBinOp, SimplCallExpr, SimplIf, SimplIfKind, SimplSelectExpr,
@@ -8,6 +18,11 @@ use relooper::ShapedBlock;
 use std::{convert::Infallible, iter::once};
 use swc_atoms::Atom;
 use swc_ecma_ast::{AssignOp, Bool, Number};
+
+/// Reloop a CFG into structured Simpl statements.
+///
+/// Takes a shaped block from the Relooper and generates corresponding
+/// structured Simpl dialect statements.
 pub fn reloop<D: TacDialect>(
     cfg: &TSimplCfg<D>,
     shaped_block: &ShapedBlock<Id<TSimplBlock<D>>>,

@@ -1,10 +1,51 @@
+//! Conversion from TAC (Three-Address Code) to SSA (Static Single Assignment).
+//!
+//! This module handles the transformation from TAC to SSA form. The conversion
+//! process uses block parameters instead of traditional φ-functions to represent
+//! merging values at control flow join points.
+//!
+//! # Conversion Process
+//!
+//! The conversion involves:
+//! 1. Computing dominance information for the CFG
+//! 2. Identifying variables that need SSA treatment
+//! 3. Creating block parameters at control flow merge points
+//! 4. Threading SSA values through the control flow graph
+//! 5. Converting assignments to SSA form with versioned identifiers
+//!
+//! # Block Parameters vs Phi Functions
+//!
+//! Instead of inserting φ-functions at merge points, this implementation uses
+//! block parameters. When jumping to a block, predecessors pass arguments for
+//! the block's parameters, naturally handling the merging of values.
+//!
+//! # Key Type
+//!
+//! [`ToSSAConverter`] - The main converter maintaining state during transformation
+
 use crate::*;
 use ssa_impls::dom::dominates;
+
+/// Converter for transforming TAC to SSA representation.
+///
+/// This struct maintains the conversion state as it transforms TAC blocks
+/// to SSA form, tracking variable versions and block mappings.
+///
+/// # Fields
+///
+/// - `map`: Mapping from TAC blocks to SSA blocks
+/// - `all`: Set of all variables in scope
+/// - `undef`: A special "undefined" value used for uninitialized variables
+/// - `domtree`: Dominance tree for the CFG
 #[non_exhaustive]
 pub struct ToSSAConverter {
+    /// Mapping from TAC block IDs to SSA block IDs
     pub map: BTreeMap<Id<TBlock>, Id<SBlock>>,
+    /// Set of all variables encountered
     pub all: BTreeSet<Ident>,
+    /// Special undefined value for uninitialized variables
     pub undef: Id<SValueW>,
+    /// Dominance tree for control flow analysis
     pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
 }
 impl ToSSAConverter {

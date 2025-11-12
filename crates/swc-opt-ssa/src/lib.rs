@@ -1,3 +1,29 @@
+//! Optimized SSA representation with type information.
+//!
+//! This crate extends the basic SSA form with type information and optimization
+//! hints. It introduces an enhanced value representation that tracks types and
+//! includes deoptimization points for speculative optimizations.
+//!
+//! # Optimized SSA
+//!
+//! The optimized SSA form adds:
+//! - Type annotations on values (using `OptType`)
+//! - Assertion nodes for type guards
+//! - Deoptimization points for speculative optimizations
+//! - Emit nodes that can be lowered differently based on type information
+//!
+//! # Key Types
+//!
+//! - [`OptValue`]: An optimized SSA value with type information
+//! - [`OptFunc`]: A function in optimized SSA form
+//! - [`OptCfg`]: The optimized SSA control flow graph
+//! - [`OptType`]: Type information for values
+//!
+//! # Modules
+//!
+//! - [`impls`]: Trait implementations for optimized SSA types
+//! - [`into`]: Conversion from basic SSA to optimized SSA
+
 use id_arena::{Arena, Id};
 use std::collections::BTreeSet;
 use swc_ecma_ast::Lit;
@@ -6,19 +32,46 @@ use swc_tac::Item;
 pub mod impls;
 pub mod into;
 pub use portal_jsc_swc_util::r#type::{ObjType, OptType};
+/// An optimized SSA value with type information and optimization hints.
+///
+/// This extends basic SSA values with type information and special nodes for
+/// optimization. It allows for speculative optimizations with deoptimization
+/// fallbacks.
+///
+/// # Type Parameters
+///
+/// - `I`: Value identifier type
+/// - `B`: Block identifier type
+/// - `F`: Function type
+/// - `D`: Deoptimizer type
+///
+/// # Variants
+///
+/// - `Deopt`: A deoptimization point for speculative optimizations
+/// - `Assert`: A type assertion/guard
+/// - `Emit`: A value with type information that can be emitted
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum OptValue<I = Id<OptValueW>, B = Id<OptBlock>, F = OptFunc, D = ()> {
+    /// Deoptimization point - fallback if speculation fails
     Deopt {
+        /// The value being deoptimized
         value: I,
+        /// The deoptimization strategy
         deoptimizer: D,
     },
+    /// Type assertion/guard
     Assert {
+        /// The value being asserted
         val: I,
+        /// The asserted type (if known)
         ty: Option<OptType>,
     },
+    /// A value to emit with type information
     Emit {
+        /// The underlying SSA value
         val: SValue<I, B, F>,
+        /// The inferred or asserted type
         ty: Option<OptType>,
     },
 }

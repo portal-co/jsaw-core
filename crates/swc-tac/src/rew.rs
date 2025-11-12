@@ -1,3 +1,21 @@
+//! Rewriting TAC back to CFG/JavaScript.
+//!
+//! This module provides functionality to convert TAC (Three-Address Code) back
+//! to CFG (Control Flow Graph) or JavaScript AST representations. This is useful
+//! for code generation after optimization passes.
+//!
+//! # Rewriting Process
+//!
+//! The rewriting process:
+//! 1. Converts TAC items back to SWC AST expressions
+//! 2. Reconstructs complex expressions from simple assignments
+//! 3. Generates JavaScript code from the TAC representation
+//! 4. Preserves semantic information and type annotations
+//!
+//! # Key Types
+//!
+//! - [`Options`]: Configuration for the rewriting process
+
 use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TCallee, TCfg, TFunc};
 use anyhow::Context;
 use id_arena::Id;
@@ -32,10 +50,22 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
+
+/// Options for TAC to CFG/JavaScript rewriting.
+///
+/// Provides configuration for how TAC should be converted back to
+/// higher-level representations.
+///
+/// # Fields
+///
+/// - `semantic`: Semantic configuration for the conversion
+/// - `conf`: Function to convert Func to Function (CFG to AST)
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct Options<'a> {
+    /// Semantic configuration controlling conversion behavior
     pub semantic: &'a SemanticCfg,
+    /// Function to convert CFG Func to AST Function
     pub conf: &'a (dyn Fn(Func) -> anyhow::Result<Function> + 'a),
 }
 impl Options<'static> {

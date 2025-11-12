@@ -1,3 +1,28 @@
+//! Legacy Simpl dialect support for TAC.
+//!
+//! This module provides support for the legacy "Simpl" JavaScript subset, which is
+//! a simplified version of JavaScript used in some compilation targets. It handles
+//! conversion between TAC and Simpl representations.
+//!
+//! # Simpl Dialect
+//!
+//! Simpl is a simplified JavaScript dialect with:
+//! - Reduced syntactic complexity
+//! - Simpler control flow constructs
+//! - Easier compilation to lower-level targets
+//!
+//! # Key Types
+//!
+//! - [`TSimplCfg`]: Control flow graph in Simpl dialect
+//! - [`TSimplFunc`]: Function in Simpl dialect
+//! - [`TacDialect`]: Trait for TAC dialects compatible with Simpl
+//!
+//! # Submodules
+//!
+//! - [`convert`]: Conversion between TAC and Simpl
+//! - [`impls`]: Trait implementations for Simpl types
+//! - [`reloop`]: Structured control flow reconstruction (relooping)
+
 use crate::*;
 use arena_traits::{Arena as TArena, IndexAlloc};
 use id_arena::{Arena, Id};
@@ -11,9 +36,17 @@ use swc_ecma_ast::{BinaryOp, Expr, Id as Ident, Lit};
 pub mod convert;
 pub mod impls;
 pub mod reloop;
+
+/// Trait for dialects compatible with TAC representation.
 pub trait TacDialect: Dialect<Mark<()>: Clone + Default> {}
+
+/// Control flow graph for Simpl dialect.
+///
+/// A TAC-level CFG specialized for the Simpl JavaScript subset.
 pub struct TSimplCfg<D: TacDialect> {
+    /// Register allocator for temporary values
     pub regs: LAM<()>,
+    /// Arena of basic blocks
     pub blocks: Arena<TSimplBlock<D>>,
 }
 pub struct TSimplFunc<D: TacDialect> {

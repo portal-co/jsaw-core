@@ -1,3 +1,16 @@
+//! Preparation passes for JavaScript before TAC conversion.
+//!
+//! This module contains preprocessing transformations that prepare JavaScript
+//! code for conversion to TAC. These passes:
+//! - Simplify complex expressions
+//! - Normalize syntax
+//! - Hoist declarations
+//! - Handle proxy detection for optimization
+//!
+//! # Key Type
+//!
+//! [`Prepa`] - The main preparation visitor that transforms JavaScript AST
+
 use super::*;
 use portal_solutions_proxy_signs::PROXY_SIGNS;
 use std::{
@@ -9,12 +22,31 @@ use swc_ecma_ast::{
     PrivateName, SeqExpr, ThisExpr, VarDecl, VarDeclarator,
 };
 use swc_ecma_visit::{VisitMut, VisitMutWith};
+
+/// Preparation visitor for preprocessing JavaScript AST.
+///
+/// This visitor performs normalization and simplification passes on the
+/// JavaScript AST before it's converted to TAC, making the conversion
+/// process simpler and more reliable.
+///
+/// # Fields
+///
+/// - `semantics`: Semantic configuration
+/// - `resolver`: Atom resolver for generating fresh names
+/// - `vars`: Set of declared variables
+/// - `idx`: Counter for generating unique names
+/// - `ctxt`: Syntax context for generated identifiers
 #[non_exhaustive]
 pub struct Prepa<'a> {
+    /// Semantic configuration
     pub semantics: &'a SemanticCfg,
+    /// Resolver for generating fresh variable names
     pub resolver: Arc<dyn AtomResolver>,
+    /// Set of variables encountered
     vars: BTreeSet<Ident>,
+    /// Counter for unique name generation
     idx: AtomicUsize,
+    /// Syntax context for generated identifiers
     ctxt: OnceLock<SyntaxContext>,
 }
 impl<'a> Prepa<'a> {

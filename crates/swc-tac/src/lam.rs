@@ -1,3 +1,18 @@
+//! Local Allocation Map (LAM) for register/variable allocation.
+//!
+//! This module provides the LAM (Local Allocation Map) structure for managing
+//! temporary variables and registers during TAC generation. It handles:
+//! - Allocating fresh identifiers for intermediate values
+//! - Managing variable naming and scoping
+//! - Providing customizable name generation strategies
+//!
+//! # Key Types
+//!
+//! - [`LAM`]: Local Allocation Map for managing identifiers
+//! - [`AtomResolver`]: Trait for generating fresh variable names
+//! - [`DefaultAtomResolver`]: Default implementation using numbered names ($0, $1, ...)
+//! - [`Prepend`]: Decorator for adding prefixes to generated names
+
 use arena_traits::{IndexAlloc, IndexIter};
 use std::{
     collections::HashMap,
@@ -8,7 +23,21 @@ use std::{
 use swc_atoms::Atom;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::Id;
+
+/// Trait for resolving atoms (generating fresh variable names).
+///
+/// Implementations of this trait provide different strategies for
+/// generating unique variable names during TAC generation.
 pub trait AtomResolver: Debug {
+    /// Generate a fresh atom/variable name.
+    ///
+    /// # Arguments
+    ///
+    /// * `len` - The current count of allocated variables (used for uniqueness)
+    ///
+    /// # Returns
+    ///
+    /// A fresh `Atom` that can be used as a variable name
     fn resolve(&self, len: usize) -> Atom;
 }
 impl<T: AtomResolver + ?Sized> AtomResolver for Arc<T> {

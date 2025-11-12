@@ -13,21 +13,21 @@ pub enum ConstVal {
 pub struct ConstantInstantiator {
     pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
 }
-pub fn instantiate_constants(a: &SFunc, semantic: &SemanticCfg) -> anyhow::Result<SFunc> {
-    let mut n = SCfg::default();
+pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyhow::Result<SFunc> {
+    let mut new_cfg = SCfg::default();
     let entry = ConstantInstantiator {
         all: BTreeMap::new(),
     }
-    .init(&a.cfg, &mut n, a.entry, semantic)?;
-    n.decls.extend(a.cfg.decls.clone().into_iter());
-    n.generics = a.cfg.generics.clone();
-    n.ts_retty = a.cfg.ts_retty.clone();
+    .init(&input_func.cfg, &mut new_cfg, input_func.entry, semantic)?;
+    new_cfg.decls.extend(input_func.cfg.decls.clone().into_iter());
+    new_cfg.generics = input_func.cfg.generics.clone();
+    new_cfg.ts_retty = input_func.cfg.ts_retty.clone();
     return Ok(SFunc {
-        cfg: n,
+        cfg: new_cfg,
         entry,
-        is_generator: a.is_generator,
-        is_async: a.is_async,
-        ts_params: a.ts_params.clone(),
+        is_generator: input_func.is_generator,
+        is_async: input_func.is_async,
+        ts_params: input_func.ts_params.clone(),
     });
 }
 impl ConstantInstantiator {
