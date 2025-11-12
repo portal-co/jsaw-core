@@ -348,11 +348,11 @@ impl TFunc {
     }
 }
 impl TCfg {
-    pub fn remark_with_domtree(&mut self, d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
-        let mut a: BTreeMap<LId, usize> = BTreeMap::new();
-        for (b, s) in self.blocks.iter() {
-            'a: for s in &s.stmts {
-                if match &s.left {
+    pub fn remark_with_domtree(&mut self, domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
+        let mut ssa_counts: BTreeMap<LId, usize> = BTreeMap::new();
+        for (block_id, block) in self.blocks.iter() {
+            'stmt_loop: for stmt in &block.stmts {
+                if match &stmt.left {
                     LId::Id { id } => !self.decls.contains(&id),
                     LId::Member { obj, mem } => {
                         !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
@@ -361,27 +361,27 @@ impl TCfg {
                 } {
                     continue;
                 }
-                if *a.entry(s.left.clone()).or_default() > 1 {
-                    continue 'a;
+                if *ssa_counts.entry(stmt.left.clone()).or_default() > 1 {
+                    continue 'stmt_loop;
                 }
-                if let LId::Id { id } = &s.left {
-                    for (b2, t) in self.blocks.iter() {
-                        for t in t.stmts.iter() {
-                            if t.right.refs().any(|r| *r == *id) {
-                                if !dominates::<TFunc>(&d, Some(b), Some(b2)) {
-                                    *a.entry(s.left.clone()).or_default() += 2usize;
-                                    continue 'a;
+                if let LId::Id { id } = &stmt.left {
+                    for (other_block_id, other_block) in self.blocks.iter() {
+                        for other_stmt in other_block.stmts.iter() {
+                            if other_stmt.right.refs().any(|ref_id| *ref_id == *id) {
+                                if !dominates::<TFunc>(&domtree, Some(block_id), Some(other_block_id)) {
+                                    *ssa_counts.entry(stmt.left.clone()).or_default() += 2usize;
+                                    continue 'stmt_loop;
                                 }
                             }
                         }
                     }
-                    *a.entry(s.left.clone()).or_default() += 1usize;
+                    *ssa_counts.entry(stmt.left.clone()).or_default() += 1usize;
                 }
             }
         }
         // let d =
-        for s in self.blocks.iter_mut().flat_map(|a| &mut a.1.stmts) {
-            if match &s.left {
+        for stmt in self.blocks.iter_mut().flat_map(|block_entry| &mut block_entry.1.stmts) {
+            if match &stmt.left {
                 LId::Id { id } => !self.decls.contains(&id),
                 LId::Member { obj, mem } => {
                     !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
@@ -390,10 +390,10 @@ impl TCfg {
             } {
                 continue;
             }
-            if a.remove(&s.left) == Some(1) {
-                s.flags |= ValFlags::SSA_LIKE
+            if ssa_counts.remove(&stmt.left) == Some(1) {
+                stmt.flags |= ValFlags::SSA_LIKE
             } else {
-                s.flags &= !ValFlags::SSA_LIKE;
+                stmt.flags &= !ValFlags::SSA_LIKE;
             }
         }
     }
