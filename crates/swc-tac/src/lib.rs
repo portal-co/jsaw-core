@@ -472,14 +472,14 @@ impl TCfg {
                 }
             })
     }
-    pub fn taints_object(&self, a: &Ident) -> bool {
-        return self.blocks.iter().any(|s| {
-            s.1.stmts.iter().any(|s| {
-                s.left.taints_object(a)
-                    || s.right
+    pub fn taints_object(&self, ident: &Ident) -> bool {
+        return self.blocks.iter().any(|block_entry| {
+            block_entry.1.stmts.iter().any(|stmt| {
+                stmt.left.taints_object(ident)
+                    || stmt.right
                         .funcs()
-                        .any(|f| f.cfg.taints_object(a) || s.right.taints_object(a))
-            }) || s.1.post.term.taints_object(a)
+                        .any(|func| func.cfg.taints_object(ident) || stmt.right.taints_object(ident))
+            }) || block_entry.1.post.term.taints_object(ident)
         });
     }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
