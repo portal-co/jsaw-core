@@ -483,10 +483,10 @@ impl TCfg {
         });
     }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
-        let a = self.blocks.iter().flat_map(|k| {
-            let i: Box<dyn Iterator<Item = Ident> + '_> = match &k.1.post.term {
-                TTerm::Return(a) => Box::new(a.iter().cloned()),
-                TTerm::Throw(b) => Box::new(Some(b.clone()).into_iter()),
+        let all_refs = self.blocks.iter().flat_map(|block_entry| {
+            let term_refs: Box<dyn Iterator<Item = Ident> + '_> = match &block_entry.1.post.term {
+                TTerm::Return(return_ident) => Box::new(return_ident.iter().cloned()),
+                TTerm::Throw(throw_ident) => Box::new(Some(throw_ident.clone()).into_iter()),
                 TTerm::Jmp(id) => Box::new(std::iter::empty()),
                 TTerm::CondJmp {
                     cond,
@@ -494,13 +494,13 @@ impl TCfg {
                     if_false,
                 } => Box::new(once(cond.clone())),
                 TTerm::Switch { x, blocks, default } => {
-                    Box::new(once(x.clone()).chain(blocks.iter().map(|a| a.0.clone())))
+                    Box::new(once(x.clone()).chain(blocks.iter().map(|case_entry| case_entry.0.clone())))
                 }
                 TTerm::Default => Box::new(std::iter::empty()),
                 TTerm::Tail { callee, args } => Box::new(
                     match callee {
-                        TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
-                            vec![a]
+                        TCallee::Val(val_ident) | TCallee::PrivateMember { func: val_ident, member: _ } => {
+                            vec![val_ident]
                         }
                         TCallee::Member { func: r#fn, member } => vec![r#fn, member],
                         TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
@@ -511,31 +511,31 @@ impl TCfg {
                         args.iter()
                             .map(
                                 |SpreadOr {
-                                     value: a,
+                                     value: arg_value,
                                      is_spread: _,
-                                 }| a,
+                                 }| arg_value,
                             )
                             .cloned(),
                     ),
                 ),
             };
-            i.chain(k.1.stmts.iter().flat_map(
+            term_refs.chain(block_entry.1.stmts.iter().flat_map(
                 |TStmt {
-                     left: a,
+                     left: left_id,
                      flags: _,
-                     right: b,
+                     right: right_item,
                      span: _,
                  }| {
-                    let a = a.as_ref().refs().cloned();
-                    let b = b
+                    let left_refs = left_id.as_ref().refs().cloned();
+                    let right_refs = right_item
                         .refs()
                         .cloned()
-                        .chain(b.funcs().flat_map(|a| a.cfg.externs()));
-                    a.chain(b)
+                        .chain(right_item.funcs().flat_map(|func| func.cfg.externs()));
+                    left_refs.chain(right_refs)
                 },
             ))
         });
-        return a;
+        return all_refs;
     }
     pub fn simplify_justs(&mut self) {
         let mut redo = true;
@@ -546,7 +546,7 @@ impl TCfg {
         }
     }
     pub fn externs<'a>(&'a self) -> Box<dyn Iterator<Item = Ident> + 'a> {
-        Box::new(self.refs().filter(|a| !self.decls.contains(a)))
+        Box::new(self.refs().filter(|ident| !self.decls.contains(ident)))
     }
     pub fn update(&mut self) {
         for x in self.blocks.iter() {
