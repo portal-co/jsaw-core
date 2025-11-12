@@ -302,32 +302,32 @@ impl SCfg {
         }
         return Some(a);
     }
-    pub fn taints_object(&self, a: &Id<SValueW>) -> bool {
-        return self.blocks.iter().any(|s| {
-            s.1.stmts.iter().any(|s| {
-                let mut s = *s;
+    pub fn taints_object(&self, value_id: &Id<SValueW>) -> bool {
+        return self.blocks.iter().any(|block_entry| {
+            block_entry.1.stmts.iter().any(|stmt_id| {
+                let mut current_value = *stmt_id;
                 loop {
-                    return match &self.values[s].value {
-                        SValue::Assign { target, val } => target.taints_object(a),
-                        SValue::Item { item, span } => item.taints_object(a),
+                    return match &self.values[current_value].value {
+                        SValue::Assign { target, val } => target.taints_object(value_id),
+                        SValue::Item { item, span } => item.taints_object(value_id),
                         SValue::Param { block, idx, ty } => match self.input(*block, *idx) {
                             None => true,
-                            Some(a) => {
-                                s = a;
+                            Some(input_value) => {
+                                current_value = input_value;
                                 continue;
                             }
                         },
                         _ => true,
                     };
                 }
-            }) || s.1.postcedent.term.taints_object(a)
+            }) || block_entry.1.postcedent.term.taints_object(value_id)
         });
     }
     pub fn refs(&self) -> BTreeSet<Ident> {
         return self
             .values
             .iter()
-            .flat_map(|(a, b)| match &b.value {
+            .flat_map(|(_value_id, value_wrapper)| match &value_wrapper.value {
                 SValue::LoadId(target) | SValue::StoreId { target, val: _ } => {
                     [target.clone()].into_iter().collect::<BTreeSet<Ident>>()
                 }
@@ -342,7 +342,7 @@ impl SCfg {
         return self
             .refs()
             .into_iter()
-            .filter(|a| !self.decls.contains(&*a))
+            .filter(|ident| !self.decls.contains(&*ident))
             .collect();
     }
 }
@@ -758,14 +758,14 @@ pub type STerm<I = Id<SValueW>, B = Id<SBlock>> = TTerm<STarget<I, B>, I>;
 //     }
 // }
 impl SCfg {
-    pub fn add_blockparam(&mut self, k: Id<SBlock>) -> Id<SValueW> {
+    pub fn add_blockparam(&mut self, block_id: Id<SBlock>) -> Id<SValueW> {
         let val = SValue::Param {
-            block: k,
-            idx: self.blocks[k].params.len(),
+            block: block_id,
+            idx: self.blocks[block_id].params.len(),
             ty: (),
         };
         let val = self.values.alloc(val.into());
-        self.blocks[k].params.push((val, ()));
+        self.blocks[block_id].params.push((val, ()));
         return val;
     }
     pub fn do_consts(&mut self, semantic: &SemanticCfg) {
