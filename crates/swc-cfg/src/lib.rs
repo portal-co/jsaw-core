@@ -209,7 +209,7 @@ impl Cfg {
                     None => span,
                     Some(s) => s,
                 };
-                let jmp = |k: Id<Block>| {
+                let jmp = |target_block: Id<Block>| {
                     vec![Stmt::Expr(ExprStmt {
                         span,
                         expr: Box::new(Expr::Assign(AssignExpr {
@@ -218,22 +218,22 @@ impl Cfg {
                             left: Ident::new(Atom::new("cff"), span, ctxt).into(),
                             right: Box::new(Expr::Lit(Lit::Str(Str {
                                 span,
-                                value: Atom::new(k.index().to_string()).into(),
+                                value: Atom::new(target_block.index().to_string()).into(),
                                 raw: None,
                             }))),
                         })),
                     })]
                     .into_iter()
                     .chain(
-                        match simple_block.branches.get(&k) {
+                        match simple_block.branches.get(&target_block) {
                             None => vec![],
-                            Some(a) => match a {
-                                relooper::BranchMode::LoopBreak(l)
-                                | relooper::BranchMode::LoopBreakIntoMulti(l) => {
+                            Some(branch_mode) => match branch_mode {
+                                relooper::BranchMode::LoopBreak(loop_id)
+                                | relooper::BranchMode::LoopBreakIntoMulti(loop_id) => {
                                     vec![Stmt::Break(BreakStmt {
                                         span,
                                         label: Some(Ident::new(
-                                            Atom::new(format!("${l}")),
+                                            Atom::new(format!("${loop_id}")),
                                             span,
                                             ctxt,
                                         )),
