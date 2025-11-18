@@ -14,25 +14,51 @@ pub fn default_ctx() -> ExprCtx {
 /// This trait builds on `ItemGetter` to provide more complex queries like
 /// resolving primordial objects and native functions.
 pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
-    fn func_and_this<'a>(&'a self, i: I, ctx: Ctx) -> Option<(&'a F, ThisArg<I>)>
+    fn func_and_this<'a>(&'a self, i: I, member: Option<I>, ctx: Ctx) -> Option<(&'a F, ThisArg<I>)>
     where
         I: Clone + 'a,
         Ctx: Clone + 'a,
     {
-        match self.get_item(i, ctx.clone())? {
-            Item::Func { func, arrow } => Some((
-                func,
-                if *arrow {
-                    ThisArg::This
-                } else {
-                    ThisArg::GlobalThis
-                },
-            )),
-            Item::Mem { obj, mem } => match self.get_item(obj.clone(), ctx.clone()) {
-                // Item::Obj { members }
+        match member {
+            None => match self.get_item(i, ctx.clone())? {
+                Item::Func { func, arrow } => Some((
+                    func,
+                    if *arrow {
+                        ThisArg::This
+                    } else {
+                        ThisArg::GlobalThis
+                    },
+                )),
                 _ => None,
             },
-            _ => None,
+            Some(mem) => {
+                let Item::Lit { lit: Lit::Str(str) } = self.get_item(mem, ctx.clone())? else {
+                    return None;
+                };
+                match match self.get_item(i.clone(), ctx.clone())? {
+                    Item::Obj { members }
+                        if members.iter().all(|i| matches!(&i.0, PropKey::Lit(_))) =>
+                    {
+                        members.iter().find_map(|(k, v)| {
+                            let PropKey::Lit(k) = k else { unreachable!() };
+                            if k.sym.as_bytes() != str.value.as_bytes() {
+                                return None;
+                            };
+                            match v {
+                                PropVal::Item(i) => {
+                                    self.func_and_this(i.clone(), None, ctx.clone())
+                                }
+                                PropVal::Method(m) => Some((m,ThisArg::GlobalThis)),
+                                _ => None,
+                            }
+                        })
+                    }
+                    _ => None,
+                } {
+                    None => None,
+                    Some((a, _)) => Some((a, ThisArg::Val(i.clone()))),
+                }
+            }
         }
     }
     fn primordial(&self, i: I, ctx: Ctx) -> Option<&'static Primordial>

@@ -30,6 +30,7 @@
 //! [`Splatting`] - The inlining transformation state (should be renamed to `Inliner`)
 
 use crate::*;
+use portal_jsc_swc_util::ThisArg;
 use std::mem::replace;
 impl TFunc {
     pub fn splatted(&self, map: Mapper<'_>) -> TFunc {
@@ -125,11 +126,7 @@ impl Splatting {
                         stmt.right = Item::Just { id: a.clone() }
                     }
                 }
-                if let Item::Call {
-                    callee: TCallee::Val(value),
-                    args,
-                } = &stmt.right
-                {
+                if let Item::Call { callee, args } = &stmt.right {
                     macro_rules! func {
                         ($value:expr, $func:expr, $arrow:expr) => {
                             match $func {
@@ -211,10 +208,17 @@ impl Splatting {
                                             cache: Default::default(),
                                             catch: output.blocks[out_block].post.catch.clone(),
                                             ret: Some((stmt.left, d, argv)),
-                                            this_val: if arrow || (!func.cfg.has_this()) {
+                                            this_val: if (!func.cfg.has_this()) {
                                                 self.this_val.clone()
                                             } else {
-                                                Some((Atom::new("globalThis"), Default::default()))
+                                                match arrow {
+                                                    ThisArg::GlobalThis => Some((
+                                                        Atom::new("globalThis"),
+                                                        Default::default(),
+                                                    )),
+                                                    ThisArg::This => self.this_val.clone(),
+                                                    ThisArg::Val(a) => Some(a),
+                                                }
                                             },
                                             stack: self
                                                 .stack
@@ -233,38 +237,56 @@ impl Splatting {
                             }
                         };
                     }
-                    let mut value = value.clone();
-                    'a: loop {
-                        if !self.stack.contains(&value) {
-                            if let Some(e) = consts
-                                .as_deref()
-                                .and_then(|a| a.map.get(&value))
-                                .map(|a| Box::as_ref(a))
-                            {
-                                match e {
-                                    Expr::Fn(f) => {
-                                        if let Ok(g) = (map.to_cfg)(&f.function).and_then(|a| {
-                                            TFunc::try_from_with_mapper(&a, map.bud())
-                                        }) {
-                                            func!(value, g, false)
+                    match callee {
+                        TCallee::Val(value) => {
+                            let mut value = value.clone();
+                            'a: loop {
+                                if !self.stack.contains(&value) {
+                                    if let Some(e) = consts
+                                        .as_deref()
+                                        .and_then(|a| a.map.get(&value))
+                                        .map(|a| Box::as_ref(a))
+                                    {
+                                        match e {
+                                            Expr::Fn(f) => {
+                                                if let Ok(g) =
+                                                    (map.to_cfg)(&f.function).and_then(|a| {
+                                                        TFunc::try_from_with_mapper(&a, map.bud())
+                                                    })
+                                                {
+                                                    func!(value, g, ThisArg::<Ident>::This)
+                                                }
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                    _ => {}
+                                    if let Some((func, arrow)) =
+                                        output.func_and_this(value.clone(), None, ())
+                                    {
+                                        func!(value, func.clone(), arrow);
+                                        // }
+                                    }
                                 }
+                                let Some(Item::Just { id }) =
+                                    output.def(LId::Id { id: value.clone() }).cloned()
+                                else {
+                                    break;
+                                };
+                                value = id;
                             }
-                            if let Some(Item::Func { func, arrow }) =
-                                output.def(LId::Id { id: value.clone() }).cloned()
+                        }
+                        TCallee::Member {
+                            func: value,
+                            member,
+                        } => {
+                            if let Some((func, arrow)) =
+                                output.func_and_this(value.clone(), Some(member.clone()), ())
                             {
-                                func!(value, func, arrow);
+                                func!(value.clone(), func.clone(), arrow);
                                 // }
                             }
                         }
-                        let Some(Item::Just { id }) =
-                            output.def(LId::Id { id: value.clone() }).cloned()
-                        else {
-                            break;
-                        };
-                        value = id;
+                        _ => {}
                     }
                 }
                 if semantic.flags.contains(SemanticFlags::NO_MONKEYPATCHING) {
