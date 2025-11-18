@@ -321,25 +321,55 @@ impl Splatting {
                                     match $func {
                                         func => match $arrow {
                                             arrow => {
-                                                if method.value.as_str().unwrap_or("nope") == "call"
-                                                {
-                                                    if let SpreadOr {
-                                                        is_spread: false,
-                                                        value: this_arg,
-                                                    } = &args[0]
-                                                    {
-                                                        out_block = self.sub(
-                                                            out_block,
-                                                            output,
-                                                            $value,
-                                                            ThisArg::Val(this_arg.clone()),
-                                                            &stmt,
-                                                            &func,
-                                                            &args[1..],
-                                                            map.bud(),
-                                                        );
-                                                        continue 'b;
+                                                match method.value.as_str().unwrap_or("nope") {
+                                                    "call" => {
+                                                        if let SpreadOr {
+                                                            is_spread: false,
+                                                            value: this_arg,
+                                                        } = &args[0]
+                                                        {
+                                                            out_block = self.sub(
+                                                                out_block,
+                                                                output,
+                                                                $value,
+                                                                ThisArg::Val(this_arg.clone()),
+                                                                &stmt,
+                                                                &func,
+                                                                &args[1..],
+                                                                map.bud(),
+                                                            );
+                                                            continue 'b;
+                                                        }
                                                     }
+                                                    "apply" => {
+                                                        if let SpreadOr {
+                                                            is_spread: false,
+                                                            value: this_arg,
+                                                        } = &args[0]
+                                                        {
+                                                            if let SpreadOr {
+                                                                is_spread: false,
+                                                                value: args,
+                                                            } = &args[1]
+                                                            {
+                                                                out_block = self.sub(
+                                                                    out_block,
+                                                                    output,
+                                                                    $value,
+                                                                    ThisArg::Val(this_arg.clone()),
+                                                                    &stmt,
+                                                                    &func,
+                                                                    &[SpreadOr {
+                                                                        is_spread: true,
+                                                                        value: args.clone(),
+                                                                    }],
+                                                                    map.bud(),
+                                                                );
+                                                                continue 'b;
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => {}
                                                 }
                                             }
                                         },
