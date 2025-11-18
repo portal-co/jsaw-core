@@ -1,3 +1,24 @@
+//! Rewriting SSA back to TAC.
+//!
+//! This module provides functionality to convert SSA (Static Single Assignment)
+//! form back to TAC (Three-Address Code). This is useful for:
+//! - Code generation after SSA optimizations
+//! - Interfacing with passes that work on TAC
+//! - Debugging and testing
+//!
+//! # Conversion Process
+//!
+//! The conversion from SSA to TAC:
+//! 1. Eliminates block parameters by materializing them as variables
+//! 2. Converts SSA values back to TAC items
+//! 3. Generates appropriate variable names with prefixes
+//! 4. Preserves type information and metadata
+//!
+//! # Name Mangling
+//!
+//! SSA value IDs are converted to unique TAC variable names using a prefix
+//! and syntax context to avoid name collisions.
+
 use crate::{SBlock, SFunc, STarget, STerm, SValue, SValueW};
 use id_arena::Id;
 use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};

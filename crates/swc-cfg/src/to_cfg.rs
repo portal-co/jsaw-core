@@ -1,4 +1,16 @@
+//! Conversion from JavaScript AST to CFG.
+//!
+//! This module handles the transformation of SWC's JavaScript AST into
+//! control flow graph representation. It processes:
+//! - Statements and expressions
+//! - Control flow structures (loops, conditionals, try-catch)
+//! - Labels and break/continue statements
+
 use crate::*;
+
+/// Loop context information.
+///
+/// Tracks the break and continue targets for a loop during CFG construction.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Loop<T = Id<Block>> {
     pub r#break: T,

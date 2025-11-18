@@ -1,6 +1,15 @@
+//! CFG restructuring and reconstruction.
+//!
+//! This module provides functionality to restructure and rebuild control flow graphs,
+//! typically used for transformations that need to create a new CFG from an existing one.
+
 use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 use id_arena::Id;
 use std::collections::{BTreeMap, HashMap};
+
+/// CFG restructuring state.
+///
+/// Maintains mapping from input blocks to output blocks during CFG reconstruction.
 #[derive(Default)]
 pub struct Recfg {
     pub map: BTreeMap<Id<Block>, Id<Block>>,
@@ -22,9 +31,9 @@ impl Recfg {
             self.map.insert(block_id, new_block_id);
             let catch = match &input_cfg.blocks[block_id].end.catch {
                 crate::Catch::Throw => Catch::Throw,
-                crate::Catch::Jump { pat, k } => Catch::Jump {
+                crate::Catch::Jump { pat, k: target_block } => Catch::Jump {
                     pat: pat.clone(),
-                    k: self.go(input_cfg, output_cfg, *k)?,
+                    k: self.go(input_cfg, output_cfg, *target_block)?,
                 },
             };
             output_cfg.blocks[new_block_id].end.catch = catch.clone();
@@ -53,11 +62,11 @@ impl Recfg {
                     x: x.clone(),
                     blocks: blocks
                         .iter()
-                        .map(|(a, b)| Ok((a.clone(), self.go(input_cfg, output_cfg, *b)?)))
+                        .map(|(case_value, case_block)| Ok((case_value.clone(), self.go(input_cfg, output_cfg, *case_block)?)))
                         .collect::<anyhow::Result<HashMap<_, _>>>()?,
                     default: self.go(input_cfg, output_cfg, *default)?,
                 },
-                a => a.clone(),
+                other_term => other_term.clone(),
             };
             output_cfg.blocks[new_block_id].end.term = term;
         }

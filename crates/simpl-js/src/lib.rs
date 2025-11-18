@@ -1,3 +1,27 @@
+//! Legacy "Simpl" dialect AST implementation.
+//!
+//! This crate provides the AST (Abstract Syntax Tree) implementation for the legacy
+//! "Simpl" JavaScript dialect, a simplified subset of JavaScript with reduced
+//! syntactic complexity and notable differences from standard JavaScript.
+//!
+//! # Simpl Dialect
+//!
+//! Simpl is a simplified JavaScript dialect with:
+//! - Reduced syntactic complexity compared to standard JavaScript
+//! - Subdialects defined by the `Dialect` trait
+//! - Notable semantic and syntactic differences from standard JavaScript
+//! - Easier compilation to lower-level targets
+//!
+//! # Dialects
+//!
+//! The `Dialect` trait allows customization of how different Simpl subdialects
+//! are handled, providing flexibility for different compilation targets.
+//!
+//! # Note
+//!
+//! For JavaScript simplification and desugaring transformations that prepare
+//! standard JavaScript for compilation, see `swc-tac/src/prepa.rs` instead.
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -29,6 +53,12 @@ use swc_ecma_ast::{
     ReturnStmt, SimpleAssignTarget, Stmt, WhileStmt,
 };
 use typenum::Same;
+
+/// Trait for defining JavaScript dialect-specific behavior.
+///
+/// Different JavaScript variants or compilation targets may require different
+/// simplification strategies. This trait allows customization of how types
+/// and constructs are handled.
 pub trait Dialect {
     type Mark<T>: Extract<T>;
     type MarkSpanned<T: Spanned + Clone + Debug + Hash + Eq>: Same<Output = Self::Mark<T>>

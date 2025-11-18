@@ -1,8 +1,18 @@
+//! Conversion between TAC and Simpl dialect.
+//!
+//! This module handles bidirectional conversion between TAC (Three-Address Code)
+//! and the Simpl JavaScript dialect. It translates TAC operations into Simpl
+//! AST constructs and vice versa.
+
 use super::*;
 use std::ops::Deref;
 use swc_ecma_ast::Ident;
+
+/// Trait for TAC dialects compatible with Simpl conversion.
 pub trait ConvTacDialect: TacDialect<Tag = Infallible> {}
 impl<D: TacDialect<Tag = Infallible>> ConvTacDialect for D {}
+
+/// Converter from Simpl TAC to standard TAC.
 pub struct SimplTacConverter<D: ConvTacDialect> {
     pub map: BTreeMap<Id<TSimplBlock<D>>, Id<TBlock>>,
 }

@@ -1,3 +1,16 @@
+//! Trait implementations for TAC types.
+//!
+//! This module implements external traits from the `cfg-traits` crate for
+//! TAC types, allowing them to work with generic control flow analysis
+//! algorithms.
+//!
+//! # Implemented Traits
+//!
+//! - `cfg_traits::Func` for `TFunc`
+//! - `cfg_traits::Block` for `TBlock`
+//! - `cfg_traits::Term` for `TPostecedent`
+//! - `cfg_traits::Target` for `Id<TBlock>`
+
 use crate::*;
 impl cfg_traits::Func for TFunc {
     type Block = Id<TBlock>;

@@ -1,3 +1,17 @@
+//! Trait implementations for SSA types.
+//!
+//! This module implements external traits from the `cfg-traits` and `ssa-traits`
+//! crates for SSA types, allowing them to work with generic control flow and
+//! SSA analysis algorithms.
+//!
+//! # Implemented Traits
+//!
+//! - `cfg_traits::Func` for `SFunc`
+//! - `cfg_traits::Block` for `SBlock`
+//! - `cfg_traits::Term` for `SPostcedent`
+//! - `cfg_traits::Target` for `STarget`
+//! - `ssa_traits::HasValues` and `ssa_traits::HasChainableValues` for SSA types
+
 use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
 use id_arena::{Arena, Id};
 use ssa_traits::{HasChainableValues, HasValues};
@@ -185,16 +199,16 @@ impl ssa_traits::Block<SFunc> for SBlock {
     }
 }
 impl ssa_traits::Target<SFunc> for STarget {
-    fn push_value(&mut self, v: <SFunc as ssa_traits::Func>::Value) {
-        self.args.push(v);
+    fn push_value(&mut self, value: <SFunc as ssa_traits::Func>::Value) {
+        self.args.push(value);
     }
     fn from_values_and_block(
-        a: impl Iterator<Item = <SFunc as ssa_traits::Func>::Value>,
-        k: <SFunc as cfg_traits::Func>::Block,
+        values: impl Iterator<Item = <SFunc as ssa_traits::Func>::Value>,
+        block_id: <SFunc as cfg_traits::Func>::Block,
     ) -> Self {
         STarget {
-            block: k,
-            args: a.collect(),
+            block: block_id,
+            args: values.collect(),
         }
     }
 }
@@ -415,8 +429,8 @@ impl HasValues<SFunc> for SPostcedent {
 }
 impl ssa_traits::TypedFunc for SFunc {
     type Ty = ();
-    fn add_blockparam(&mut self, k: Self::Block, y: Self::Ty) -> Self::Value {
-        self.cfg.add_blockparam(k)
+    fn add_blockparam(&mut self, block_id: Self::Block, _ty: Self::Ty) -> Self::Value {
+        self.cfg.add_blockparam(block_id)
     }
 }
 impl ssa_traits::TypedBlock<SFunc> for SBlock {
@@ -428,11 +442,11 @@ impl ssa_traits::TypedBlock<SFunc> for SBlock {
             <SFunc as ssa_traits::Func>::Value,
         ),
     > {
-        return self.params.iter().map(|(a, b)| (*b, *a));
+        return self.params.iter().map(|(value_id, ty)| (*ty, *value_id));
     }
 }
 impl ssa_traits::TypedValue<SFunc> for SValueW {
-    fn ty(&self, f: &SFunc) -> <SFunc as ssa_traits::TypedFunc>::Ty {
+    fn ty(&self, _func: &SFunc) -> <SFunc as ssa_traits::TypedFunc>::Ty {
         ()
     }
 }
