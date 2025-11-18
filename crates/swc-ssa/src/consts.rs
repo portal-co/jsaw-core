@@ -19,7 +19,9 @@ pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyh
         all: BTreeMap::new(),
     }
     .init(&input_func.cfg, &mut new_cfg, input_func.entry, semantic)?;
-    new_cfg.decls.extend(input_func.cfg.decls.clone().into_iter());
+    new_cfg
+        .decls
+        .extend(input_func.cfg.decls.clone().into_iter());
     new_cfg.generics = input_func.cfg.generics.clone();
     new_cfg.ts_retty = input_func.cfg.ts_retty.clone();
     return Ok(SFunc {

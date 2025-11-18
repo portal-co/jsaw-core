@@ -741,7 +741,11 @@ impl TCfg {
                         let mut m = HashMap::new();
                         for (k, v) in members.clone().into_iter() {
                             let mut k = match k {
-                                PropKey::Lit { sym: l, span: s, ctx: _ } => Lit::Str(Str {
+                                PropKey::Lit(PropSym {
+                                    sym: l,
+                                    span: s,
+                                    ctx: _,
+                                }) => Lit::Str(Str {
                                     span: s,
                                     value: l.clone().into(),
                                     raw: None,
@@ -878,7 +882,7 @@ impl TCfg {
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
                                                                         match a {
-                                                                            Lit::Str(s) => PropKey::Lit { sym: (&*s.value.clone().to_atom_lossy()).clone(), span: s.span, ctx: Default::default() },
+                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (&*s.value.clone().to_atom_lossy()).clone(), span: s.span, ctx: Default::default() }),
                                                                             _ => todo!(),
                                                                         },
                                                                         &self.regs,
@@ -982,10 +986,10 @@ impl TCfg {
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
                                                                         (match a {
-                                                                            Lit::Str(s) => PropKey::Lit { sym: (&*s.value
+                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (&*s.value
                                                                                     .to_atom_lossy(
                                                                                     ))
-                                                                                    .clone(), span: s.span, ctx: Default::default() },
+                                                                                    .clone(), span: s.span, ctx: Default::default() }),
                                                                             _ => todo!(),
                                                                         }),
                                                                         &self.regs,

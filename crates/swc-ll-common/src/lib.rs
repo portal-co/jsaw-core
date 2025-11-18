@@ -232,7 +232,14 @@ pub struct Private {
     /// Source span
     pub span: Span,
 }
-
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+pub struct PropSym {
+    pub sym: Atom,
+    /// Dummy when not a real span
+    pub span: Span,
+    /// Default when unneeded, such as as object properties
+    pub ctx: SyntaxContext,
+}
 /// Object property key.
 ///
 /// Represents either a literal identifier key or a computed (dynamic) key expression.
@@ -240,56 +247,26 @@ pub struct Private {
 #[non_exhaustive]
 pub enum PropKey<I> {
     /// Literal identifier key (e.g., `obj.foo`)
-    Lit {
-        sym: Atom,
-        /// Dummy when not a real span
-        span: Span,
-        /// Default when unneeded, such as as object properties
-        ctx: SyntaxContext,
-    },
+    Lit(PropSym),
     /// Computed/dynamic key (e.g., `obj[expr]`)
     Computed(I),
 }
 impl<I> PropKey<I> {
     pub fn as_ref(&self) -> PropKey<&I> {
         match self {
-            PropKey::Lit {
-                sym: a,
-                span: b,
-                ctx: c,
-            } => PropKey::Lit {
-                sym: a.clone(),
-                span: *b,
-                ctx: *c,
-            },
+            PropKey::Lit(a) => PropKey::Lit(a.clone()),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn as_mut(&mut self) -> PropKey<&mut I> {
         match self {
-            PropKey::Lit {
-                sym: a,
-                span: b,
-                ctx: c,
-            } => PropKey::Lit {
-                sym: a.clone(),
-                span: *b,
-                ctx: *c,
-            },
+            PropKey::Lit(a) => PropKey::Lit(a.clone()),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
         Ok(match self {
-            PropKey::Lit {
-                sym: l,
-                span: m,
-                ctx: n,
-            } => PropKey::Lit {
-                sym: l,
-                span: m,
-                ctx: n,
-            },
+            PropKey::Lit(l) => PropKey::Lit(l),
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
         })
     }

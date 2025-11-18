@@ -50,6 +50,7 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
+use swc_ll_common::PropSym;
 
 /// Options for TAC to CFG/JavaScript rewriting.
 ///
@@ -408,12 +409,14 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     .map(|a| {
                         Ok(PropOrSpread::Prop({
                             let name = match &a.0 {
-                                crate::PropKey::Lit { sym: l, span, ctx: _ } => {
-                                    swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
-                                        span: *span,
-                                        sym: l.clone(),
-                                    })
-                                }
+                                crate::PropKey::Lit(PropSym {
+                                    sym: l,
+                                    span,
+                                    ctx: _,
+                                }) => swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
+                                    span: *span,
+                                    sym: l.clone(),
+                                }),
                                 crate::PropKey::Computed(c) => {
                                     swc_ecma_ast::PropName::Computed(ComputedPropName {
                                         span: span,
@@ -481,12 +484,14 @@ impl<I, F> Render<I, F> for Item<I, F> {
                         .map(|a| {
                             Ok({
                                 let name = match &a.1 {
-                                    crate::PropKey::Lit { sym: l, span, ctx: _ } => {
-                                        swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
-                                            span: *span,
-                                            sym: l.clone(),
-                                        })
-                                    }
+                                    crate::PropKey::Lit(PropSym {
+                                        sym: l,
+                                        span,
+                                        ctx: _,
+                                    }) => swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
+                                        span: *span,
+                                        sym: l.clone(),
+                                    }),
                                     crate::PropKey::Computed(c) => {
                                         swc_ecma_ast::PropName::Computed(ComputedPropName {
                                             span: span,
@@ -502,7 +507,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 span,
                                                 ctxt: Default::default(),
                                                 key: match &a.1 {
-                                                    PropKey::Lit { sym: l, span, ctx: _ } => PrivateName {
+                                                    PropKey::Lit(PropSym {
+                                                        sym: l,
+                                                        span,
+                                                        ctx: _,
+                                                    }) => PrivateName {
                                                         name: l.clone(),
                                                         span: *span,
                                                     },
@@ -550,7 +559,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit { sym: l, span, ctx: _ } => PrivateName {
+                                                        PropKey::Lit(PropSym {
+                                                            sym: l,
+                                                            span,
+                                                            ctx: _,
+                                                        }) => PrivateName {
                                                             name: l.clone(),
                                                             span: *span,
                                                         },
@@ -585,7 +598,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit { sym: l, span, ctx: _ } => PrivateName {
+                                                        PropKey::Lit(PropSym {
+                                                            sym: l,
+                                                            span,
+                                                            ctx: _,
+                                                        }) => PrivateName {
                                                             name: l.clone(),
                                                             span: *span,
                                                         },
@@ -620,7 +637,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit { sym: l, span, ctx: _ } => PrivateName {
+                                                        PropKey::Lit(PropSym {
+                                                            sym: l,
+                                                            span,
+                                                            ctx: _,
+                                                        }) => PrivateName {
                                                             name: l.clone(),
                                                             span: *span,
                                                         },
@@ -811,14 +832,16 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                 .map(|k| {
                                     Ok(ObjectPatProp::KeyValue(KeyValuePatProp {
                                         key: match &*k {
-                                            crate::PropKey::Lit { sym: l, span, ctx: _ } => {
-                                                swc_ecma_ast::PropName::Ident(
-                                                    swc_ecma_ast::IdentName {
-                                                        span: *span,
-                                                        sym: l.clone(),
-                                                    },
-                                                )
-                                            }
+                                            crate::PropKey::Lit(PropSym {
+                                                sym: l,
+                                                span,
+                                                ctx: _,
+                                            }) => swc_ecma_ast::PropName::Ident(
+                                                swc_ecma_ast::IdentName {
+                                                    span: *span,
+                                                    sym: l.clone(),
+                                                },
+                                            ),
                                             crate::PropKey::Computed(c) => {
                                                 swc_ecma_ast::PropName::Computed(ComputedPropName {
                                                     span: span,

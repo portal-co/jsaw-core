@@ -402,7 +402,8 @@ impl Cfg {
                                                     spread: None,
                                                     expr: Box::new(Expr::Lit(Lit::Str(Str {
                                                         span,
-                                                        value: Atom::new(l.index().to_string()).into(),
+                                                        value: Atom::new(l.index().to_string())
+                                                            .into(),
                                                         raw: None,
                                                     }))),
                                                 })

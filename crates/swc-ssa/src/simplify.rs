@@ -26,7 +26,7 @@ use swc_common::{EqIgnoreSpan, Spanned, SyntaxContext};
 use swc_ecma_ast::{BinaryOp, Bool, Expr, Number, Str, UnaryOp, op};
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
 pub use swc_tac::{Item, ItemGetter};
-use swc_tac::{ItemGetterExt, PropKey, PropVal, SpreadOr};
+use swc_tac::{ItemGetterExt, PropKey, PropSym, PropVal, SpreadOr};
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -510,10 +510,12 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                                     break Some(false);
                                                 };
                                                 let l2 = match &i.0 {
-                                                    PropKey::Lit { sym: l, span: s2, ctx: _ } => Lit::Str(Str {
-                                                        span: span
-                                                            .clone()
-                                                            .unwrap_or(*s2),
+                                                    PropKey::Lit(PropSym {
+                                                        sym: l,
+                                                        span: s2,
+                                                        ctx: _,
+                                                    }) => Lit::Str(Str {
+                                                        span: span.clone().unwrap_or(*s2),
                                                         value: l.clone().into(),
                                                         raw: None,
                                                     }),
@@ -796,7 +798,11 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     break None;
                                 };
                                 let l2 = match &i.0 {
-                                    PropKey::Lit { sym: l, span: s2, ctx: _ } => Lit::Str(Str {
+                                    PropKey::Lit(PropSym {
+                                        sym: l,
+                                        span: s2,
+                                        ctx: _,
+                                    }) => Lit::Str(Str {
                                         span: span.clone().unwrap_or(*s2),
                                         value: l.clone().into(),
                                         raw: None,
