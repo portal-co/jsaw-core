@@ -14,6 +14,7 @@ ssa-impls.workspace = true
 ssa-reloop.workspace = true
 relooper.workspace = true
 either = "1.13.0"
+num-traits = "0.2.19"
 id-arena.workspace = true
 portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util" }
 

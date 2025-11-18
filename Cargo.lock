@@ -701,6 +701,7 @@ dependencies = [
  "id-arena",
  "linearize",
  "linearize-derive",
+ "num-traits",
  "portal-jsc-common",
  "portal-jsc-swc-util",
  "portal-solutions-proxy-signs",

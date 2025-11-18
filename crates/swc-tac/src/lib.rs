@@ -65,6 +65,7 @@ use swc_ecma_ast::{
     ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
+pub use swc_ll_common::ext::ItemGetterExt;
 // use crate::consts::{ItemGetter, ItemGetterExt};
 use crate::lam::{AtomResolver, DefaultAtomResolver};
 pub use swc_ll_common::*;
@@ -553,7 +554,7 @@ impl TCfg {
         let mut redo = true;
         while take(&mut redo) {
             for ref_ in self.refs().collect::<BTreeSet<_>>() {
-                redo = redo | self.simplify_just(ref_);
+                redo = redo | self.simplify_just(ref_,());
             }
         }
     }
@@ -735,7 +736,7 @@ impl TCfg {
                 .clone()
                 .into_iter()
                 // .filter_map(|a|)
-                .filter_map(|a| match self.get_item(a.clone())? {
+                .filter_map(|a| match self.get_item(a.clone(),())? {
                     Item::Obj { members } => {
                         // let mut a = Vec::default();
                         let mut m = HashMap::new();
@@ -750,7 +751,7 @@ impl TCfg {
                                     value: l.clone().into(),
                                     raw: None,
                                 }),
-                                PropKey::Computed(c) => match self.get_item(c)? {
+                                PropKey::Computed(c) => match self.get_item(c,())? {
                                     Item::Lit { lit } => lit.clone(),
                                     _ => return None,
                                 },
@@ -858,7 +859,7 @@ impl TCfg {
                     'a: {
                         if let LId::Member { obj, mem } = &s.left {
                             if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit { lit }) = self.get_item(mem[0].clone()) {
+                                if let Some(Item::Lit { lit }) = self.get_item(mem[0].clone(),()) {
                                     let mut lit = lit.clone();
                                     lit.set_span(Span::dummy_with_cmt());
                                     if let Some(w) = v.get(&lit) {
@@ -963,7 +964,7 @@ impl TCfg {
                     'b: {
                         if let Item::Mem { obj, mem } = &s.right {
                             if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit { lit }) = self.get_item(mem.clone()) {
+                                if let Some(Item::Lit { lit }) = self.get_item(mem.clone(),()) {
                                     let mut lit = lit.clone();
                                     lit.set_span(Span::dummy_with_cmt());
                                     if let Some(w) = v.get(&lit) {

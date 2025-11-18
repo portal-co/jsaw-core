@@ -1,10 +1,10 @@
-use crate::{simplify::default_ctx, *};
+use crate::{*};
 use portal_jsc_swc_util::SemanticCfg;
 use std::collections::HashMap;
 use swc_common::Spanned;
 use swc_ecma_ast::Expr;
 use swc_ecma_utils::{ExprExt, Value};
-use swc_tac::SpreadOr;
+use swc_tac::{SpreadOr, ext::default_ctx};
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub enum ConstVal {
     Lit(Lit),
@@ -155,14 +155,15 @@ impl ConstantInstantiator {
                         }
                     }
                 };
-                let v = match v.const_in(semantic, out, false) {
-                    None => match v.array_in(semantic, out, false) {
-                        None => v,
-                        Some(a) => SValue::Item {
-                            item: Item::Arr { members: a },
-                            span: None,
-                        },
-                    },
+                let v = match v.const_in(semantic, out, false,()) {
+                    // None => match v.array_in(semantic, out, false) {
+                    //     None => v,
+                    //     Some(a) => SValue::Item {
+                    //         item: Item::Arr { members: a },
+                    //         span: None,
+                    //     },
+                    // },
+                    None => v,
                     Some(a) => SValue::Item {
                         item: Item::Lit { lit: a.clone() },
                         span: Some(a.span()),

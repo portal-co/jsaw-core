@@ -12,17 +12,22 @@
 
 use crate::*;
 
-impl ItemGetter<Ident, TFunc> for TCfg {
-    fn get_item(&self, i: (Atom, SyntaxContext)) -> Option<&Item<(Atom, SyntaxContext), TFunc>> {
+impl<Ctx> ItemGetter<Ident, TFunc, Ctx> for TCfg {
+    fn get_item<'a>(
+        &'a self,
+        i: (Atom, SyntaxContext),
+        ctx: Ctx,
+    ) -> Option<&'a Item<(Atom, SyntaxContext), TFunc>> where Ctx: 'a {
         self.def(LId::Id { id: i })
     }
-    fn get_mut_item(
-        &mut self,
+    fn get_mut_item<'a>(
+        &'a mut self,
         i: (Atom, SyntaxContext),
-    ) -> Option<&mut Item<(Atom, SyntaxContext), TFunc>> {
+        ctx: Ctx,
+    ) -> Option<&'a mut Item<(Atom, SyntaxContext), TFunc>> where Ctx: 'a {
         self.def_mut(LId::Id { id: i })
     }
-    fn get_ident(&self, i: (Atom, SyntaxContext)) -> Option<Ident> {
+    fn get_ident<'a>(&'a self, i: (Atom, SyntaxContext), ctx: Ctx) -> Option<Ident> where Ctx: 'a {
         Some(i)
     }
 }

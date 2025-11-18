@@ -50,6 +50,8 @@ use swc_ecma_ast::{
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 use swc_ecma_ast::{Id as Ident, IdentName};
+
+use crate::ext::ItemGetterExt;
 pub mod fetch;
 bitflags! {
     /// Flags for class members (properties and methods).
@@ -68,158 +70,15 @@ bitflags! {
 ///
 /// This trait provides a uniform interface for resolving item references
 /// in both TAC and SSA forms.
-pub trait ItemGetter<I, F> {
+pub trait ItemGetter<I, F,Ctx = ()> {
     /// Get an immutable reference to an item
-    fn get_item(&self, i: I) -> Option<&Item<I, F>>;
+    fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>> where Ctx: 'b;
     /// Get a mutable reference to an item
-    fn get_mut_item(&mut self, i: I) -> Option<&mut Item<I, F>>;
+    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>> where Ctx: 'b;
     /// Get an identifier from a reference
-    fn get_ident(&self, i: I) -> Option<Ident>;
+    fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident> where Ctx: 'b;
 }
-
-/// Extension trait providing higher-level item resolution operations.
-///
-/// This trait builds on `ItemGetter` to provide more complex queries like
-/// resolving primordial objects and native functions.
-pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
-    fn func_and_this<'a>(&'a self, i: I) -> Option<(&'a F, ThisArg<I>)>
-    where
-        I: Clone + 'a,
-    {
-        match self.get_item(i)? {
-            Item::Func { func, arrow } => Some((
-                func,
-                if *arrow {
-                    ThisArg::This
-                } else {
-                    ThisArg::GlobalThis
-                },
-            )),
-            Item::Mem { obj, mem } => match self.get_item(obj.clone()) {
-                // Item::Obj { members }
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-    fn primordial(&self, i: I) -> Option<&'static Primordial>
-    where
-        I: Clone,
-    {
-        match self.get_ident(i.clone()) {
-            Some((a, _)) => Primordial::global(&a),
-            _ => match self.get_item(i)? {
-                Item::Mem { obj, mem } => match self.get_item(mem.clone())? {
-                    Item::Lit { lit: Lit::Str(s) } => {
-                        self.primordial(obj.clone())?.get_perfect(s.value.as_str()?)
-                    }
-                    _ => None,
-                },
-                _ => None,
-            },
-        }
-    }
-    fn native_of(&self, mut i: I) -> Option<Native<I>>
-    where
-        I: Clone,
-    {
-        loop {
-            let g = self.get_item(i)?;
-            let (mut func, mut member, args) = match g {
-                Item::Just { id } => {
-                    i = id.clone();
-                    continue;
-                }
-                Item::Call {
-                    callee: TCallee::Member { func, member },
-                    args,
-                } => (func, member, args),
-                _ => return None,
-            };
-            loop {
-                if let Some(i) = self.get_ident(func.clone()) {
-                    if i.0 == "globalThis" {
-                        break;
-                    }
-                }
-                let Item::Just { id } = self.get_item(func.clone())? else {
-                    return None;
-                };
-                func = id;
-            }
-            let n = loop {
-                let id = match self.get_item(member.clone())? {
-                    Item::Lit { lit: Lit::Str(s) } => {
-                        if let Some(m) = s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
-                        {
-                            if let Some(m) = Native::of(m) {
-                                break m;
-                            }
-                        }
-                        return None;
-                    }
-                    Item::Just { id } => id,
-                    _ => return None,
-                };
-                member = id;
-            };
-            let mut args = args.iter().cloned();
-            return n
-                .map::<I, ()>(&mut |_| match args.next() {
-                    Some(SpreadOr {
-                        value: a,
-                        is_spread: b,
-                    }) if !b => Ok(a),
-                    _ => Err(()),
-                })
-                .ok();
-        }
-    }
-    fn inlinable(&self, d: &Item<I, F>) -> bool
-    where
-        I: Clone,
-    {
-        let tcfg = self;
-        match d {
-            Item::Just { id } => tcfg.get_item(id.clone()).is_some(),
-            Item::Asm { value }
-                if match value {
-                    Asm::OrZero(value) => tcfg.get_item(value.clone()).is_some(),
-                    _ => todo!(),
-                } =>
-            {
-                true
-            }
-            Item::Lit { lit } => true,
-            Item::Un { arg, op }
-                if !matches!(op, UnaryOp::Delete) && tcfg.get_item(arg.clone()).is_some() =>
-            {
-                true
-            }
-            _ => false,
-        }
-    }
-    fn simplify_just(&mut self, i: I) -> bool
-    where
-        Item<I, F>: Clone,
-        I: Clone,
-    {
-        if let Some(g) = self.get_item(i.clone()).and_then(|j| match j {
-            Item::Just { id } => self.get_item(id.clone()),
-            _ => None,
-        }) {
-            if self.inlinable(g) {
-                let g = g.clone();
-                if let Some(h) = self.get_mut_item(i) {
-                    *h = g;
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-}
-impl<T: ItemGetter<I, F> + ?Sized, I, F> ItemGetterExt<I, F> for T {}
+pub mod ext;
 /// Private field identifier (JavaScript private class fields).
 ///
 /// Represents a private field name using the `#field` syntax in JavaScript classes.
@@ -446,7 +305,7 @@ impl<I: Eq, F> Item<I, F> {
     }
 }
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
-    tcfg.inlinable(d)
+    tcfg.inlinable(d,())
 }
 /// A value that may or may not be spread.
 ///

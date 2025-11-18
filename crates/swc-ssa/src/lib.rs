@@ -779,7 +779,7 @@ impl SCfg {
                 }
                 continue;
             };
-            if let Some(v) = v.value.const_in(semantic, self, true) {
+            if let Some(v) = v.value.const_in(semantic, self, true,()) {
                 m.insert(k, v);
                 continue;
             };
