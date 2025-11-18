@@ -368,7 +368,11 @@ impl TCfg {
                     for (other_block_id, other_block) in self.blocks.iter() {
                         for other_stmt in other_block.stmts.iter() {
                             if other_stmt.right.refs().any(|ref_id| *ref_id == *id) {
-                                if !dominates::<TFunc>(&domtree, Some(block_id), Some(other_block_id)) {
+                                if !dominates::<TFunc>(
+                                    &domtree,
+                                    Some(block_id),
+                                    Some(other_block_id),
+                                ) {
                                     *ssa_counts.entry(stmt.left.clone()).or_default() += 2usize;
                                     continue 'stmt_loop;
                                 }
@@ -380,7 +384,11 @@ impl TCfg {
             }
         }
         // let d =
-        for stmt in self.blocks.iter_mut().flat_map(|block_entry| &mut block_entry.1.stmts) {
+        for stmt in self
+            .blocks
+            .iter_mut()
+            .flat_map(|block_entry| &mut block_entry.1.stmts)
+        {
             if match &stmt.left {
                 LId::Id { id } => !self.decls.contains(&id),
                 LId::Member { obj, mem } => {
@@ -476,9 +484,9 @@ impl TCfg {
         return self.blocks.iter().any(|block_entry| {
             block_entry.1.stmts.iter().any(|stmt| {
                 stmt.left.taints_object(ident)
-                    || stmt.right
-                        .funcs()
-                        .any(|func| func.cfg.taints_object(ident) || stmt.right.taints_object(ident))
+                    || stmt.right.funcs().any(|func| {
+                        func.cfg.taints_object(ident) || stmt.right.taints_object(ident)
+                    })
             }) || block_entry.1.post.term.taints_object(ident)
         });
     }
@@ -493,13 +501,17 @@ impl TCfg {
                     if_true,
                     if_false,
                 } => Box::new(once(cond.clone())),
-                TTerm::Switch { x, blocks, default } => {
-                    Box::new(once(x.clone()).chain(blocks.iter().map(|case_entry| case_entry.0.clone())))
-                }
+                TTerm::Switch { x, blocks, default } => Box::new(
+                    once(x.clone()).chain(blocks.iter().map(|case_entry| case_entry.0.clone())),
+                ),
                 TTerm::Default => Box::new(std::iter::empty()),
                 TTerm::Tail { callee, args } => Box::new(
                     match callee {
-                        TCallee::Val(val_ident) | TCallee::PrivateMember { func: val_ident, member: _ } => {
+                        TCallee::Val(val_ident)
+                        | TCallee::PrivateMember {
+                            func: val_ident,
+                            member: _,
+                        } => {
                             vec![val_ident]
                         }
                         TCallee::Member { func: r#fn, member } => vec![r#fn, member],
@@ -729,9 +741,9 @@ impl TCfg {
                         let mut m = HashMap::new();
                         for (k, v) in members.clone().into_iter() {
                             let mut k = match k {
-                                PropKey::Lit(l) => Lit::Str(Str {
-                                    span: Span::dummy_with_cmt(),
-                                    value: l.0.clone().into(),
+                                PropKey::Lit(l, s, _) => Lit::Str(Str {
+                                    span: s,
+                                    value: l.clone().into(),
                                     raw: None,
                                 }),
                                 PropKey::Computed(c) => match self.get_item(c)? {
@@ -865,13 +877,13 @@ impl TCfg {
                                                                 .iter()
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
-                                                                        PropKey::Lit(match a {
-                                                                            Lit::Str(s) => (
-                                                                                (&*s.value.clone().to_atom_lossy()).clone(),
+                                                                        match a {
+                                                                            Lit::Str(s) => PropKey::Lit(
+                                                                                (&*s.value.clone().to_atom_lossy()).clone(),s.span,
                                                                                 Default::default(),
                                                                             ),
                                                                             _ => todo!(),
-                                                                        }),
+                                                                        },
                                                                         &self.regs,
                                                                     )
                                                                 })
@@ -972,9 +984,12 @@ impl TCfg {
                                                                 .iter()
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
-                                                                        PropKey::Lit(match a {
-                                                                            Lit::Str(s) => (
-                                                                                (&*s.value.to_atom_lossy()).clone(),
+                                                                        (match a {
+                                                                            Lit::Str(s) => PropKey::Lit(
+                                                                                (&*s.value
+                                                                                    .to_atom_lossy(
+                                                                                    ))
+                                                                                    .clone(),s.span,
                                                                                 Default::default(),
                                                                             ),
                                                                             _ => todo!(),

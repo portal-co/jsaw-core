@@ -36,18 +36,20 @@ use linearize::{StaticMap, static_map};
 use portal_jsc_common::natives::Primordial;
 use portal_jsc_common::{natives::Native, syntax::Asm};
 use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
+use portal_jsc_swc_util::{
+    ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ThisArg, ses_method,
+};
 use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
 // use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
-use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
     AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
     ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
+use swc_ecma_ast::{Id as Ident, IdentName};
 pub mod fetch;
 bitflags! {
     /// Flags for class members (properties and methods).
@@ -80,6 +82,26 @@ pub trait ItemGetter<I, F> {
 /// This trait builds on `ItemGetter` to provide more complex queries like
 /// resolving primordial objects and native functions.
 pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
+    fn func_and_this<'a>(&'a self, i: I) -> Option<(&'a F, ThisArg<I>)>
+    where
+        I: Clone + 'a,
+    {
+        match self.get_item(i)? {
+            Item::Func { func, arrow } => Some((
+                func,
+                if *arrow {
+                    ThisArg::This
+                } else {
+                    ThisArg::GlobalThis
+                },
+            )),
+            Item::Mem { obj, mem } => match self.get_item(obj.clone()) {
+                // Item::Obj { members }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
     fn primordial(&self, i: I) -> Option<&'static Primordial>
     where
         I: Clone,
@@ -128,7 +150,8 @@ pub trait ItemGetterExt<I, F>: ItemGetter<I, F> {
             let n = loop {
                 let id = match self.get_item(member.clone())? {
                     Item::Lit { lit: Lit::Str(s) } => {
-                        if let Some(m) = s.value.as_str().and_then(|s|s.strip_prefix("~Natives_")) {
+                        if let Some(m) = s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
+                        {
                             if let Some(m) = Native::of(m) {
                                 break m;
                             }
@@ -217,26 +240,26 @@ pub struct Private {
 #[non_exhaustive]
 pub enum PropKey<I> {
     /// Literal identifier key (e.g., `obj.foo`)
-    Lit(Ident),
+    Lit(Atom, Span,SyntaxContext),
     /// Computed/dynamic key (e.g., `obj[expr]`)
     Computed(I),
 }
 impl<I> PropKey<I> {
     pub fn as_ref(&self) -> PropKey<&I> {
         match self {
-            PropKey::Lit(a) => PropKey::Lit(a.clone()),
+            PropKey::Lit(a,b,c) => PropKey::Lit(a.clone(),*b,*c),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn as_mut(&mut self) -> PropKey<&mut I> {
         match self {
-            PropKey::Lit(a) => PropKey::Lit(a.clone()),
+            PropKey::Lit(a,b,c) => PropKey::Lit(a.clone(),*b,*c),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
         Ok(match self {
-            PropKey::Lit(l) => PropKey::Lit(l),
+            PropKey::Lit(l,m,n) => PropKey::Lit(l,m,n),
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
         })
     }
@@ -447,54 +470,28 @@ pub struct SpreadOr<I> {
 #[non_exhaustive]
 pub enum Item<I, F> {
     /// Reference to another identifier/value
-    Just {
-        id: I,
-    },
+    Just { id: I },
     /// Binary operation (e.g., `a + b`, `x === y`)
-    Bin {
-        left: I,
-        right: I,
-        op: BinaryOp,
-    },
+    Bin { left: I, right: I, op: BinaryOp },
     /// Unary operation (e.g., `!x`, `-y`, `typeof z`)
-    Un {
-        arg: I,
-        op: UnaryOp,
-    },
+    Un { arg: I, op: UnaryOp },
     /// Member/property access (e.g., `obj.prop` or `obj[key]`)
-    Mem {
-        obj: I,
-        mem: I,
-    },
+    Mem { obj: I, mem: I },
     /// Private member access (e.g., `obj.#private`)
-    PrivateMem {
-        obj: I,
-        mem: Private,
-    },
+    PrivateMem { obj: I, mem: Private },
     /// Check if object has private member (e.g., `#private in obj`)
-    HasPrivateMem {
-        obj: I,
-        mem: Private,
-    },
+    HasPrivateMem { obj: I, mem: Private },
     /// Function literal (regular function or arrow function)
-    Func {
-        func: F,
-        arrow: bool,
-    },
+    Func { func: F, arrow: bool },
     /// Literal value (number, string, boolean, null, etc.)
-    Lit {
-        lit: Lit,
-    },
+    Lit { lit: Lit },
     /// Function call
     Call {
         callee: TCallee<I>,
         args: Vec<SpreadOr<I>>,
     },
     /// Constructor call with `new`
-    New {
-        class: I,
-        args: Vec<I>,
-    },
+    New { class: I, args: Vec<I> },
     /// Object literal
     Obj {
         members: Vec<(PropKey<I>, PropVal<I, F>)>,
@@ -506,9 +503,7 @@ pub enum Item<I, F> {
         constructor: Option<F>,
     },
     /// Array literal
-    Arr {
-        members: Vec<SpreadOr<I>>,
-    },
+    Arr { members: Vec<SpreadOr<I>> },
     /// Static array slice (optimization for known slice operations)
     StaticSubArray {
         begin: usize,
@@ -516,41 +511,25 @@ pub enum Item<I, F> {
         wrapped: I,
     },
     /// Static object subset (optimization for known property access)
-    StaticSubObject {
-        wrapped: I,
-        keys: Vec<PropKey<I>>,
-    },
+    StaticSubObject { wrapped: I, keys: Vec<PropKey<I>> },
     /// Yield expression (in generators)
-    Yield {
-        value: Option<I>,
-        delegate: bool,
-    },
+    Yield { value: Option<I>, delegate: bool },
     /// Await expression (in async functions)
-    Await {
-        value: I,
-    },
+    Await { value: I },
     /// Inline assembly operation
-    Asm {
-        value: Asm<I>,
-    },
+    Asm { value: Asm<I> },
     /// Undefined value
     Undef,
     /// `this` reference
     This,
     /// Ternary/conditional operator (e.g., `cond ? then : else`)
-    Select {
-        cond: I,
-        then: I,
-        otherwise: I,
-    },
+    Select { cond: I, then: I, otherwise: I },
     /// `arguments` object
     Arguments,
     /// Meta property (e.g., `import.meta`, `new.target`)
-    Meta {
-        prop: MetaPropKind,
-    }, // Intrinsic {
-       //     value: Native<I>,
-       // },
+    Meta { prop: MetaPropKind }, // Intrinsic {
+                                 //     value: Native<I>,
+                                 // },
 }
 impl<I, F> Item<I, F> {
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J, F>, E> {
@@ -1021,7 +1000,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.0 {
-                    swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1050,7 +1029,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(i.iter()),
                 };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
-                    swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1120,7 +1099,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.0 {
-                    swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1152,7 +1131,7 @@ impl<I, F> Item<I, F> {
                             PropVal::Item(i) => Box::new(i.iter_mut()),
                         };
                         let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
-                            swc_tac::PropKey::Lit(_) => Box::new(empty()),
+                            swc_tac::PropKey::Lit(..) => Box::new(empty()),
                             swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                         };
                         v.chain(w)

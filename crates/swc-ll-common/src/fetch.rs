@@ -37,10 +37,7 @@ macro_rules! fetch {
                             Expr::Member(m) => match &m.prop {
                                 MemberProp::Ident(ident_name) => TCallee::Member {
                                     func: p(&m.obj),
-                                    member: PropKey::Lit((
-                                        ident_name.sym.clone(),
-                                        Default::default(),
-                                    )),
+                                    member: PropKey::Lit(ident_name.sym.clone(),ident_name.span,Default::default()),
                                 },
                                 MemberProp::PrivateName(private_name) => TCallee::PrivateMember {
                                     func: p(&m.obj),
@@ -70,7 +67,7 @@ macro_rules! fetch {
                 Expr::Member(m) => Some(match &m.prop {
                     MemberProp::Ident(ident_name) => Item::Mem {
                         obj: p(&m.obj),
-                        mem: PropKey::Lit((ident_name.sym.clone(), Default::default())),
+                        mem: PropKey::Lit(ident_name.sym.clone(),ident_name.span,Default::default()),
                     },
                     MemberProp::PrivateName(private_name) => Item::PrivateMem {
                         obj: p(&m.obj),

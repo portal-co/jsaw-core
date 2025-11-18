@@ -205,6 +205,12 @@ impl<T> Spanned for MakeSpanned<T> {
     }
 }
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum ThisArg<T> {
+    This,
+    Val(T),
+    GlobalThis,
+}
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum ImportOr<T> {
     NotImport(T),
     Import {

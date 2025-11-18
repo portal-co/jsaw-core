@@ -1042,11 +1042,23 @@ impl ToTACConverter<'_> {
                         w => match $a {
                             swc_ecma_ast::PropName::Ident(ident_name) => (
                                 w,
-                                PropKey::Lit((ident_name.sym.clone(), Default::default())),
+                                PropKey::Lit(
+                                    ident_name.sym.clone(),
+                                    ident_name.span,
+                                    Default::default(),
+                                ),
                                 v,
                             ),
                             swc_ecma_ast::PropName::Str(s) => {
-                                ((w, PropKey::Lit((s.value.as_atom().cloned().unwrap(), Default::default())), v))
+                                ((
+                                    w,
+                                    PropKey::Lit(
+                                        s.value.as_atom().cloned().unwrap(),
+                                        s.span,
+                                        Default::default(),
+                                    ),
+                                    v,
+                                ))
                             }
                             swc_ecma_ast::PropName::Num(number) => {
                                 anyhow::bail!("todo: {}:{}", file!(), line!())
@@ -1137,10 +1149,11 @@ impl ToTACConverter<'_> {
                         } else {
                             MemberFlags::empty()
                         } | MemberFlags::PRIVATE,
-                        PropKey::Lit((
+                        PropKey::Lit(
                             p.key.name.clone(),
+                            p.key.span,
                             privates.get(&p.key.name).cloned().unwrap_or_default(),
-                        )),
+                        ),
                         PropVal::Item(match p.value.as_ref() {
                             None => None,
                             Some(a) => Some({
@@ -1165,10 +1178,11 @@ impl ToTACConverter<'_> {
                         } else {
                             MemberFlags::empty()
                         } | MemberFlags::PRIVATE,
-                        PropKey::Lit((
+                        PropKey::Lit(
                             p.key.name.clone(),
+                            p.key.span,
                             privates.get(&p.key.name).cloned().unwrap_or_default(),
-                        )),
+                        ),
                         x,
                     ));
                 }
@@ -1941,14 +1955,19 @@ impl ToTACConverter<'_> {
                                 match $v {
                                     v => match $a {
                                         swc_ecma_ast::PropName::Ident(ident_name) => Some((
-                                            PropKey::Lit((
+                                            PropKey::Lit(
                                                 ident_name.sym.clone(),
+                                                ident_name.span,
                                                 Default::default(),
-                                            )),
+                                            ),
                                             v,
                                         )),
                                         swc_ecma_ast::PropName::Str(s) => Some((
-                                            PropKey::Lit((s.value.as_atom().cloned().unwrap(), Default::default())),
+                                            PropKey::Lit(
+                                                s.value.as_atom().cloned().unwrap(),
+                                                s.span,
+                                                Default::default(),
+                                            ),
                                             v,
                                         )),
                                         swc_ecma_ast::PropName::Num(number) => {
@@ -1973,7 +1992,7 @@ impl ToTACConverter<'_> {
                             }
                             swc_ecma_ast::PropOrSpread::Prop(prop) => match prop.as_ref() {
                                 swc_ecma_ast::Prop::Shorthand(ident) => Some((
-                                    PropKey::Lit(ident.clone().into()),
+                                    PropKey::Lit(ident.sym.clone(),ident.span,ident.ctxt),
                                     PropVal::Item(ident.clone().into()),
                                 )),
                                 swc_ecma_ast::Prop::KeyValue(key_value_prop) => {

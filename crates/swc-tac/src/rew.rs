@@ -408,10 +408,10 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     .map(|a| {
                         Ok(PropOrSpread::Prop({
                             let name = match &a.0 {
-                                crate::PropKey::Lit(l) => {
+                                crate::PropKey::Lit(l, span, _) => {
                                     swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
-                                        span: span,
-                                        sym: l.0.clone(),
+                                        span: *span,
+                                        sym: l.clone(),
                                     })
                                 }
                                 crate::PropKey::Computed(c) => {
@@ -481,10 +481,10 @@ impl<I, F> Render<I, F> for Item<I, F> {
                         .map(|a| {
                             Ok({
                                 let name = match &a.1 {
-                                    crate::PropKey::Lit(l) => {
+                                    crate::PropKey::Lit(l,span,_) => {
                                         swc_ecma_ast::PropName::Ident(swc_ecma_ast::IdentName {
-                                            span: span,
-                                            sym: l.0.clone(),
+                                            span: *span,
+                                            sym: l.clone(),
                                         })
                                     }
                                     crate::PropKey::Computed(c) => {
@@ -502,9 +502,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 span,
                                                 ctxt: Default::default(),
                                                 key: match &a.1 {
-                                                    PropKey::Lit(l) => PrivateName {
-                                                        name: l.0.clone(),
-                                                        span,
+                                                    PropKey::Lit(l,span,_) => PrivateName {
+                                                        name: l.clone(),
+                                                        span: *span,
                                                     },
                                                     _ => panic!("invalid private name"),
                                                 },
@@ -550,9 +550,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit(l) => PrivateName {
-                                                            name: l.0.clone(),
-                                                            span,
+                                                        PropKey::Lit(l,span,_) => PrivateName {
+                                                            name: l.clone(),
+                                                            span: *span,
                                                         },
                                                         _ => panic!("invalid private name"),
                                                     },
@@ -585,9 +585,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit(l) => PrivateName {
-                                                            name: l.0.clone(),
-                                                            span,
+                                                        PropKey::Lit(l,span,_) => PrivateName {
+                                                            name: l.clone(),
+                                                            span: *span,
                                                         },
                                                         _ => panic!("invalid private name"),
                                                     },
@@ -620,9 +620,9 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 PrivateMethod {
                                                     span,
                                                     key: match &a.1 {
-                                                        PropKey::Lit(l) => PrivateName {
-                                                            name: l.0.clone(),
-                                                            span,
+                                                        PropKey::Lit(l,span,_) => PrivateName {
+                                                            name: l.clone(),
+                                                            span: *span,
                                                         },
                                                         _ => panic!("invalid private name"),
                                                     },
@@ -811,11 +811,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                 .map(|k| {
                                     Ok(ObjectPatProp::KeyValue(KeyValuePatProp {
                                         key: match &*k {
-                                            crate::PropKey::Lit(l) => {
+                                            crate::PropKey::Lit(l,span,_) => {
                                                 swc_ecma_ast::PropName::Ident(
                                                     swc_ecma_ast::IdentName {
-                                                        span: span,
-                                                        sym: l.0.clone(),
+                                                        span: *span,
+                                                        sym: l.clone(),
                                                     },
                                                 )
                                             }
