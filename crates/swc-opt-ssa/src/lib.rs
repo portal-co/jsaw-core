@@ -171,26 +171,31 @@ impl OptValueW {
         }
     }
 }
-impl<Ctx: Clone> SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc,Ctx> for OptCfg {
-    fn val(&self, id: Id<OptValueW>,ctx: Ctx,) -> Option<&SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
+impl<Ctx: Clone> SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc, Ctx> for OptCfg {
+    fn val(
+        &self,
+        id: Id<OptValueW>,
+        ctx: Ctx,
+    ) -> Option<&SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
         match &self.values[id].value {
-            OptValue::Deopt { value: a, .. } => self.val(*a,ctx),
-            OptValue::Assert { val, ty } => self.val(*val,ctx),
+            OptValue::Deopt { value: a, .. } => self.val(*a, ctx),
+            OptValue::Assert { val, ty } => self.val(*val, ctx),
             OptValue::Emit { val, ty } => Some(val),
         }
     }
     fn val_mut(
         &mut self,
-        id: Id<OptValueW>,ctx: Ctx,
+        id: Id<OptValueW>,
+        ctx: Ctx,
     ) -> Option<&mut SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
         let v: *mut OptValue = &mut self.values[id].value as *mut _;
         //SAFETY: only borrowed once; values are moved before recursing
         match unsafe { &mut *v } {
             OptValue::Deopt { value: a, .. } => {
                 let a = *a;
-                return self.val_mut(a,ctx);
+                return self.val_mut(a, ctx);
             }
-            OptValue::Assert { val, ty } => self.val_mut(*val,ctx),
+            OptValue::Assert { val, ty } => self.val_mut(*val, ctx),
             OptValue::Emit { val, ty } => Some(val),
         }
     }

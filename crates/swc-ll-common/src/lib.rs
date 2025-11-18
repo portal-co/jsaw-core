@@ -70,13 +70,19 @@ bitflags! {
 ///
 /// This trait provides a uniform interface for resolving item references
 /// in both TAC and SSA forms.
-pub trait ItemGetter<I, F,Ctx = ()> {
+pub trait ItemGetter<I, F, Ctx = ()> {
     /// Get an immutable reference to an item
-    fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>> where Ctx: 'b;
+    fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>>
+    where
+        Ctx: 'b;
     /// Get a mutable reference to an item
-    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>> where Ctx: 'b;
+    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>>
+    where
+        Ctx: 'b;
     /// Get an identifier from a reference
-    fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident> where Ctx: 'b;
+    fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident>
+    where
+        Ctx: 'b;
 }
 pub mod ext;
 /// Private field identifier (JavaScript private class fields).
@@ -305,7 +311,7 @@ impl<I: Eq, F> Item<I, F> {
     }
 }
 pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)) -> bool {
-    tcfg.inlinable(d,())
+    tcfg.inlinable(d, ())
 }
 /// A value that may or may not be spread.
 ///

@@ -13,12 +13,13 @@ pub fn default_ctx() -> ExprCtx {
 ///
 /// This trait builds on `ItemGetter` to provide more complex queries like
 /// resolving primordial objects and native functions.
-pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
-    fn func_and_this<'a>(&'a self, i: I,ctx: Ctx) -> Option<(&'a F, ThisArg<I>)>
+pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
+    fn func_and_this<'a>(&'a self, i: I, ctx: Ctx) -> Option<(&'a F, ThisArg<I>)>
     where
-        I: Clone + 'a,Ctx: Clone+'a,
+        I: Clone + 'a,
+        Ctx: Clone + 'a,
     {
-        match self.get_item(i,ctx.clone())? {
+        match self.get_item(i, ctx.clone())? {
             Item::Func { func, arrow } => Some((
                 func,
                 if *arrow {
@@ -27,36 +28,38 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
                     ThisArg::GlobalThis
                 },
             )),
-            Item::Mem { obj, mem } => match self.get_item(obj.clone(),ctx.clone()) {
+            Item::Mem { obj, mem } => match self.get_item(obj.clone(), ctx.clone()) {
                 // Item::Obj { members }
                 _ => None,
             },
             _ => None,
         }
     }
-    fn primordial(&self, i: I,ctx: Ctx) -> Option<&'static Primordial>
+    fn primordial(&self, i: I, ctx: Ctx) -> Option<&'static Primordial>
     where
-        I: Clone,Ctx:Clone,
+        I: Clone,
+        Ctx: Clone,
     {
-        match self.get_ident(i.clone(),ctx.clone()) {
+        match self.get_ident(i.clone(), ctx.clone()) {
             Some((a, _)) => Primordial::global(&a),
-            _ => match self.get_item(i,ctx.clone())? {
-                Item::Mem { obj, mem } => match self.get_item(mem.clone(),ctx.clone())? {
-                    Item::Lit { lit: Lit::Str(s) } => {
-                        self.primordial(obj.clone(),ctx)?.get_perfect(s.value.as_str()?)
-                    }
+            _ => match self.get_item(i, ctx.clone())? {
+                Item::Mem { obj, mem } => match self.get_item(mem.clone(), ctx.clone())? {
+                    Item::Lit { lit: Lit::Str(s) } => self
+                        .primordial(obj.clone(), ctx)?
+                        .get_perfect(s.value.as_str()?),
                     _ => None,
                 },
                 _ => None,
             },
         }
     }
-    fn native_of(&self, mut i: I,ctx: Ctx) -> Option<Native<I>>
+    fn native_of(&self, mut i: I, ctx: Ctx) -> Option<Native<I>>
     where
-        I: Clone,Ctx: Clone,
+        I: Clone,
+        Ctx: Clone,
     {
         loop {
-            let g = self.get_item(i,ctx.clone())?;
+            let g = self.get_item(i, ctx.clone())?;
             let (mut func, mut member, args) = match g {
                 Item::Just { id } => {
                     i = id.clone();
@@ -69,18 +72,18 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
                 _ => return None,
             };
             loop {
-                if let Some(i) = self.get_ident(func.clone(),ctx.clone()) {
+                if let Some(i) = self.get_ident(func.clone(), ctx.clone()) {
                     if i.0 == "globalThis" {
                         break;
                     }
                 }
-                let Item::Just { id } = self.get_item(func.clone(),ctx.clone())? else {
+                let Item::Just { id } = self.get_item(func.clone(), ctx.clone())? else {
                     return None;
                 };
                 func = id;
             }
             let n = loop {
-                let id = match self.get_item(member.clone(),ctx.clone())? {
+                let id = match self.get_item(member.clone(), ctx.clone())? {
                     Item::Lit { lit: Lit::Str(s) } => {
                         if let Some(m) = s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
                         {
@@ -107,16 +110,17 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
                 .ok();
         }
     }
-    fn inlinable(&self, d: &Item<I, F>,ctx: Ctx) -> bool
+    fn inlinable(&self, d: &Item<I, F>, ctx: Ctx) -> bool
     where
-        I: Clone,Ctx: Clone,
+        I: Clone,
+        Ctx: Clone,
     {
         let tcfg = self;
         match d {
-            Item::Just { id } => tcfg.get_item(id.clone(),ctx.clone()).is_some(),
+            Item::Just { id } => tcfg.get_item(id.clone(), ctx.clone()).is_some(),
             Item::Asm { value }
                 if match value {
-                    Asm::OrZero(value) => tcfg.get_item(value.clone(),ctx.clone()).is_some(),
+                    Asm::OrZero(value) => tcfg.get_item(value.clone(), ctx.clone()).is_some(),
                     _ => todo!(),
                 } =>
             {
@@ -124,25 +128,27 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
             }
             Item::Lit { lit } => true,
             Item::Un { arg, op }
-                if !matches!(op, UnaryOp::Delete) && tcfg.get_item(arg.clone(),ctx.clone()).is_some() =>
+                if !matches!(op, UnaryOp::Delete)
+                    && tcfg.get_item(arg.clone(), ctx.clone()).is_some() =>
             {
                 true
             }
             _ => false,
         }
     }
-    fn simplify_just(&mut self, i: I,ctx: Ctx) -> bool
+    fn simplify_just(&mut self, i: I, ctx: Ctx) -> bool
     where
         Item<I, F>: Clone,
-        I: Clone,Ctx: Clone,
+        I: Clone,
+        Ctx: Clone,
     {
-        if let Some(g) = self.get_item(i.clone(),ctx.clone()).and_then(|j| match j {
-            Item::Just { id } => self.get_item(id.clone(),ctx.clone()),
+        if let Some(g) = self.get_item(i.clone(), ctx.clone()).and_then(|j| match j {
+            Item::Just { id } => self.get_item(id.clone(), ctx.clone()),
             _ => None,
         }) {
-            if self.inlinable(g,ctx.clone()) {
+            if self.inlinable(g, ctx.clone()) {
                 let g = g.clone();
-                if let Some(h) = self.get_mut_item(i,ctx.clone()) {
+                if let Some(h) = self.get_mut_item(i, ctx.clone()) {
                     *h = g;
                     return true;
                 }
@@ -151,12 +157,12 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
         return false;
     }
 }
-impl<T: ItemGetter<I, F,Ctx> + ?Sized, I, F,Ctx> ItemGetterExt<I, F,Ctx> for T {}
+impl<T: ItemGetter<I, F, Ctx> + ?Sized, I, F, Ctx> ItemGetterExt<I, F, Ctx> for T {}
 impl<I: Clone + Eq, F> Item<I, F> {
     pub fn const_in<Ctx: Clone>(
         &self,
         semantics: &SemanticCfg,
-        k: &(dyn ItemGetter<I, F,Ctx> + '_),
+        k: &(dyn ItemGetter<I, F, Ctx> + '_),
         span: Span,
         ctx: Ctx,
     ) -> Option<Lit> {
@@ -182,8 +188,8 @@ impl<I: Clone + Eq, F> Item<I, F> {
                         _ => {}
                     }
                 }
-                let left = k.get_item(l2.clone(),ctx.clone())?;
-                let right = k.get_item(r2.clone(),ctx.clone())?;
+                let left = k.get_item(l2.clone(), ctx.clone())?;
+                let right = k.get_item(r2.clone(), ctx.clone())?;
                 let (left, right) = match (left, right) {
                     (Item::Undef, Item::Undef) => match op {
                         BinaryOp::EqEqEq | BinaryOp::EqEq => {
@@ -193,14 +199,14 @@ impl<I: Clone + Eq, F> Item<I, F> {
                             return Some(Lit::Bool(Bool { span, value: false }));
                         }
                         _ => {
-                            let left = left.const_in(semantics, k, span,ctx.clone())?;
-                            let right = right.const_in(semantics, k, span,ctx.clone())?;
+                            let left = left.const_in(semantics, k, span, ctx.clone())?;
+                            let right = right.const_in(semantics, k, span, ctx.clone())?;
                             (left, right)
                         }
                     },
                     (left_val, right_val) => {
-                        let left = left_val.const_in(semantics, k, span,ctx.clone());
-                        let right = right_val.const_in(semantics, k, span,ctx.clone());
+                        let left = left_val.const_in(semantics, k, span, ctx.clone());
+                        let right = right_val.const_in(semantics, k, span, ctx.clone());
                         match (left_val, right_val, &left, &right) {
                             (Item::Undef, _, _, Some(_)) | (_, Item::Undef, Some(_), _) => match op
                             {
@@ -455,7 +461,12 @@ impl<I: Clone + Eq, F> Item<I, F> {
                         raw: None,
                     }));
                 }
-                let l = k.get_item(arg.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                let l = k.get_item(arg.clone(), ctx.clone())?.const_in(
+                    semantics,
+                    k,
+                    span,
+                    ctx.clone(),
+                )?;
                 match op {
                     swc_ecma_ast::UnaryOp::Minus => match l {
                         Lit::Num(n) => Some(Lit::Num(Number {
@@ -510,10 +521,11 @@ impl<I: Clone + Eq, F> Item<I, F> {
                 }
             }
             Item::Mem { obj, mem } => {
-                match k.get_item(obj.clone(),ctx.clone()) {
-                    Some(Item::Obj { members },
-                   ) => match {
-                        let l = k.get_item(mem.clone(),ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone()))?;
+                match k.get_item(obj.clone(), ctx.clone()) {
+                    Some(Item::Obj { members }) => match {
+                        let l = k
+                            .get_item(mem.clone(), ctx.clone())
+                            .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))?;
                         let mut i = members.iter();
                         loop {
                             let Some(i) = i.next() else {
@@ -530,7 +542,10 @@ impl<I: Clone + Eq, F> Item<I, F> {
                                     raw: None,
                                 }),
                                 PropKey::Computed(c) => {
-                                    match k.get_item(c.clone(),ctx.clone()).and_then(|w| w.const_in(semantics, k, span,ctx.clone())) {
+                                    match k
+                                        .get_item(c.clone(), ctx.clone())
+                                        .and_then(|w| w.const_in(semantics, k, span, ctx.clone()))
+                                    {
                                         None => return None,
                                         Some(l) => l,
                                     }
@@ -547,85 +562,95 @@ impl<I: Clone + Eq, F> Item<I, F> {
                         }
                     } {
                         Some(v) => {
-                            return k.get_item(v,ctx.clone()).and_then(|w| w.const_in(semantics, k, span,ctx.clone()));
+                            return k
+                                .get_item(v, ctx.clone())
+                                .and_then(|w| w.const_in(semantics, k, span, ctx.clone()));
                         }
                         None => {}
                     },
                     _ => {}
                 }
-                match k.get_item(mem.clone(),ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone())) {
-                        // Some(Lit::Str(s)) => match s.value.as_str()? {
-                        //     "length" => match k.val(*obj) {
-                        //         Some(i)
-                        //             if semantics
-                        //                 .flags
-                        //                 .contains(SemanticFlags::NO_MONKEYPATCHING) =>
-                        //         {
-                        //             match i.array_in(semantics, k, pierce) {
-                        //                 None => {
-                        //                     let l = i.const_in(semantics, k, pierce)?;
-                        //                     let Lit::Str(s) = l else {
-                        //                         return None;
-                        //                     };
-                        //                     Some(Lit::Num(Number {
-                        //                         span: s.span,
-                        //                         value: s.value.len() as f64,
-                        //                         raw: None,
-                        //                     }))
-                        //                 }
-                        //                 Some(a) => Some(Lit::Num(Number {
-                        //                     span: span
-                        //                         .as_ref()
-                        //                         .cloned()
-                        //                         .unwrap_or_else(|| Span::dummy_with_cmt()),
-                        //                     value: a.len() as f64,
-                        //                     raw: None,
-                        //                 })),
-                        //             }
-                        //         }
-                        //         _ => None,
-                        //     },
-                        //     _ => None,
-                        // },
-                        // Some(Lit::Num(n)) => {
-                        //     match k.val(*obj) {
-                        //         Some(i)
-                        //             if semantics
-                        //                 .flags
-                        //                 .contains(SemanticFlags::NO_MONKEYPATCHING) =>
-                        //         {
-                        //             match i.array_in(semantics, k, pierce) {
-                        //             None => None,
-                        //             Some(a) => a
-                        //                 .iter()
-                        //                 .all(|SpreadOr { value: _, is_spread: v }| !*v)
-                        //                 .then(|| {
-                        //                     a.get((n.value.round() as usize))
-                        //                         .and_then(|SpreadOr { value: a, is_spread: _ }| k.val(*a))
-                        //                         .and_then(|a| a.const_in(semantics, k, pierce))
-                        //                 })
-                        //                 .flatten(),
-                        //         }
-                        //         }
-                        //         _ => None,
-                        //     }
-                        // }
-                        _ => None,
-                    }
+                match k
+                    .get_item(mem.clone(), ctx.clone())
+                    .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))
+                {
+                    // Some(Lit::Str(s)) => match s.value.as_str()? {
+                    //     "length" => match k.val(*obj) {
+                    //         Some(i)
+                    //             if semantics
+                    //                 .flags
+                    //                 .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                    //         {
+                    //             match i.array_in(semantics, k, pierce) {
+                    //                 None => {
+                    //                     let l = i.const_in(semantics, k, pierce)?;
+                    //                     let Lit::Str(s) = l else {
+                    //                         return None;
+                    //                     };
+                    //                     Some(Lit::Num(Number {
+                    //                         span: s.span,
+                    //                         value: s.value.len() as f64,
+                    //                         raw: None,
+                    //                     }))
+                    //                 }
+                    //                 Some(a) => Some(Lit::Num(Number {
+                    //                     span: span
+                    //                         .as_ref()
+                    //                         .cloned()
+                    //                         .unwrap_or_else(|| Span::dummy_with_cmt()),
+                    //                     value: a.len() as f64,
+                    //                     raw: None,
+                    //                 })),
+                    //             }
+                    //         }
+                    //         _ => None,
+                    //     },
+                    //     _ => None,
+                    // },
+                    // Some(Lit::Num(n)) => {
+                    //     match k.val(*obj) {
+                    //         Some(i)
+                    //             if semantics
+                    //                 .flags
+                    //                 .contains(SemanticFlags::NO_MONKEYPATCHING) =>
+                    //         {
+                    //             match i.array_in(semantics, k, pierce) {
+                    //             None => None,
+                    //             Some(a) => a
+                    //                 .iter()
+                    //                 .all(|SpreadOr { value: _, is_spread: v }| !*v)
+                    //                 .then(|| {
+                    //                     a.get((n.value.round() as usize))
+                    //                         .and_then(|SpreadOr { value: a, is_spread: _ }| k.val(*a))
+                    //                         .and_then(|a| a.const_in(semantics, k, pierce))
+                    //                 })
+                    //                 .flatten(),
+                    //         }
+                    //         }
+                    //         _ => None,
+                    //     }
+                    // }
+                    _ => None,
+                }
             }
             Item::Call { callee, args }
                 if semantics.flags.contains(SemanticFlags::NO_MONKEYPATCHING) =>
             {
                 match callee {
                     TCallee::Member { func, member } => {
-                        let member = k.get_item(member.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                        let member = k.get_item(member.clone(), ctx.clone())?.const_in(
+                            semantics,
+                            k,
+                            span,
+                            ctx.clone(),
+                        )?;
                         let Lit::Str(s) = member else {
                             return None;
                         };
-                        let func = k.get_item(func.clone(),ctx.clone())?;
+                        let func = k.get_item(func.clone(), ctx.clone())?;
                         match func {
                             _ => {
-                                let func = func.const_in(semantics, k, span,ctx.clone())?;
+                                let func = func.const_in(semantics, k, span, ctx.clone())?;
                                 let mut i;
                                 let ses = ses_method(
                                     &func,
@@ -638,8 +663,9 @@ impl<I: Clone + Eq, F> Item<I, F> {
                                                     value: n,
                                                     is_spread: s,
                                                 } = i.next()?;
-                                                let i =
-                                                    k.get_item(n.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                                                let i = k
+                                                    .get_item(n.clone(), ctx.clone())?
+                                                    .const_in(semantics, k, span, ctx.clone())?;
                                                 Some(i)
                                             })
                                             .fuse()

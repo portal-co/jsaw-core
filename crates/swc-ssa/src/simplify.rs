@@ -82,7 +82,15 @@ impl SCfg {
         let mut redo = true;
         while take(&mut redo) {
             for ref_ in self.values.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
-                redo = redo | ItemGetterExt::<id_arena::Id<SValueW>, SFunc, SSACtx<'_, ()>>::simplify_just(&mut *self, ref_, SSACtx { wrapped: &(), pierce: true });
+                redo = redo
+                    | ItemGetterExt::<id_arena::Id<SValueW>, SFunc, SSACtx<'_, ()>>::simplify_just(
+                        &mut *self,
+                        ref_,
+                        SSACtx {
+                            wrapped: &(),
+                            pierce: true,
+                        },
+                    );
             }
         }
     }
@@ -126,7 +134,7 @@ pub trait SValGetter<I: Copy + Eq, B, F = SFunc, Ctx = ()>:
 pub fn _get_item<'a, I: Copy + Eq, B, F, Ctx: Clone>(
     a: &'a (dyn SValGetter<I, B, F, Ctx> + 'a),
     mut i: I,
-    ctx: SSACtx<'_ ,Ctx>,
+    ctx: SSACtx<'_, Ctx>,
 ) -> Option<&'a Item<I, F>> {
     loop {
         match a.val(i, ctx.wrapped.clone())? {
@@ -157,7 +165,7 @@ pub fn _get_item<'a, I: Copy + Eq, B, F, Ctx: Clone>(
 pub fn _get_ident<'a, I: Copy + Eq, B, F, Ctx: Clone>(
     a: &'a (dyn SValGetter<I, B, F, Ctx> + 'a),
     mut i: I,
-    ctx: SSACtx<'a,Ctx>,
+    ctx: SSACtx<'a, Ctx>,
 ) -> Option<Ident> {
     let mut bak = None;
     loop {
@@ -195,7 +203,7 @@ pub fn _get_ident<'a, I: Copy + Eq, B, F, Ctx: Clone>(
 pub fn _get_item_mut<'a, 'b: 'a, I: Copy + Eq, B, F, Ctx: Clone>(
     a: &'b mut (dyn SValGetter<I, B, F, Ctx> + 'a),
     mut i: I,
-    ctx: SSACtx<'_,Ctx>,
+    ctx: SSACtx<'_, Ctx>,
 ) -> Option<&'a mut Item<I, F>> {
     let a: *mut (dyn SValGetter<I, B, F, Ctx> + 'a) = a as *mut _;
     loop {
@@ -203,7 +211,7 @@ pub fn _get_item_mut<'a, 'b: 'a, I: Copy + Eq, B, F, Ctx: Clone>(
         match unsafe { &mut *a }.val_mut(i, ctx.wrapped.clone())? {
             SValue::Param { block, idx, ty } => {
                 if ctx.pierce {
-                    if let Some(j) = unsafe{&mut *a}.input(block, *idx, ctx.wrapped.clone()) {
+                    if let Some(j) = unsafe { &mut *a }.input(block, *idx, ctx.wrapped.clone()) {
                         i = j;
                         continue;
                     }
@@ -240,17 +248,22 @@ macro_rules! sval_item {
         }
     };
 }
-impl<Ctx: Clone> SValGetter<Id<SValueW>, Id<SBlock>,SFunc, Ctx> for SCfg {
-    fn val(&self, id: Id<SValueW>,ctx: Ctx) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
+impl<Ctx: Clone> SValGetter<Id<SValueW>, Id<SBlock>, SFunc, Ctx> for SCfg {
+    fn val(&self, id: Id<SValueW>, ctx: Ctx) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
         Some(&self.values[id].value)
     }
-    fn val_mut(&mut self, id: Id<SValueW>,ctx: Ctx) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
+    fn val_mut(
+        &mut self,
+        id: Id<SValueW>,
+        ctx: Ctx,
+    ) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
         Some(&mut self.values[id].value)
     }
     fn inputs<'a>(
         &'a self,
         block: &Id<SBlock>,
-        param: usize,ctx: Ctx
+        param: usize,
+        ctx: Ctx,
     ) -> Box<dyn Iterator<Item = Id<SValueW>> + 'a>
     where
         Id<SValueW>: 'a,
@@ -258,7 +271,7 @@ impl<Ctx: Clone> SValGetter<Id<SValueW>, Id<SBlock>,SFunc, Ctx> for SCfg {
     {
         Box::new(SCfg::inputs(self, *block, param))
     }
-    fn taints_object(&self, id: Id<SValueW>,ctx: Ctx) -> bool {
+    fn taints_object(&self, id: Id<SValueW>, ctx: Ctx) -> bool {
         SCfg::taints_object(self, &id)
     }
 }
@@ -968,27 +981,47 @@ sval_item!(SCfg [block Id<SBlock>]);
 //         }
 //     }
 // }
-impl<I: Copy + Eq,B,F> SValue<I,B,F>{
-      pub fn const_in<Ctx: Clone>(
+impl<I: Copy + Eq, B, F> SValue<I, B, F> {
+    pub fn const_in<Ctx: Clone>(
         &self,
         semantics: &SemanticCfg,
-        k: &(dyn SValGetter<I, B, F,Ctx> + '_),
-        pierce: bool,ctx: Ctx,
-    ) -> Option<Lit>{
-        match self{
-            SValue::Param { block, idx, ty } => if pierce{
-                if let Some(i) = k.input(block, *idx,ctx.clone()).and_then(|a|k.val(a, ctx.clone())){
-                    return i.const_in(semantics, k, pierce, ctx);
-                }else{
+        k: &(dyn SValGetter<I, B, F, Ctx> + '_),
+        pierce: bool,
+        ctx: Ctx,
+    ) -> Option<Lit> {
+        match self {
+            SValue::Param { block, idx, ty } => {
+                if pierce {
+                    if let Some(i) = k
+                        .input(block, *idx, ctx.clone())
+                        .and_then(|a| k.val(a, ctx.clone()))
+                    {
+                        return i.const_in(semantics, k, pierce, ctx);
+                    } else {
+                        None
+                    }
+                } else {
                     None
                 }
-            }else{
-                None
-            },
-            SValue::Item { item, span } => item.const_in(semantics, k, span.clone().unwrap_or_default(), SSACtx { wrapped: &ctx, pierce }),
-            SValue::Assign { target, val } => k.val(*val,ctx.clone())?.const_in(semantics, k, pierce, ctx),
-            SValue::StoreId { target, val } =>k.val(*val,ctx.clone())?.const_in(semantics, k, pierce, ctx),
-            SValue::EdgeBlocker { value, span } =>k.val(*value,ctx.clone())?.const_in(semantics, k, pierce, ctx),
+            }
+            SValue::Item { item, span } => item.const_in(
+                semantics,
+                k,
+                span.clone().unwrap_or_default(),
+                SSACtx {
+                    wrapped: &ctx,
+                    pierce,
+                },
+            ),
+            SValue::Assign { target, val } => k
+                .val(*val, ctx.clone())?
+                .const_in(semantics, k, pierce, ctx),
+            SValue::StoreId { target, val } => k
+                .val(*val, ctx.clone())?
+                .const_in(semantics, k, pierce, ctx),
+            SValue::EdgeBlocker { value, span } => k
+                .val(*value, ctx.clone())?
+                .const_in(semantics, k, pierce, ctx),
             _ => None,
         }
     }

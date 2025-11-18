@@ -144,11 +144,12 @@ impl Convert {
                                 state.get(left).cloned().context("in getting the value")?;
                             let (right, rty) =
                                 state.get(right).cloned().context("in getting the value")?;
-                            let cnstl =
-                                out.val(left,()).and_then(|a| a.const_in(semantic, out, false,()));
+                            let cnstl = out
+                                .val(left, ())
+                                .and_then(|a| a.const_in(semantic, out, false, ()));
                             let cnstr = out
-                                .val(right,())
-                                .and_then(|a| a.const_in(semantic, out, false,()));
+                                .val(right, ())
+                                .and_then(|a| a.const_in(semantic, out, false, ()));
                             match (cnstl, cnstr) {
                                 (Some(_), Some(_)) => {
                                     let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
@@ -160,7 +161,7 @@ impl Convert {
                                             },
                                             span: span.clone(),
                                         };
-                                    let Some(a) = v.const_in(semantic, out, false,()) else {
+                                    let Some(a) = v.const_in(semantic, out, false, ()) else {
                                         todo!()
                                     };
                                     (
@@ -318,7 +319,9 @@ impl Convert {
                         swc_tac::Item::Un { arg, op } => {
                             let (arg, tag) =
                                 state.get(arg).cloned().context("in getting the value")?;
-                            let cnst = out.val(arg,()).and_then(|a| a.const_in(semantic, out, false,()));
+                            let cnst = out
+                                .val(arg, ())
+                                .and_then(|a| a.const_in(semantic, out, false, ()));
                             match cnst {
                                 Some(k) => {
                                     let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
@@ -329,7 +332,7 @@ impl Convert {
                                             },
                                             span: span.clone(),
                                         };
-                                    let Some(a) = v.const_in(semantic, out, false,()) else {
+                                    let Some(a) = v.const_in(semantic, out, false, ()) else {
                                         todo!()
                                     };
                                     (

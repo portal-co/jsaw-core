@@ -1,4 +1,4 @@
-use crate::{*};
+use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
 use std::collections::HashMap;
 use swc_common::Spanned;
@@ -155,7 +155,7 @@ impl ConstantInstantiator {
                         }
                     }
                 };
-                let v = match v.const_in(semantic, out, false,()) {
+                let v = match v.const_in(semantic, out, false, ()) {
                     // None => match v.array_in(semantic, out, false) {
                     //     None => v,
                     //     Some(a) => SValue::Item {

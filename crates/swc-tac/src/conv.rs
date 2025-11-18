@@ -1183,7 +1183,9 @@ impl ToTACConverter<'_> {
                         PropKey::Lit(PropSym {
                             sym: p.key.name.clone(),
                             span: p.key.span,
-                            ctx: PrivateKind::Private(privates.get(&p.key.name).cloned().unwrap_or_default()),
+                            ctx: PrivateKind::Private(
+                                privates.get(&p.key.name).cloned().unwrap_or_default(),
+                            ),
                         }),
                         x,
                     ));
