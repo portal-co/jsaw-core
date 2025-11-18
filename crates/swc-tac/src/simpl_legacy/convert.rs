@@ -274,7 +274,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                         PropKey::Lit(PropSym {
                             sym: a.0.clone(),
                             span: Span::dummy_with_cmt(),
-                            ctx: a.1,
+                            ctx: (),
                         }),
                         PropVal::Method({
                             let mut f: TFunc = Default::default();

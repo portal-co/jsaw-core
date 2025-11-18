@@ -1045,7 +1045,7 @@ impl ToTACConverter<'_> {
                                 PropKey::Lit(PropSym {
                                     sym: ident_name.sym.clone(),
                                     span: ident_name.span,
-                                    ctx: Default::default(),
+                                    ctx: PrivateKind::Public,
                                 }),
                                 v,
                             ),
@@ -1055,7 +1055,7 @@ impl ToTACConverter<'_> {
                                     PropKey::Lit(PropSym {
                                         sym: s.value.as_atom().cloned().unwrap(),
                                         span: s.span,
-                                        ctx: Default::default(),
+                                        ctx: PrivateKind::Public,
                                     }),
                                     v,
                                 ))
@@ -1078,7 +1078,7 @@ impl ToTACConverter<'_> {
         }
         let mut members: Vec<(
             MemberFlags,
-            PropKey<Ident>,
+            PropKey<Ident, PrivateKind>,
             PropVal<Option<(Atom, swc_common::SyntaxContext)>, TFunc>,
         )> = Default::default();
         let mut constructor: Option<TFunc> = Default::default();
@@ -1148,11 +1148,13 @@ impl ToTACConverter<'_> {
                             MemberFlags::STATIC
                         } else {
                             MemberFlags::empty()
-                        } | MemberFlags::PRIVATE,
+                        },
                         PropKey::Lit(PropSym {
                             sym: p.key.name.clone(),
                             span: p.key.span,
-                            ctx: privates.get(&p.key.name).cloned().unwrap_or_default(),
+                            ctx: PrivateKind::Private(
+                                privates.get(&p.key.name).cloned().unwrap_or_default(),
+                            ),
                         }),
                         PropVal::Item(match p.value.as_ref() {
                             None => None,
@@ -1177,11 +1179,11 @@ impl ToTACConverter<'_> {
                             MemberFlags::STATIC
                         } else {
                             MemberFlags::empty()
-                        } | MemberFlags::PRIVATE,
+                        },
                         PropKey::Lit(PropSym {
                             sym: p.key.name.clone(),
                             span: p.key.span,
-                            ctx: privates.get(&p.key.name).cloned().unwrap_or_default(),
+                            ctx: PrivateKind::Private(privates.get(&p.key.name).cloned().unwrap_or_default()),
                         }),
                         x,
                     ));
@@ -1958,7 +1960,7 @@ impl ToTACConverter<'_> {
                                             PropKey::Lit(PropSym {
                                                 sym: ident_name.sym.clone(),
                                                 span: ident_name.span,
-                                                ctx: Default::default(),
+                                                ctx: (),
                                             }),
                                             v,
                                         )),
@@ -1966,7 +1968,7 @@ impl ToTACConverter<'_> {
                                             PropKey::Lit(PropSym {
                                                 sym: s.value.as_atom().cloned().unwrap(),
                                                 span: s.span,
-                                                ctx: Default::default(),
+                                                ctx: (),
                                             }),
                                             v,
                                         )),
@@ -1995,7 +1997,7 @@ impl ToTACConverter<'_> {
                                     PropKey::Lit(PropSym {
                                         sym: ident.sym.clone(),
                                         span: ident.span,
-                                        ctx: ident.ctxt,
+                                        ctx: (),
                                     }),
                                     PropVal::Item(ident.clone().into()),
                                 )),

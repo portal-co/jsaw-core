@@ -50,7 +50,7 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
-use swc_ll_common::PropSym;
+use swc_ll_common::{PrivateKind, PropSym};
 
 /// Options for TAC to CFG/JavaScript rewriting.
 ///
@@ -502,38 +502,43 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                 };
                                 match &a.2 {
                                     crate::PropVal::Item(i) => {
-                                        if a.0.contains(MemberFlags::PRIVATE) {
-                                            ClassMember::PrivateProp(PrivateProp {
-                                                span,
-                                                ctxt: Default::default(),
-                                                key: match &a.1 {
-                                                    PropKey::Lit(PropSym {
-                                                        sym: l,
-                                                        span,
-                                                        ctx: _,
-                                                    }) => PrivateName {
-                                                        name: l.clone(),
-                                                        span: *span,
+                                        match &a.1 {
+                                            PropKey::Lit(PropSym {
+                                                sym: _,
+                                                span: _,
+                                                ctx: PrivateKind::Private(ctx),
+                                            }) => {
+                                                ClassMember::PrivateProp(PrivateProp {
+                                                    span,
+                                                    ctxt: Default::default(),
+                                                    key: match &a.1 {
+                                                        PropKey::Lit(PropSym {
+                                                            sym: l,
+                                                            span,
+                                                            ctx: _,
+                                                        }) => PrivateName {
+                                                            name: l.clone(),
+                                                            span: *span,
+                                                        },
+                                                        _ => panic!("invalid private name"),
                                                     },
-                                                    _ => panic!("invalid private name"),
-                                                },
-                                                value: match i.as_ref() {
-                                                    None => None,
-                                                    Some(a) => Some(sr(cx, a)?),
-                                                },
-                                                type_ann: None,
-                                                is_static: a.0.contains(MemberFlags::STATIC),
-                                                decorators: Default::default(),
-                                                accessibility: None,
-                                                // is_abstract: false,
-                                                is_optional: false,
-                                                is_override: false,
-                                                readonly: false,
-                                                // declare: false,
-                                                definite: false,
-                                            })
-                                        } else {
-                                            ClassMember::ClassProp(ClassProp {
+                                                    value: match i.as_ref() {
+                                                        None => None,
+                                                        Some(a) => Some(sr(cx, a)?),
+                                                    },
+                                                    type_ann: None,
+                                                    is_static: a.0.contains(MemberFlags::STATIC),
+                                                    decorators: Default::default(),
+                                                    accessibility: None,
+                                                    // is_abstract: false,
+                                                    is_optional: false,
+                                                    is_override: false,
+                                                    readonly: false,
+                                                    // declare: false,
+                                                    definite: false,
+                                                })
+                                            }
+                                            _ => ClassMember::ClassProp(ClassProp {
                                                 span,
                                                 key: name,
                                                 value: match i.as_ref() {
@@ -550,38 +555,28 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 readonly: false,
                                                 declare: false,
                                                 definite: false,
-                                            })
+                                            }),
                                         }
                                     }
-                                    crate::PropVal::Getter(m) => {
-                                        if a.0.contains(MemberFlags::PRIVATE) {
-                                            swc_ecma_ast::ClassMember::PrivateMethod(
-                                                PrivateMethod {
-                                                    span,
-                                                    key: match &a.1 {
-                                                        PropKey::Lit(PropSym {
-                                                            sym: l,
-                                                            span,
-                                                            ctx: _,
-                                                        }) => PrivateName {
-                                                            name: l.clone(),
-                                                            span: *span,
-                                                        },
-                                                        _ => panic!("invalid private name"),
-                                                    },
-                                                    function: Box::new(sf(cx, m)?),
-                                                    kind: swc_ecma_ast::MethodKind::Getter,
-                                                    is_static: a.0.contains(MemberFlags::STATIC),
-                                                    accessibility: None,
-                                                    is_abstract: false,
-                                                    is_optional: false,
-                                                    is_override: false,
-                                                },
-                                            )
-                                        } else {
-                                            swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                    crate::PropVal::Getter(m) => match &a.1 {
+                                        PropKey::Lit(PropSym {
+                                            sym: _,
+                                            span: _,
+                                            ctx: PrivateKind::Private(ctx),
+                                        }) => swc_ecma_ast::ClassMember::PrivateMethod(
+                                            PrivateMethod {
                                                 span,
-                                                key: name,
+                                                key: match &a.1 {
+                                                    PropKey::Lit(PropSym {
+                                                        sym: l,
+                                                        span,
+                                                        ctx: _,
+                                                    }) => PrivateName {
+                                                        name: l.clone(),
+                                                        span: *span,
+                                                    },
+                                                    _ => panic!("invalid private name"),
+                                                },
                                                 function: Box::new(sf(cx, m)?),
                                                 kind: swc_ecma_ast::MethodKind::Getter,
                                                 is_static: a.0.contains(MemberFlags::STATIC),
@@ -589,38 +584,39 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 is_abstract: false,
                                                 is_optional: false,
                                                 is_override: false,
-                                            })
-                                        }
-                                    }
-                                    crate::PropVal::Setter(m) => {
-                                        if a.0.contains(MemberFlags::PRIVATE) {
-                                            swc_ecma_ast::ClassMember::PrivateMethod(
-                                                PrivateMethod {
-                                                    span,
-                                                    key: match &a.1 {
-                                                        PropKey::Lit(PropSym {
-                                                            sym: l,
-                                                            span,
-                                                            ctx: _,
-                                                        }) => PrivateName {
-                                                            name: l.clone(),
-                                                            span: *span,
-                                                        },
-                                                        _ => panic!("invalid private name"),
-                                                    },
-                                                    function: Box::new(sf(cx, m)?),
-                                                    kind: swc_ecma_ast::MethodKind::Setter,
-                                                    is_static: a.0.contains(MemberFlags::STATIC),
-                                                    accessibility: None,
-                                                    is_abstract: false,
-                                                    is_optional: false,
-                                                    is_override: false,
-                                                },
-                                            )
-                                        } else {
-                                            swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                            },
+                                        ),
+                                        _ => swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                            span,
+                                            key: name,
+                                            function: Box::new(sf(cx, m)?),
+                                            kind: swc_ecma_ast::MethodKind::Getter,
+                                            is_static: a.0.contains(MemberFlags::STATIC),
+                                            accessibility: None,
+                                            is_abstract: false,
+                                            is_optional: false,
+                                            is_override: false,
+                                        }),
+                                    },
+                                    crate::PropVal::Setter(m) => match &a.1 {
+                                        PropKey::Lit(PropSym {
+                                            sym: _,
+                                            span: _,
+                                            ctx: PrivateKind::Private(ctx),
+                                        }) => swc_ecma_ast::ClassMember::PrivateMethod(
+                                            PrivateMethod {
                                                 span,
-                                                key: name,
+                                                key: match &a.1 {
+                                                    PropKey::Lit(PropSym {
+                                                        sym: l,
+                                                        span,
+                                                        ctx: _,
+                                                    }) => PrivateName {
+                                                        name: l.clone(),
+                                                        span: *span,
+                                                    },
+                                                    _ => panic!("invalid private name"),
+                                                },
                                                 function: Box::new(sf(cx, m)?),
                                                 kind: swc_ecma_ast::MethodKind::Setter,
                                                 is_static: a.0.contains(MemberFlags::STATIC),
@@ -628,38 +624,39 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 is_abstract: false,
                                                 is_optional: false,
                                                 is_override: false,
-                                            })
-                                        }
-                                    }
-                                    crate::PropVal::Method(m) => {
-                                        if a.0.contains(MemberFlags::PRIVATE) {
-                                            swc_ecma_ast::ClassMember::PrivateMethod(
-                                                PrivateMethod {
-                                                    span,
-                                                    key: match &a.1 {
-                                                        PropKey::Lit(PropSym {
-                                                            sym: l,
-                                                            span,
-                                                            ctx: _,
-                                                        }) => PrivateName {
-                                                            name: l.clone(),
-                                                            span: *span,
-                                                        },
-                                                        _ => panic!("invalid private name"),
-                                                    },
-                                                    function: Box::new(sf(cx, m)?),
-                                                    kind: swc_ecma_ast::MethodKind::Method,
-                                                    is_static: a.0.contains(MemberFlags::STATIC),
-                                                    accessibility: None,
-                                                    is_abstract: false,
-                                                    is_optional: false,
-                                                    is_override: false,
-                                                },
-                                            )
-                                        } else {
-                                            swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                            },
+                                        ),
+                                        _ => swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                            span,
+                                            key: name,
+                                            function: Box::new(sf(cx, m)?),
+                                            kind: swc_ecma_ast::MethodKind::Setter,
+                                            is_static: a.0.contains(MemberFlags::STATIC),
+                                            accessibility: None,
+                                            is_abstract: false,
+                                            is_optional: false,
+                                            is_override: false,
+                                        }),
+                                    },
+                                    crate::PropVal::Method(m) => match &a.1 {
+                                        PropKey::Lit(PropSym {
+                                            sym: _,
+                                            span: _,
+                                            ctx: PrivateKind::Private(ctx),
+                                        }) => swc_ecma_ast::ClassMember::PrivateMethod(
+                                            PrivateMethod {
                                                 span,
-                                                key: name,
+                                                key: match &a.1 {
+                                                    PropKey::Lit(PropSym {
+                                                        sym: l,
+                                                        span,
+                                                        ctx: _,
+                                                    }) => PrivateName {
+                                                        name: l.clone(),
+                                                        span: *span,
+                                                    },
+                                                    _ => panic!("invalid private name"),
+                                                },
                                                 function: Box::new(sf(cx, m)?),
                                                 kind: swc_ecma_ast::MethodKind::Method,
                                                 is_static: a.0.contains(MemberFlags::STATIC),
@@ -667,9 +664,20 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                                 is_abstract: false,
                                                 is_optional: false,
                                                 is_override: false,
-                                            })
-                                        }
-                                    }
+                                            },
+                                        ),
+                                        _ => swc_ecma_ast::ClassMember::Method(ClassMethod {
+                                            span,
+                                            key: name,
+                                            function: Box::new(sf(cx, m)?),
+                                            kind: swc_ecma_ast::MethodKind::Method,
+                                            is_static: a.0.contains(MemberFlags::STATIC),
+                                            accessibility: None,
+                                            is_abstract: false,
+                                            is_optional: false,
+                                            is_override: false,
+                                        }),
+                                    },
                                     _ => todo!(),
                                 }
                             })

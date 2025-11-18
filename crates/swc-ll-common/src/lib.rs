@@ -60,8 +60,8 @@ bitflags! {
     pub struct MemberFlags: u64{
         /// Member is static (belongs to the class, not instances)
         const STATIC = 0x1;
-        /// Member is private (using JavaScript private field syntax)
-        const PRIVATE = 0x2;
+        // /// Member is private (using JavaScript private field syntax)
+        // const PRIVATE = 0x2;
     }
 }
 /// Trait for getting items and identifiers from a data structure.
@@ -232,39 +232,47 @@ pub struct Private {
     /// Source span
     pub span: Span,
 }
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum PrivateKind {
+    Private(SyntaxContext),
+    Public,
+}
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
-pub struct PropSym {
+pub struct PropSym<C = ()> {
     pub sym: Atom,
     /// Dummy when not a real span
     pub span: Span,
     /// Default when unneeded, such as as object properties
-    pub ctx: SyntaxContext,
+    pub ctx: C,
 }
 /// Object property key.
 ///
 /// Represents either a literal identifier key or a computed (dynamic) key expression.
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
 #[non_exhaustive]
-pub enum PropKey<I> {
+pub enum PropKey<I, C = ()> {
     /// Literal identifier key (e.g., `obj.foo`)
-    Lit(PropSym),
+    Lit(PropSym<C>),
     /// Computed/dynamic key (e.g., `obj[expr]`)
     Computed(I),
 }
-impl<I> PropKey<I> {
-    pub fn as_ref(&self) -> PropKey<&I> {
+impl<I, C: Clone> PropKey<I, C> {
+    pub fn as_ref(&self) -> PropKey<&I, C> {
         match self {
             PropKey::Lit(a) => PropKey::Lit(a.clone()),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
-    pub fn as_mut(&mut self) -> PropKey<&mut I> {
+    pub fn as_mut(&mut self) -> PropKey<&mut I, C> {
         match self {
             PropKey::Lit(a) => PropKey::Lit(a.clone()),
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
-    pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
+    pub fn map<J, E>(
+        self,
+        f: &mut (dyn FnMut(I) -> Result<J, E> + '_),
+    ) -> Result<PropKey<J, C>, E> {
         Ok(match self {
             PropKey::Lit(l) => PropKey::Lit(l),
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
@@ -506,7 +514,7 @@ pub enum Item<I, F> {
     /// Class definition
     Class {
         superclass: Option<I>,
-        members: Vec<(MemberFlags, PropKey<I>, PropVal<Option<I>, F>)>,
+        members: Vec<(MemberFlags, PropKey<I, PrivateKind>, PropVal<Option<I>, F>)>,
         constructor: Option<F>,
     },
     /// Array literal
