@@ -30,7 +30,7 @@
 //! [`Splatting`] - The inlining transformation state (should be renamed to `Inliner`)
 
 use crate::*;
-use portal_jsc_swc_util::ThisArg;
+use portal_jsc_common::syntax::ThisArg;
 use std::mem::replace;
 impl TFunc {
     pub fn splatted(&self, map: Mapper<'_>) -> TFunc {

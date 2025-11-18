@@ -5,6 +5,13 @@
 
 use crate::*;
 
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum ThisArg<T> {
+    This,
+    Val(T),
+    GlobalThis,
+}
+
 /// Represents how a symbol is imported from a module.
 ///
 /// JavaScript has three main import forms, each represented by a variant:

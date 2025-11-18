@@ -204,12 +204,7 @@ impl<T> Spanned for MakeSpanned<T> {
         self.span
     }
 }
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum ThisArg<T> {
-    This,
-    Val(T),
-    GlobalThis,
-}
+
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum ImportOr<T> {
     NotImport(T),
@@ -245,18 +240,6 @@ impl<T> AsMut<T> for ImportOr<T> {
                 module,
                 name,
             } => value,
-        }
-    }
-}
-impl<T: Spanned> Spanned for ImportOr<T> {
-    fn span(&self) -> Span {
-        match self {
-            ImportOr::NotImport(a) => a.span(),
-            ImportOr::Import {
-                value,
-                module,
-                name,
-            } => value.span(),
         }
     }
 }

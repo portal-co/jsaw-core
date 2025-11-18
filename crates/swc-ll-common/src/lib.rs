@@ -34,11 +34,9 @@ use std::sync::Arc;
 // use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::natives::Primordial;
-use portal_jsc_common::{natives::Native, syntax::Asm};
+use portal_jsc_common::{natives::Native, syntax::Asm, syntax::ThisArg};
 use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{
-    ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ThisArg, ses_method,
-};
+use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
 use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
 use swc_atoms::Atom;
