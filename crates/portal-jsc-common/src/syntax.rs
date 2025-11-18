@@ -9,7 +9,7 @@ use crate::*;
 pub enum ThisArg<T> {
     This,
     Val(T),
-    GlobalThis,
+    NoThisArg,
 }
 
 /// Represents how a symbol is imported from a module.

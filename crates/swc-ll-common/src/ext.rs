@@ -26,7 +26,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                     if *arrow {
                         ThisArg::This
                     } else {
-                        ThisArg::GlobalThis
+                        ThisArg::NoThisArg
                     },
                 )),
                 _ => None,
@@ -48,7 +48,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                                 PropVal::Item(i) => {
                                     self.func_and_this(i.clone(), None, ctx.clone())
                                 }
-                                PropVal::Method(m) => Some((m,ThisArg::GlobalThis)),
+                                PropVal::Method(m) => Some((m,ThisArg::NoThisArg)),
                                 _ => None,
                             }
                         })

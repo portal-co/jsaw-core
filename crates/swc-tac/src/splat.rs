@@ -212,7 +212,7 @@ impl Splatting {
                                                 self.this_val.clone()
                                             } else {
                                                 match arrow {
-                                                    ThisArg::GlobalThis => Some((
+                                                    ThisArg::NoThisArg => Some((
                                                         Atom::new("globalThis"),
                                                         Default::default(),
                                                     )),
