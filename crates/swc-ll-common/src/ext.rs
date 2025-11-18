@@ -152,7 +152,7 @@ pub trait ItemGetterExt<I, F,Ctx>: ItemGetter<I, F,Ctx> {
     }
 }
 impl<T: ItemGetter<I, F,Ctx> + ?Sized, I, F,Ctx> ItemGetterExt<I, F,Ctx> for T {}
-impl<I: Copy + Eq, F> Item<I, F> {
+impl<I: Clone + Eq, F> Item<I, F> {
     pub fn const_in<Ctx: Clone>(
         &self,
         semantics: &SemanticCfg,
@@ -182,8 +182,8 @@ impl<I: Copy + Eq, F> Item<I, F> {
                         _ => {}
                     }
                 }
-                let left = k.get_item(*l2,ctx.clone())?;
-                let right = k.get_item(*r2,ctx.clone())?;
+                let left = k.get_item(l2.clone(),ctx.clone())?;
+                let right = k.get_item(r2.clone(),ctx.clone())?;
                 let (left, right) = match (left, right) {
                     (Item::Undef, Item::Undef) => match op {
                         BinaryOp::EqEqEq | BinaryOp::EqEq => {
@@ -455,7 +455,7 @@ impl<I: Copy + Eq, F> Item<I, F> {
                         raw: None,
                     }));
                 }
-                let l = k.get_item(*arg,ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                let l = k.get_item(arg.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
                 match op {
                     swc_ecma_ast::UnaryOp::Minus => match l {
                         Lit::Num(n) => Some(Lit::Num(Number {
@@ -510,10 +510,10 @@ impl<I: Copy + Eq, F> Item<I, F> {
                 }
             }
             Item::Mem { obj, mem } => {
-                match k.get_item(*obj,ctx.clone()) {
+                match k.get_item(obj.clone(),ctx.clone()) {
                     Some(Item::Obj { members },
                    ) => match {
-                        let l = k.get_item(*mem,ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone()))?;
+                        let l = k.get_item(mem.clone(),ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone()))?;
                         let mut i = members.iter();
                         loop {
                             let Some(i) = i.next() else {
@@ -530,7 +530,7 @@ impl<I: Copy + Eq, F> Item<I, F> {
                                     raw: None,
                                 }),
                                 PropKey::Computed(c) => {
-                                    match k.get_item(*c,ctx.clone()).and_then(|w| w.const_in(semantics, k, span,ctx.clone())) {
+                                    match k.get_item(c.clone(),ctx.clone()).and_then(|w| w.const_in(semantics, k, span,ctx.clone())) {
                                         None => return None,
                                         Some(l) => l,
                                     }
@@ -543,7 +543,7 @@ impl<I: Copy + Eq, F> Item<I, F> {
                             let PropVal::Item(i) = &i.1 else {
                                 break None;
                             };
-                            break Some(*i);
+                            break Some(i.clone());
                         }
                     } {
                         Some(v) => {
@@ -553,7 +553,7 @@ impl<I: Copy + Eq, F> Item<I, F> {
                     },
                     _ => {}
                 }
-                match k.get_item(*mem,ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone())) {
+                match k.get_item(mem.clone(),ctx.clone()).and_then(|m| m.const_in(semantics, k, span,ctx.clone())) {
                         // Some(Lit::Str(s)) => match s.value.as_str()? {
                         //     "length" => match k.val(*obj) {
                         //         Some(i)
@@ -618,11 +618,11 @@ impl<I: Copy + Eq, F> Item<I, F> {
             {
                 match callee {
                     TCallee::Member { func, member } => {
-                        let member = k.get_item(*member,ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                        let member = k.get_item(member.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
                         let Lit::Str(s) = member else {
                             return None;
                         };
-                        let func = k.get_item(*func,ctx.clone())?;
+                        let func = k.get_item(func.clone(),ctx.clone())?;
                         match func {
                             _ => {
                                 let func = func.const_in(semantics, k, span,ctx.clone())?;
@@ -639,7 +639,7 @@ impl<I: Copy + Eq, F> Item<I, F> {
                                                     is_spread: s,
                                                 } = i.next()?;
                                                 let i =
-                                                    k.get_item(*n,ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
+                                                    k.get_item(n.clone(),ctx.clone())?.const_in(semantics, k, span,ctx.clone())?;
                                                 Some(i)
                                             })
                                             .fuse()
