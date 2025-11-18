@@ -80,6 +80,112 @@ pub struct Splatting {
     pub stack: BTreeSet<Ident>,
 }
 impl Splatting {
+    fn bud(
+        &self,
+        value: Ident,
+        arrow: ThisArg<(Atom, SyntaxContext)>,
+        output: &TCfg,
+        out_block: Id<TBlock>,
+        stmt: &TStmt,
+        d: Id<TBlock>,
+        argv: Ident,
+        func: &TFunc,
+    ) -> Self {
+        Splatting {
+            cache: Default::default(),
+            catch: output.blocks[out_block].post.catch.clone(),
+            ret: Some((stmt.left.clone(), d, argv)),
+            this_val: if (!func.cfg.has_this()) {
+                self.this_val.clone()
+            } else {
+                match arrow {
+                    ThisArg::NoThisArg => Some((Atom::new("globalThis"), Default::default())),
+                    ThisArg::This => self.this_val.clone(),
+                    ThisArg::Val(a) => Some(a),
+                }
+            },
+            stack: self.stack.iter().cloned().chain([value]).collect(),
+        }
+    }
+    fn sub(
+        &self,
+        mut out_block: Id<TBlock>,
+        output: &mut TCfg,
+        value: Ident,
+        arrow: ThisArg<(Atom, SyntaxContext)>,
+        stmt: &TStmt,
+        func: &TFunc,
+        args: &[SpreadOr<Ident>],
+        map: Mapper<'_>,
+    ) -> (Id<TBlock>) {
+        let argv = output.regs.alloc(());
+        output.decls.insert(argv.clone());
+        output.blocks[out_block].stmts.push(TStmt {
+            left: LId::Id { id: argv.clone() },
+            flags: ValFlags::SSA_LIKE,
+            right: Item::Arr {
+                members: args.iter().cloned().collect(),
+            },
+            span: Span::dummy_with_cmt(),
+        });
+        if args.iter().any(|a| a.is_spread) {
+            for (i, param) in func.params.iter().cloned().enumerate() {
+                output.blocks[out_block].stmts.push(TStmt {
+                    left: LId::Id { id: param.clone() },
+                    flags: Default::default(),
+                    right: Item::Lit {
+                        lit: Lit::Num(Number {
+                            value: i as f64,
+                            raw: None,
+                            span: Span::dummy_with_cmt(),
+                        }),
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+                output.blocks[out_block].stmts.push(TStmt {
+                    left: LId::Id { id: param.clone() },
+                    flags: Default::default(),
+                    right: Item::Mem {
+                        obj: argv.clone(),
+                        mem: param.clone(),
+                    },
+                    span: Span::dummy_with_cmt(),
+                });
+            }
+        } else {
+            for (param, arg) in func
+                .params
+                .iter()
+                .cloned()
+                .map(Some)
+                .chain(once(None).cycle())
+                .zip(args.iter().cloned().map(Some).chain(once(None).cycle()))
+            {
+                if param.is_none() && arg.is_none() {
+                    break;
+                }
+                if let Some(param) = param {
+                    output.blocks[out_block].stmts.push(TStmt {
+                        left: LId::Id { id: param },
+                        flags: Default::default(),
+                        right: match arg {
+                            None => Item::Undef,
+                            Some(SpreadOr { value: a, .. }) => Item::Just { id: a },
+                        },
+                        span: Span::dummy_with_cmt(),
+                    });
+                }
+            }
+        }
+        // if {
+        let mut d = output.blocks.alloc(Default::default());
+        output.blocks[d].post.catch = output.blocks[out_block].post.catch.clone();
+        let mut new = self.bud(value, arrow, output, out_block, stmt, d, argv, &func);
+        let c = new.translate(&func.cfg, output, func.entry, map.bud());
+        output.blocks[replace(&mut out_block, d)].post.term = TTerm::Jmp(c);
+        return out_block;
+        // continue 'b;
+    }
     pub fn translate(
         &mut self,
         input: &TCfg,
@@ -132,105 +238,16 @@ impl Splatting {
                             match $func {
                                 func => match $arrow {
                                     arrow => {
-                                        let argv = output.regs.alloc(());
-                                        output.decls.insert(argv.clone());
-                                        output.blocks[out_block].stmts.push(TStmt {
-                                            left: LId::Id { id: argv.clone() },
-                                            flags: ValFlags::SSA_LIKE,
-                                            right: Item::Arr {
-                                                members: args.iter().cloned().collect(),
-                                            },
-                                            span: Span::dummy_with_cmt(),
-                                        });
-                                        if args.iter().any(|a| a.is_spread) {
-                                            for (i, param) in
-                                                func.params.iter().cloned().enumerate()
-                                            {
-                                                output.blocks[out_block].stmts.push(TStmt {
-                                                    left: LId::Id { id: param.clone() },
-                                                    flags: Default::default(),
-                                                    right: Item::Lit {
-                                                        lit: Lit::Num(Number {
-                                                            value: i as f64,
-                                                            raw: None,
-                                                            span: Span::dummy_with_cmt(),
-                                                        }),
-                                                    },
-                                                    span: Span::dummy_with_cmt(),
-                                                });
-                                                output.blocks[out_block].stmts.push(TStmt {
-                                                    left: LId::Id { id: param.clone() },
-                                                    flags: Default::default(),
-                                                    right: Item::Mem {
-                                                        obj: argv.clone(),
-                                                        mem: param.clone(),
-                                                    },
-                                                    span: Span::dummy_with_cmt(),
-                                                });
-                                            }
-                                        } else {
-                                            for (param, arg) in func
-                                                .params
-                                                .iter()
-                                                .cloned()
-                                                .map(Some)
-                                                .chain(once(None).cycle())
-                                                .zip(
-                                                    args.iter()
-                                                        .cloned()
-                                                        .map(Some)
-                                                        .chain(once(None).cycle()),
-                                                )
-                                            {
-                                                if param.is_none() && arg.is_none() {
-                                                    break;
-                                                }
-                                                if let Some(param) = param {
-                                                    output.blocks[out_block].stmts.push(TStmt {
-                                                        left: LId::Id { id: param },
-                                                        flags: Default::default(),
-                                                        right: match arg {
-                                                            None => Item::Undef,
-                                                            Some(SpreadOr { value: a, .. }) => {
-                                                                Item::Just { id: a }
-                                                            }
-                                                        },
-                                                        span: Span::dummy_with_cmt(),
-                                                    });
-                                                }
-                                            }
-                                        }
-                                        // if {
-                                        let mut d = output.blocks.alloc(Default::default());
-                                        output.blocks[d].post.catch =
-                                            output.blocks[out_block].post.catch.clone();
-                                        let mut new = Splatting {
-                                            cache: Default::default(),
-                                            catch: output.blocks[out_block].post.catch.clone(),
-                                            ret: Some((stmt.left, d, argv)),
-                                            this_val: if (!func.cfg.has_this()) {
-                                                self.this_val.clone()
-                                            } else {
-                                                match arrow {
-                                                    ThisArg::NoThisArg => Some((
-                                                        Atom::new("globalThis"),
-                                                        Default::default(),
-                                                    )),
-                                                    ThisArg::This => self.this_val.clone(),
-                                                    ThisArg::Val(a) => Some(a),
-                                                }
-                                            },
-                                            stack: self
-                                                .stack
-                                                .iter()
-                                                .cloned()
-                                                .chain([$value])
-                                                .collect(),
-                                        };
-                                        let c =
-                                            new.translate(&func.cfg, output, func.entry, map.bud());
-                                        output.blocks[replace(&mut out_block, d)].post.term =
-                                            TTerm::Jmp(c);
+                                        out_block = self.sub(
+                                            out_block,
+                                            output,
+                                            $value,
+                                            arrow,
+                                            &stmt,
+                                            &func,
+                                            args,
+                                            map.bud(),
+                                        );
                                         continue 'b;
                                     }
                                 },
@@ -306,94 +323,23 @@ impl Splatting {
                                             arrow => {
                                                 if method.value.as_str().unwrap_or("nope") == "call"
                                                 {
-                                                    let mut args_itet = args
-                                                        .iter()
-                                                        .cloned()
-                                                        .map(Some)
-                                                        .chain(once(None).cycle());
-                                                    let this_arg = args_itet.next().unwrap();
-                                                    for (param, arg) in func
-                                                        .params
-                                                        .iter()
-                                                        .cloned()
-                                                        .map(Some)
-                                                        .chain(once(None).cycle())
-                                                        .zip(args_itet)
+                                                    if let SpreadOr {
+                                                        is_spread: false,
+                                                        value: this_arg,
+                                                    } = &args[0]
                                                     {
-                                                        if param.is_none() && arg.is_none() {
-                                                            break;
-                                                        }
-                                                        if let Some(param) = param {
-                                                            output.blocks[out_block].stmts.push(
-                                                                TStmt {
-                                                                    left: LId::Id { id: param },
-                                                                    flags: Default::default(),
-                                                                    right: match arg {
-                                                                        None => Item::Undef,
-                                                                        Some(SpreadOr {
-                                                                            value: a,
-                                                                            ..
-                                                                        }) => Item::Just { id: a },
-                                                                    },
-                                                                    span: Span::dummy_with_cmt(),
-                                                                },
-                                                            );
-                                                        }
+                                                        out_block = self.sub(
+                                                            out_block,
+                                                            output,
+                                                            $value,
+                                                            ThisArg::Val(this_arg.clone()),
+                                                            &stmt,
+                                                            &func,
+                                                            &args[1..],
+                                                            map.bud(),
+                                                        );
+                                                        continue 'b;
                                                     }
-                                                    let argv = output.regs.alloc(());
-                                                    output.decls.insert(argv.clone());
-                                                    output.blocks[out_block].stmts.push(TStmt {
-                                                        left: LId::Id { id: argv.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Arr {
-                                                            members: args.iter().cloned().collect(),
-                                                        },
-                                                        span: Span::dummy_with_cmt(),
-                                                    });
-                                                    // if {
-                                                    let mut d =
-                                                        output.blocks.alloc(Default::default());
-                                                    output.blocks[d].post.catch =
-                                                        output.blocks[out_block].post.catch.clone();
-                                                    let mut new = Splatting {
-                                                        cache: Default::default(),
-                                                        catch: output.blocks[out_block]
-                                                            .post
-                                                            .catch
-                                                            .clone(),
-                                                        ret: Some((stmt.left, d, argv)),
-                                                        this_val: if arrow || (!func.cfg.has_this())
-                                                        {
-                                                            self.this_val.clone()
-                                                        } else {
-                                                            match this_arg {
-                                                                None => Some((
-                                                                    Atom::new("globalThis"),
-                                                                    Default::default(),
-                                                                )),
-                                                                Some(SpreadOr {
-                                                                    value: arg,
-                                                                    ..
-                                                                }) => Some(arg),
-                                                            }
-                                                        },
-                                                        stack: self
-                                                            .stack
-                                                            .iter()
-                                                            .cloned()
-                                                            .chain([$value])
-                                                            .collect(),
-                                                    };
-                                                    let c = new.translate(
-                                                        &func.cfg,
-                                                        output,
-                                                        func.entry,
-                                                        map.bud(),
-                                                    );
-                                                    output.blocks[replace(&mut out_block, d)]
-                                                        .post
-                                                        .term = TTerm::Jmp(c);
-                                                    continue 'b;
                                                 }
                                             }
                                         },
