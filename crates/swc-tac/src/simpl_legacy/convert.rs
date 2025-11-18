@@ -271,7 +271,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                 .enumerate()
                 .map(|(idx, (a, b))| {
                     (
-                        PropKey::Lit(a.0.clone(),Span::dummy_with_cmt(),a.1),
+                        PropKey::Lit { sym: a.0.clone(), span: Span::dummy_with_cmt(), ctx: a.1 },
                         PropVal::Method({
                             let mut f: TFunc = Default::default();
                             for x in b {

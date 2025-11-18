@@ -240,26 +240,56 @@ pub struct Private {
 #[non_exhaustive]
 pub enum PropKey<I> {
     /// Literal identifier key (e.g., `obj.foo`)
-    Lit(Atom, Span,SyntaxContext),
+    Lit {
+        sym: Atom,
+        /// Dummy when not a real span
+        span: Span,
+        /// Default when unneeded, such as as object properties
+        ctx: SyntaxContext,
+    },
     /// Computed/dynamic key (e.g., `obj[expr]`)
     Computed(I),
 }
 impl<I> PropKey<I> {
     pub fn as_ref(&self) -> PropKey<&I> {
         match self {
-            PropKey::Lit(a,b,c) => PropKey::Lit(a.clone(),*b,*c),
+            PropKey::Lit {
+                sym: a,
+                span: b,
+                ctx: c,
+            } => PropKey::Lit {
+                sym: a.clone(),
+                span: *b,
+                ctx: *c,
+            },
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn as_mut(&mut self) -> PropKey<&mut I> {
         match self {
-            PropKey::Lit(a,b,c) => PropKey::Lit(a.clone(),*b,*c),
+            PropKey::Lit {
+                sym: a,
+                span: b,
+                ctx: c,
+            } => PropKey::Lit {
+                sym: a.clone(),
+                span: *b,
+                ctx: *c,
+            },
             PropKey::Computed(c) => PropKey::Computed(c),
         }
     }
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<PropKey<J>, E> {
         Ok(match self {
-            PropKey::Lit(l,m,n) => PropKey::Lit(l,m,n),
+            PropKey::Lit {
+                sym: l,
+                span: m,
+                ctx: n,
+            } => PropKey::Lit {
+                sym: l,
+                span: m,
+                ctx: n,
+            },
             PropKey::Computed(x) => PropKey::Computed(f(x)?),
         })
     }
@@ -1000,7 +1030,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.0 {
-                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
+                    swc_tac::PropKey::Lit { .. } => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1029,7 +1059,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(i.iter()),
                 };
                 let w: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
-                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
+                    swc_tac::PropKey::Lit { .. } => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1099,7 +1129,7 @@ impl<I, F> Item<I, F> {
                     PropVal::Item(i) => Box::new(once(i)),
                 };
                 let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.0 {
-                    swc_tac::PropKey::Lit(..) => Box::new(empty()),
+                    swc_tac::PropKey::Lit { .. } => Box::new(empty()),
                     swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                 };
                 v.chain(w)
@@ -1131,7 +1161,7 @@ impl<I, F> Item<I, F> {
                             PropVal::Item(i) => Box::new(i.iter_mut()),
                         };
                         let w: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
-                            swc_tac::PropKey::Lit(..) => Box::new(empty()),
+                            swc_tac::PropKey::Lit { .. } => Box::new(empty()),
                             swc_tac::PropKey::Computed(c) => Box::new(once(c)),
                         };
                         v.chain(w)

@@ -510,7 +510,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                                     break Some(false);
                                                 };
                                                 let l2 = match &i.0 {
-                                                    PropKey::Lit(l,s2,_) => Lit::Str(Str {
+                                                    PropKey::Lit { sym: l, span: s2, ctx: _ } => Lit::Str(Str {
                                                         span: span
                                                             .clone()
                                                             .unwrap_or(*s2),
@@ -796,7 +796,7 @@ impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
                                     break None;
                                 };
                                 let l2 = match &i.0 {
-                                    PropKey::Lit(l,s2,_) => Lit::Str(Str {
+                                    PropKey::Lit { sym: l, span: s2, ctx: _ } => Lit::Str(Str {
                                         span: span.clone().unwrap_or(*s2),
                                         value: l.clone().into(),
                                         raw: None,
