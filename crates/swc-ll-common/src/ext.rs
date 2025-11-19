@@ -1,3 +1,5 @@
+use std::mem::replace;
+
 use super::*;
 use swc_ecma_ast::op;
 use swc_ecma_utils::{ExprCtx, ExprExt, Value};
@@ -35,7 +37,16 @@ impl<I: Clone, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Verbatim {
         }
     }
 }
-
+#[derive(Clone)]
+pub enum ForceEquality {
+    Lit(Lit),
+    Undef,
+}
+#[derive(Clone)]
+pub enum ForceTarget {
+    Eq(ForceEquality),
+    Ne(ForceEquality),
+}
 /// Extension trait providing higher-level item resolution operations.
 ///
 /// This trait builds on `ItemGetter` to provide more complex queries like
@@ -238,6 +249,178 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
             }
         }
         return false;
+    }
+    fn force(
+        &mut self,
+        mut i: I,
+        ctx: Ctx,
+        l: &(dyn ItemResultGetter<I, F, Ctx, Lit> + '_),
+        mut target: ForceTarget,
+        trap: &mut bool,
+    ) where
+        I: Clone,
+        Item<I, F>: Clone,
+        Ctx: Clone,
+    {
+        'a: loop {
+            match &target {
+                ForceTarget::Eq(target) => match target {
+                    ForceEquality::Lit(target) => {
+                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone()) {
+                            if !lit.eq_ignore_span(&target) {
+                                *trap = true;
+                                return;
+                            }
+                        }
+                    }
+                    ForceEquality::Undef => {}
+                },
+
+                ForceTarget::Ne(target) => match target {
+                    ForceEquality::Lit(target) => {
+                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone()) {
+                            if lit.eq_ignore_span(&target) {
+                                *trap = true;
+                                return;
+                            }
+                        }
+                    }
+                    ForceEquality::Undef => {
+                        if let Some(Item::Undef) = self.get_item(i.clone(), ctx.clone()) {
+                            *trap = true;
+                            return;
+                        }
+                    }
+                },
+            }
+
+            let ir = self.get_mut_item(i.clone(), ctx.clone());
+            let Some(ir) = ir else {
+                return;
+            };
+            match (
+                match &target {
+                    ForceTarget::Eq(target) => replace(
+                        ir,
+                        match target {
+                            ForceEquality::Lit(target) => Item::Lit {
+                                lit: target.clone(),
+                            },
+                            ForceEquality::Undef => Item::Undef,
+                        },
+                    ),
+                    _ => ir.clone(),
+                },
+                target,
+            ) {
+                (
+                    Item::Bin {
+                        left,
+                        right,
+                        op: BinaryOp::EqEqEq,
+                    },
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: true })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: false }))),
+                )
+                | (
+                    Item::Bin {
+                        left,
+                        right,
+                        op: BinaryOp::NotEqEq,
+                    },
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: false })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: true }))),
+                ) => {
+                    if let Some(left) = l.get_result(&self, left.clone(), ctx.clone()) {
+                        i = right;
+                        target = ForceTarget::Eq(ForceEquality::Lit(left));
+                        continue 'a;
+                    } else if let Some(right) = l.get_result(&self, right.clone(), ctx.clone()) {
+                        i = left;
+                        target = ForceTarget::Eq(ForceEquality::Lit(right));
+                        continue 'a;
+                    }
+
+                    if let Some(Item::Undef) = self.get_item(left.clone(), ctx.clone()) {
+                        i = right;
+                        target = ForceTarget::Eq(ForceEquality::Undef);
+                        continue 'a;
+                    }
+                    if let Some(Item::Undef) = self.get_item(right.clone(), ctx.clone()) {
+                        i = left;
+                        target = ForceTarget::Eq(ForceEquality::Undef);
+                        continue 'a;
+                    }
+
+                    return;
+                }
+                (
+                    Item::Bin {
+                        left,
+                        right,
+                        op: BinaryOp::EqEqEq,
+                    },
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: false })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: true }))),
+                )
+                | (
+                    Item::Bin {
+                        left,
+                        right,
+                        op: BinaryOp::NotEqEq,
+                    },
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: true })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: false }))),
+                ) => {
+                    if let Some(left) = l.get_result(&self, left.clone(), ctx.clone()) {
+                        i = right;
+                        target = ForceTarget::Ne(ForceEquality::Lit(left));
+                        continue 'a;
+                    } else if let Some(right) = l.get_result(&self, right.clone(), ctx.clone()) {
+                        i = left;
+                        target = ForceTarget::Ne(ForceEquality::Lit(right));
+                        continue 'a;
+                    }
+                    if let Some(Item::Undef) = self.get_item(left.clone(), ctx.clone()) {
+                        i = right;
+                        target = ForceTarget::Ne(ForceEquality::Undef);
+                        continue 'a;
+                    }
+                    if let Some(Item::Undef) = self.get_item(right.clone(), ctx.clone()) {
+                        i = left;
+                        target = ForceTarget::Ne(ForceEquality::Undef);
+                        continue 'a;
+                    }
+                    return;
+                }
+                (
+                    Item::Select {
+                        cond,
+                        then,
+                        otherwise,
+                    },
+                    ForceTarget::Ne(target2),
+                ) => {
+                    self.force(
+                        otherwise,
+                        ctx.clone(),
+                        l,
+                        ForceTarget::Ne(target2.clone()),
+                        trap,
+                    );
+
+                    i = then;
+                    target = ForceTarget::Ne(target2);
+                    continue 'a;
+                }
+                (Item::Just { id }, target2) => {
+                    i = id;
+                    target = target2;
+                    continue 'a;
+                }
+                _ => return,
+            }
+        }
     }
 }
 impl<T: ItemGetter<I, F, Ctx> + ?Sized, I, F, Ctx> ItemGetterExt<I, F, Ctx> for T {}

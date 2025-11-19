@@ -36,7 +36,7 @@ pub enum Primordial {
     Math,
     /// `Math.fround` method (note: currently misspelled as "froumd")
     // TODO: Consider renaming to MathFround for consistency and fixing typo
-    Math_froumd,
+    Math_fround,
     /// `Math.imul` method (32-bit integer multiplication)
     // TODO: Consider renaming to MathImul for consistency
     Math_imul,
@@ -80,7 +80,7 @@ impl Primordial {
             (Self::Reflect, "get") => Some(&Self::Reflect_get),
             (Self::Reflect, "set") => Some(&Self::Reflect_set),
             (Self::Reflect, "apply") => Some(&Self::Reflect_apply),
-            (Self::Math, "fround") => Some(&Self::Math_froumd),
+            (Self::Math, "fround") => Some(&Self::Math_fround),
             (Self::Math, "imul") => Some(&Self::Math_imul),
             _ => None,
         }
@@ -108,32 +108,67 @@ impl Primordial {
 #[non_exhaustive]
 pub enum Native<E> {
     /// Assert that a value is a string (runtime or compile-time)
-    AssertString { value: E, comptime: bool },
+    AssertString {
+        value: E,
+        comptime: bool,
+    },
     /// Assert that a value is a number (runtime or compile-time)
-    AssertNumber { value: E, comptime: bool },
+    AssertNumber {
+        value: E,
+        comptime: bool,
+    },
     /// Assert that a value is a static function (runtime or compile-time)
-    AssertStaticFn { value: E, comptime: bool },
+    AssertStaticFn {
+        value: E,
+        comptime: bool,
+    },
     /// Fast addition operation (assumes numeric operands)
-    FastAdd { lhs: E, rhs: E },
+    FastAdd {
+        lhs: E,
+        rhs: E,
+    },
     /// Fast logical AND operation
-    FastAnd { lhs: E, rhs: E },
+    FastAnd {
+        lhs: E,
+        rhs: E,
+    },
     /// Fast logical OR operation
-    FastOr { lhs: E, rhs: E },
+    FastOr {
+        lhs: E,
+        rhs: E,
+    },
     /// Fast equality comparison
-    FastEq { lhs: E, rhs: E },
+    FastEq {
+        lhs: E,
+        rhs: E,
+    },
     /// Fast subtraction operation (assumes numeric operands)
-    FastSub { lhs: E, rhs: E },
+    FastSub {
+        lhs: E,
+        rhs: E,
+    },
     /// Fast multiplication operation
     /// When `imul` is true, uses 32-bit integer multiplication semantics
-    FastMul { lhs: E, rhs: E, imul: bool },
+    FastMul {
+        lhs: E,
+        rhs: E,
+        imul: bool,
+    },
     /// Fast left shift operation (assumes integer operands)
-    FastShl { lhs: E, rhs: E },
+    FastShl {
+        lhs: E,
+        rhs: E,
+    },
     /// Marker for functions that should be inlined
     ///
     /// `n` controls inlining depth:
     /// - If `n` is specified and non-zero: inline the function and replace references to `n` with `n - 1`
     /// - If `n` is specified and zero, or not specified: remove the marker while inlining
-    InlineMe { n: Option<E> },
+    InlineMe {
+        n: Option<E>,
+    },
+    /// Never executed; compilers can optimize this out
+    Trim,
 }
 impl Native<()> {
     pub fn all() -> impl Iterator<Item = Self> {
@@ -148,6 +183,7 @@ impl Native<()> {
             "fast_imul",
             "inlineme",
             "inlineme_n",
+            "trim",
         ]
         .into_iter()
         .filter_map(|a| Self::of(a))
@@ -212,6 +248,7 @@ impl Native<()> {
             },
             "inlineme" => Self::InlineMe { n: None },
             "inlineme_n" => Self::InlineMe { n: Some(()) },
+            "trim" => Self::Trim,
             _ => return None,
         })
     }
@@ -219,6 +256,7 @@ impl Native<()> {
 impl<E> Native<E> {
     pub fn key(&self) -> &'static str {
         match self {
+            Native::Trim => "trim",
             Native::AssertString { value, comptime } => {
                 if *comptime {
                     "comptime_string"
@@ -261,6 +299,7 @@ impl<E> Native<E> {
     }
     pub fn as_ref<'a>(&'a self) -> Native<&'a E> {
         match self {
+            Native::Trim => Native::Trim,
             Native::AssertString { value, comptime } => Native::AssertString {
                 value,
                 comptime: *comptime,
@@ -289,6 +328,7 @@ impl<E> Native<E> {
     }
     pub fn as_mut<'a>(&'a mut self) -> Native<&'a mut E> {
         match self {
+            Native::Trim => Native::Trim,
             Native::AssertString { value, comptime } => Native::AssertString {
                 value,
                 comptime: *comptime,
@@ -320,6 +360,7 @@ impl<E> Native<E> {
         f: &mut (dyn FnMut(E) -> Result<E2, Er> + '_),
     ) -> Result<Native<E2>, Er> {
         Ok(match self {
+            Native::Trim => Native::Trim,
             Native::AssertString { value, comptime } => Native::AssertString {
                 value: f(value)?,
                 comptime,
