@@ -1197,11 +1197,11 @@ impl ToTACConverter<'_> {
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id { id: tmp.clone() },
             flags: Default::default(),
-            right: Item::Class {
+            right: Item::Class(TClass {
                 superclass,
                 members,
                 constructor,
-            },
+            }),
             span: s.span(),
         });
         o.decls.insert(tmp.clone());

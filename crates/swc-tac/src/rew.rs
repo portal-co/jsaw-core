@@ -50,7 +50,7 @@ use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
-use swc_ll_common::{PrivateKind, PropSym};
+use swc_ll_common::{PrivateKind, PropSym, TClass};
 
 /// Options for TAC to CFG/JavaScript rewriting.
 ///
@@ -464,11 +464,11 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     })
                     .collect::<Result<_, E>>()?,
             }),
-            Item::Class {
+            Item::Class(TClass{
                 superclass,
                 members,
                 constructor,
-            } => Expr::Class(ClassExpr {
+            }) => Expr::Class(ClassExpr {
                 ident: None,
                 class: Box::new(Class {
                     span,

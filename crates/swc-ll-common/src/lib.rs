@@ -360,7 +360,12 @@ pub struct SpreadOr<I> {
     /// Whether this is a spread operation
     pub is_spread: bool,
 }
-
+#[derive(Clone,Debug,PartialEq, Eq)]
+pub struct TClass<I,F>{
+    pub superclass: Option<I>,
+    pub members: Vec<(MemberFlags, PropKey<I, PrivateKind>, PropVal<Option<I>, F>)>,
+    pub constructor: Option<F>,
+}
 /// Core operation/value type for TAC and SSA.
 ///
 /// The `Item` enum represents all operations and values in the TAC and SSA
@@ -413,11 +418,7 @@ pub enum Item<I, F> {
         members: Vec<(PropKey<I>, PropVal<I, F>)>,
     },
     /// Class definition
-    Class {
-        superclass: Option<I>,
-        members: Vec<(MemberFlags, PropKey<I, PrivateKind>, PropVal<Option<I>, F>)>,
-        constructor: Option<F>,
-    },
+    Class(TClass<I,F>),
     /// Array literal
     Arr { members: Vec<SpreadOr<I>> },
     /// Static array slice (optimization for known slice operations)
@@ -526,11 +527,11 @@ impl<I, F> Item<I, F> {
             Item::Undef => Item::Undef,
             Item::This => Item::This,
             Item::Arguments => Item::Arguments,
-            Item::Class {
+            Item::Class (TClass{
                 superclass,
                 members,
                 constructor,
-            } => Item::Class {
+            }) => Item::Class(TClass {
                 superclass: superclass.as_ref(),
                 constructor: constructor.as_ref(),
                 members: members
@@ -549,7 +550,7 @@ impl<I, F> Item<I, F> {
                         )
                     })
                     .collect(),
-            },
+            }),
             Item::Select {
                 cond,
                 then,
@@ -658,11 +659,11 @@ impl<I, F> Item<I, F> {
             Item::Undef => Item::Undef,
             Item::This => Item::This,
             Item::Arguments => Item::Arguments,
-            Item::Class {
+            Item::Class(TClass {
                 superclass,
                 members,
                 constructor,
-            } => Item::Class {
+            }) => Item::Class(TClass {
                 superclass: superclass.as_mut(),
                 constructor: constructor.as_mut(),
                 members: members
@@ -681,7 +682,7 @@ impl<I, F> Item<I, F> {
                         )
                     })
                     .collect(),
-            },
+            }),
             Item::StaticSubArray {
                 begin,
                 end,
@@ -805,11 +806,11 @@ impl<I, F> Item<I, F> {
                 value: value.map(&mut |a| f(cx, a))?,
             },
             Item::This => Item::This,
-            Item::Class {
+            Item::Class(TClass{
                 superclass,
                 members,
                 constructor,
-            } => Item::Class {
+            }) => Item::Class(TClass{
                 superclass: match superclass {
                     None => None,
                     Some(a) => Some(f(cx, a)?),
@@ -837,7 +838,7 @@ impl<I, F> Item<I, F> {
                         ))
                     })
                     .collect::<Result<_, E>>()?,
-            },
+            }),
             Item::StaticSubArray {
                 begin,
                 end,
@@ -865,11 +866,11 @@ impl<I, F> Item<I, F> {
                 PropVal::Getter(f) | PropVal::Setter(f) | PropVal::Method(f) => Some(f),
                 _ => None,
             })),
-            Item::Class {
+            Item::Class(TClass{
                 superclass,
                 members,
                 constructor,
-            } => Box::new(
+            }) => Box::new(
                 members
                     .iter()
                     .filter_map(|m| match &m.2 {
@@ -933,11 +934,11 @@ impl<I, F> Item<I, F> {
                 Box::new(empty())
             }
             Item::Asm { value } => Box::new(value.refs()),
-            Item::Class {
+            Item::Class(TClass{
                 superclass,
                 members,
                 constructor,
-            } => Box::new(superclass.iter().chain(members.iter().flat_map(|m| {
+            }) => Box::new(superclass.iter().chain(members.iter().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &I> + '_> = match &m.2 {
                     PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
                         Box::new(empty())
@@ -1032,11 +1033,11 @@ impl<I, F> Item<I, F> {
                 Box::new(empty())
             }
             Item::Asm { value } => Box::new(value.refs_mut()),
-            Item::Class {
+            Item::Class(TClass{
                 superclass,
                 members,
                 constructor,
-            } => Box::new(
+            }) => Box::new(
                 superclass
                     .iter_mut()
                     .chain(members.iter_mut().flat_map(|m| {
