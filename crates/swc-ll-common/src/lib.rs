@@ -82,6 +82,44 @@ pub trait ItemGetter<I, F, Ctx = ()> {
     where
         Ctx: 'b;
 }
+impl<'a,I,F,Ctx,T: ItemGetter<I,F,Ctx> + ?Sized> ItemGetter<I,F,Ctx> for &'a T{
+    fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>>
+    where
+        Ctx: 'b {
+        (&**self).get_item(i, ctx)
+    }
+
+    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>>
+    where
+        Ctx: 'b {
+        None
+    }
+
+    fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident>
+    where
+        Ctx: 'b {
+        (&**self).get_ident(i, ctx)
+    }
+}
+impl<'a,I,F,Ctx,T: ItemGetter<I,F,Ctx> + ?Sized> ItemGetter<I,F,Ctx> for &'a mut T{
+    fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>>
+    where
+        Ctx: 'b {
+        (&**self).get_item(i, ctx)
+    }
+
+    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>>
+    where
+        Ctx: 'b {
+        (&mut **self).get_mut_item(i, ctx)
+    }
+
+    fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident>
+    where
+        Ctx: 'b {
+        (&**self).get_ident(i, ctx)
+    }
+}
 pub mod ext;
 /// Private field identifier (JavaScript private class fields).
 ///

@@ -32,6 +32,7 @@
 use crate::*;
 use portal_jsc_common::syntax::ThisArg;
 use std::mem::replace;
+use swc_ll_common::ext::Verbatim;
 impl TFunc {
     pub fn splatted(&self, map: Mapper<'_>) -> TFunc {
         let mut s = Splatting::default();
@@ -278,7 +279,7 @@ impl Splatting {
                                         }
                                     }
                                     if let Some((func, arrow)) =
-                                        output.func_and_this(value.clone(), None, ())
+                                        output.func_and_this(value.clone(), None, (), &Verbatim)
                                     {
                                         func!(value, func.clone(), arrow);
                                         // }
@@ -296,9 +297,12 @@ impl Splatting {
                             func: value,
                             member,
                         } => {
-                            if let Some((func, arrow)) =
-                                output.func_and_this(value.clone(), Some(member.clone()), ())
-                            {
+                            if let Some((func, arrow)) = output.func_and_this(
+                                value.clone(),
+                                Some(member.clone()),
+                                (),
+                                &Verbatim,
+                            ) {
                                 func!(value.clone(), func.clone(), arrow);
                                 // }
                             }
