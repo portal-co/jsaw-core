@@ -20,9 +20,9 @@ pub trait ItemResultGetter<I: Clone, F, Ctx: Clone, R> {
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Debug)]
 pub struct Verbatim;
-#[derive(Clone, Default)]
-pub struct Following {
-    pub semantics: SemanticCfg,
+#[derive(Clone)]
+pub struct Following<'a> {
+    pub semantics: &'a SemanticCfg,
 }
 impl<I: Clone, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Verbatim {
     fn get_lit(
@@ -38,7 +38,7 @@ impl<I: Clone, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Verbatim {
         }
     }
 }
-impl<I: Clone + Eq, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Following {
+impl<'a, I: Clone + Eq, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Following<'a> {
     fn get_lit(
         &self,
         // semantics: &SemanticCfg,
