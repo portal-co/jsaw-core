@@ -1,4 +1,20 @@
 use super::*;
+#[derive(Clone)]
+pub struct Following<'a> {
+    pub semantics: &'a SemanticCfg,
+}
+impl<'a, I: Clone + Eq, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Following<'a> {
+    fn get_result(
+        &self,
+        // semantics: &SemanticCfg,
+        g: &(dyn ItemGetter<I, F, Ctx> + '_),
+        i: I,
+        ctx: Ctx,
+    ) -> Option<Lit> {
+        g.get_item(i, ctx.clone())?
+            .const_in(&self.semantics, g, Span::dummy_with_cmt(), ctx)
+    }
+}
 impl<I: Clone + Eq, F> Item<I, F> {
     pub fn const_in<Ctx: Clone>(
         &self,

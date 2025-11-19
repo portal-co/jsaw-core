@@ -10,7 +10,7 @@ pub fn default_ctx() -> ExprCtx {
     }
 }
 pub trait ItemResultGetter<I: Clone, F, Ctx: Clone, R> {
-    fn get_lit(
+    fn get_result(
         &self,
         // semantics: &SemanticCfg,
         g: &(dyn ItemGetter<I, F, Ctx> + '_),
@@ -20,12 +20,9 @@ pub trait ItemResultGetter<I: Clone, F, Ctx: Clone, R> {
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Debug)]
 pub struct Verbatim;
-#[derive(Clone)]
-pub struct Following<'a> {
-    pub semantics: &'a SemanticCfg,
-}
+
 impl<I: Clone, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Verbatim {
-    fn get_lit(
+    fn get_result(
         &self,
         // semantics: &SemanticCfg,
         g: &(dyn ItemGetter<I, F, Ctx> + '_),
@@ -38,18 +35,7 @@ impl<I: Clone, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Verbatim {
         }
     }
 }
-impl<'a, I: Clone + Eq, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Following<'a> {
-    fn get_lit(
-        &self,
-        // semantics: &SemanticCfg,
-        g: &(dyn ItemGetter<I, F, Ctx> + '_),
-        i: I,
-        ctx: Ctx,
-    ) -> Option<Lit> {
-        g.get_item(i, ctx.clone())?
-            .const_in(&self.semantics, g, Span::dummy_with_cmt(), ctx)
-    }
-}
+
 /// Extension trait providing higher-level item resolution operations.
 ///
 /// This trait builds on `ItemGetter` to provide more complex queries like
@@ -79,7 +65,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                 _ => None,
             },
             Some(mem) => {
-                let Lit::Str(str) = l.get_lit(&self, mem.clone(), ctx.clone())? else {
+                let Lit::Str(str) = l.get_result(&self, mem.clone(), ctx.clone())? else {
                     return None;
                 };
                 match match self.get_item(i.clone(), ctx.clone())? {
@@ -122,7 +108,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
         match self.get_ident(i.clone(), ctx.clone()) {
             Some((a, _)) => Primordial::global(&a),
             _ => match self.get_item(i, ctx.clone())? {
-                Item::Mem { obj, mem } => match l.get_lit(&self, mem.clone(), ctx.clone()) {
+                Item::Mem { obj, mem } => match l.get_result(&self, mem.clone(), ctx.clone()) {
                     Some(Lit::Str(s)) => self
                         .primordial(obj.clone(), ctx, l)?
                         .get_perfect(s.value.as_str()?),
@@ -168,7 +154,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                 func = id;
             }
             let n = loop {
-                let id = match l.get_lit(&self, member.clone(), ctx.clone()) {
+                let id = match l.get_result(&self, member.clone(), ctx.clone()) {
                     Some(Lit::Str(s)) => {
                         if let Some(m) = s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
                         {
