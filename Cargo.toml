@@ -20,6 +20,7 @@ version = "0.8.0-pre.9"
 edition = "2024"
 license = "MPL-2.0"
 description = "ECMAScript IR"
+repository = "https://github.com/portal-co/jsaw-core.git"
 
 
 [workspace.dependencies]
