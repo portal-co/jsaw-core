@@ -22,7 +22,7 @@ use portal_jsc_common::natives::Native;
 pub use portal_jsc_common::{semantic::SemanticFlags, semantic::SemanticTarget, syntax::ImportMap};
 use portal_solutions_swibb::ConstCollector;
 use std::{collections::BTreeMap, mem::take};
-use swc_atoms::Atom;
+use swc_atoms::{Atom, Wtf8Atom};
 use swc_common::{Span, Spanned};
 use swc_ecma_ast::{BinaryOp, Bool, CallExpr, Expr, Id, Lit, MemberExpr, MemberProp, ModuleItem};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
@@ -268,12 +268,12 @@ pub fn mangle((a, b): &Id) -> Atom {
     Atom::new(format!("{}${a}", b.as_u32()))
 }
 pub trait ImportMapper {
-    fn import_of(&self, cx: &Id) -> Option<(Atom, ImportMap<Atom>)>;
+    fn import_of(&self, cx: &Id) -> Option<(Wtf8Atom, ImportMap<Atom>)>;
 }
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct NoImportMapper {}
 impl ImportMapper for NoImportMapper {
-    fn import_of(&self, cx: &Id) -> Option<(Atom, ImportMap<Atom>)> {
+    fn import_of(&self, cx: &Id) -> Option<(Wtf8Atom, ImportMap<Atom>)> {
         None
     }
 }
