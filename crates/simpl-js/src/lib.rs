@@ -608,7 +608,7 @@ impl Conv for Expr {
                             keys: vec![],
                         }
                         .into(),
-                        module: a,
+                        module: (&*a.to_atom_lossy()).clone(),
                         name: b,
                     },
                 }),
