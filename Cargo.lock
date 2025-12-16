@@ -392,6 +392,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "impl-trait-for-tuples"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0eb5a3343abf848c0984fe4604b2b105da9539376e24fc0a3b0007411ae4fd9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -862,8 +873,9 @@ checksum = "bd561b504f0baa18b1b44c277bb216367ce6176900117aa0041d6a22f9c8f67a"
 [[package]]
 name = "portal-solutions-swibb"
 version = "0.5.0"
-source = "git+https://github.com/portal-co/swibb.git#e2a67b0f7db0e0e93cab2d71f6f05788db7a9244"
+source = "git+https://github.com/portal-co/swibb.git#b97a5fa7d6837792991e05516a8795d7f36d72e8"
 dependencies = [
+ "impl-trait-for-tuples",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
