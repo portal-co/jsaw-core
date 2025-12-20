@@ -52,19 +52,11 @@ ssa-impls-03 =  { version = "0.3.0-alpha.2", package = "ssa-impls"  ,git="https:
 ssa-reloop-03 = { version = "0.3.0-alpha.2", package = "ssa-reloop" ,git="https://github.com/portal-co/codegen-utils.git",branch="dev/0.3"}
 
 
-proc-macro2 = "^1.0.88"
-quasiquote = "^0.1.1"
-quote = "^1.0.37"
-syn = "^2.0.82"
-
 typenum = "^1.18.0"
 bitflags = {version="^2.8.0",default-features=false}
 relooper = "^0.1.0"
 cityhasher = "^0.1.0"
 
-portal-pc-waffle = "^0.5.4"
-px-llvm-codegen-utils-core = "^0.1.4"
-px-llvm-codegen-utils-info = "^0.1.4"
 portal-pc-asm-common = "^0.1.0"
 bitvec = "^1.0.1"
 instability = "^0.3.7"
