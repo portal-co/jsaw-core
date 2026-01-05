@@ -135,7 +135,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 [[package]]
 name = "cfg-traits"
 version = "0.2.3"
-source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#b4f810fe7a857d6638dd3107c5487ae4a75a245b"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#fbf0449d0935310fc92c3bb8069db260d01501d0"
 dependencies = [
  "arena-traits",
  "either",
@@ -873,7 +873,7 @@ checksum = "bd561b504f0baa18b1b44c277bb216367ce6176900117aa0041d6a22f9c8f67a"
 [[package]]
 name = "portal-solutions-swibb"
 version = "0.5.0"
-source = "git+https://github.com/portal-co/swibb.git#0dfe26ff428cd2d7af87eafd495d5f4082b97785"
+source = "git+https://github.com/portal-co/swibb.git#8cba5664d5b3029ad9a9f4ad984d5613b480dc6c"
 dependencies = [
  "impl-trait-for-tuples",
  "swc_atoms",
@@ -1088,7 +1088,7 @@ dependencies = [
 [[package]]
 name = "ssa-impls"
 version = "0.2.3"
-source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#b4f810fe7a857d6638dd3107c5487ae4a75a245b"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#fbf0449d0935310fc92c3bb8069db260d01501d0"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1098,7 +1098,7 @@ dependencies = [
 [[package]]
 name = "ssa-reloop"
 version = "0.2.3"
-source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#b4f810fe7a857d6638dd3107c5487ae4a75a245b"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#fbf0449d0935310fc92c3bb8069db260d01501d0"
 dependencies = [
  "arena-traits",
  "cfg-traits",
@@ -1110,7 +1110,7 @@ dependencies = [
 [[package]]
 name = "ssa-traits"
 version = "0.2.3"
-source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#b4f810fe7a857d6638dd3107c5487ae4a75a245b"
+source = "git+https://github.com/portal-co/codegen-utils.git?branch=master#fbf0449d0935310fc92c3bb8069db260d01501d0"
 dependencies = [
  "anyhow",
  "arena-traits",
