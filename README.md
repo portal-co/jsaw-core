@@ -152,3 +152,12 @@ This is part of the Portal Compiler Organization projects. Contributions should 
 ## Status
 
 Version 0.8.0-pre.9 - Pre-release development version. APIs may change between pre-release versions.
+
+## Goals
+- [ ] Add project goals
+
+## Progress
+- [ ] Initial setup
+
+---
+*AI assisted*
