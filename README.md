@@ -154,10 +154,12 @@ This is part of the Portal Compiler Organization projects. Contributions should 
 Version 0.8.0-pre.9 - Pre-release development version. APIs may change between pre-release versions.
 
 ## Goals
-- [ ] Add project goals
+- [ ] Provide a multi-stage compilation pipeline for ECMAScript
+- [ ] Support SWC-based parsing and IR lowering
 
 ## Progress
-- [ ] Initial setup
+- [ ] Core compiler crates implemented (`swc-cfg`, `swc-ssa`, `swc-tac`)
+- [ ] Documentation for architecture and usage provided
 
 ---
 *AI assisted*
