@@ -39,311 +39,14 @@ use swc_ecma_ast::{
 pub struct ToTACConverter<'a> {
     /// Mapping from CFG block IDs to TAC block IDs
     pub map: BTreeMap<Id<Block>, Id<TBlock>>,
-    /// Optional return target (identifier and block)
-    pub ret_to: Option<(Ident, Id<TBlock>)>,
-    /// Exception handler for current context
-    pub recatch: TCatch,
-    /// Optional `this` binding
-    pub this: Option<Ident>,
-    /// Mapper providing conversion utilities
+
+    pub core: ToTACConverterCore<'a>,
+}
+#[non_exhaustive]
+pub struct ToTACConverterCore<'a> {
     pub mapper: Mapper<'a>,
 }
-impl ToTACConverter<'_> {
-    pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
-        self.convert_block(i, o, b)
-    }
-    fn convert_cond_prop(
-        &mut self,
-        i: &Cfg,
-        o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
-        test: Ident,
-        cons: &MemberProp,
-        alt: &MemberProp,
-        span: Span,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
-        match (cons, alt) {
-            (MemberProp::Computed(cons), MemberProp::Computed(alt)) => {
-                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &alt.expr, span)
-            }
-            (MemberProp::Ident(a), MemberProp::Ident(b)) => {
-                let [a, b] = [a, b].map(|v| {
-                    let val = o.regs.alloc(());
-                    o.decls.insert(val.clone());
-                    o.blocks[t].stmts.push(TStmt {
-                        left: LId::Id { id: val.clone() },
-                        flags: ValFlags::SSA_LIKE,
-                        right: Item::Lit {
-                            lit: Lit::Str(Str {
-                                span: v.span,
-                                value: v.sym.clone().into(),
-                                raw: None,
-                            }),
-                        },
-                        span,
-                    });
-                    val
-                });
-                let mut tmp = o.regs.alloc(());
-                o.blocks[t].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Select {
-                        cond: test.clone(),
-                        then: a,
-                        otherwise: b,
-                    },
-                    span,
-                });
-                o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
-            }
-            (MemberProp::Computed(cons), alt) => {
-                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &imp(alt.clone()), span)
-            }
-            (cons, MemberProp::Computed(alt)) => {
-                self.convert_cond_expr(i, o, b, t, test, &imp(cons.clone()), &alt.expr, span)
-            }
-            _ => todo!(),
-        }
-    }
-    /// Converts a conditional expression (CondExpr) to TAC, factoring out test, cons, alt, and span.
-    fn convert_cond_expr(
-        &mut self,
-        i: &Cfg,
-        o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
-        test: Ident,
-        cons: &Expr,
-        alt: &Expr,
-        span: Span,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
-        let v = test;
-        match o.def(LId::Id { id: v.clone() }) {
-            Some(Item::Lit { lit: Lit::Bool(b2) }) => {
-                let w;
-                (w, t) = self.expr(i, o, b, t, if b2.value { cons } else { alt })?;
-                return Ok((w, t));
-            }
-            _ => {}
-        }
-        fn try_get_frames<'a, 'b: 'a>(
-            a: &'a Expr,
-            b: &'b Expr,
-        ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
-            if (a.is_pure() && b.is_pure()) || a.eq_ignore_span(b) {
-                Some((vec![], a, b))
-            } else {
-                match (a, b) {
-                    (Expr::Assign(a), Expr::Assign(b))
-                        if a.left.eq_ignore_span(&b.left)
-                            && a.left.as_simple().is_some_and(|s| s.is_ident())
-                            && a.op == b.op =>
-                    {
-                        let (mut e, a2, b) = try_get_frames(&a.right, &b.right)?;
-                        e.push(Frame::Assign(&a.left, a.op));
-                        Some((e, a2, b))
-                    }
-                    (Expr::Member(a), Expr::Member(b)) if a.prop.eq_ignore_span(&b.prop) => {
-                        let (mut e, a2, b) = try_get_frames(&a.obj, &b.obj)?;
-                        e.push(Frame::Member(&a.prop));
-                        Some((e, a2, b))
-                    }
-                    (Expr::Member(a), Expr::Member(b))
-                        if !(a.prop.is_private_name() || b.prop.is_private_name()) =>
-                    {
-                        let (mut e, a2, b2) = try_get_frames(&a.obj, &b.obj)?;
-                        e.push(Frame::Member2(&a.prop, &b.prop));
-                        Some((e, a2, b2))
-                    }
-                    (Expr::Await(a), Expr::Await(b)) => {
-                        let (mut e, a2, b2) = try_get_frames(&a.arg, &b.arg)?;
-                        e.push(Frame::Await);
-                        Some((e, a2, b2))
-                    }
-                    (Expr::Yield(a), Expr::Yield(b)) if a.delegate == b.delegate => {
-                        let (mut e, a2, b2) = try_get_frames(a.arg.as_ref()?, b.arg.as_ref()?)?;
-                        e.push(Frame::Yield {
-                            delegate: a.delegate,
-                        });
-                        Some((e, a2, b2))
-                    }
-                    (Expr::Cond(a), Expr::Cond(b)) => {
-                        let (mut e, a2, b2) = try_get_frames(&a.test, &b.test)?;
-                        let (fra, thena, elsea) = try_get_frames(&a.cons, &a.alt)?;
-                        let (frb, thenb, elseb) = try_get_frames(&b.cons, &b.alt)?;
-                        e.push(Frame::Cond {
-                            thena,
-                            elsea,
-                            fra,
-                            thenb,
-                            elseb,
-                            frb,
-                        });
-                        Some((e, a2, b2))
-                    }
-                    (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
-                        let (Callee::Expr(a2), Callee::Expr(b2)) = (&a.callee, &b.callee) else {
-                            return None;
-                        };
-                        match (&**a2, &**b2) {
-                            (Expr::Member(a2), Expr::Member(b2))
-                                if a2.prop.eq_ignore_span(&b2.prop) =>
-                            {
-                                let (mut e, a2_, b2) = try_get_frames(&a2.obj, &b2.obj)?;
-                                e.push(Frame::CallMember(
-                                    &a2.prop,
-                                    a.args.iter().map(|a| &*a.expr).collect(),
-                                    b.args.iter().map(|a| &*a.expr).collect(),
-                                ));
-                                Some((e, a2_, b2))
-                            }
-                            (Expr::Member(aa), Expr::Member(bb))
-                                if !aa.prop.is_private_name() && !bb.prop.is_private_name() =>
-                            {
-                                let (mut e, a2_, b2) = try_get_frames(&aa.obj, &bb.obj)?;
-                                e.push(Frame::CallMember2(
-                                    a.args.iter().map(|a| &*a.expr).collect(),
-                                    &aa.prop,
-                                    b.args.iter().map(|a| &*a.expr).collect(),
-                                    &bb.prop,
-                                ));
-                                Some((e, a2_, b2))
-                            }
-                            (Expr::Member(_), _) | (_, Expr::Member(_)) => None,
-                            (Expr::Ident(i), j) | (j, Expr::Ident(i))
-                                if !i.optional
-                                    && i.sym == "eval"
-                                    && match j {
-                                        Expr::Ident(j) => !j.eq_ignore_span(i),
-                                        _ => true,
-                                    } =>
-                            {
-                                None
-                            }
-                            (a2, b2) => {
-                                let (mut e, a2, b2) = try_get_frames(a2, b2)?;
-                                e.push(Frame::Call(
-                                    a.args.iter().map(|a| &*a.expr).collect(),
-                                    b.args.iter().map(|a| &*a.expr).collect(),
-                                ));
-                                Some((e, a2, b2))
-                            }
-                        }
-                    }
-                    _ => None,
-                }
-            }
-        }
-        if let Some((frames, c2, a2)) = try_get_frames(&cons, &alt) {
-            let cons;
-            let alt;
-            (cons, t) = self.expr(i, o, b, t, &c2)?;
-            (alt, t) = self.expr(i, o, b, t, &a2)?;
-            let mut tmp = o.regs.alloc(());
-            o.blocks[t].stmts.push(TStmt {
-                left: LId::Id { id: tmp.clone() },
-                flags: ValFlags::SSA_LIKE,
-                right: Item::Select {
-                    cond: v.clone(),
-                    then: cons,
-                    otherwise: alt,
-                },
-                span,
-            });
-            o.decls.insert(tmp.clone());
-            for f in frames.into_iter() {
-                (tmp, t) = self.frame(i, o, b, t, f, tmp, v.clone())?;
-            }
-            return Ok((tmp, t));
-        };
-        let then = o.blocks.alloc(TBlock {
-            stmts: vec![],
-            post: TPostecedent {
-                catch: o.blocks[t].post.catch.clone(),
-                term: Default::default(),
-                orig_span: Some(span),
-            },
-        });
-        let els = o.blocks.alloc(TBlock {
-            stmts: vec![],
-            post: TPostecedent {
-                catch: o.blocks[t].post.catch.clone(),
-                term: Default::default(),
-                orig_span: Some(span),
-            },
-        });
-        let done = o.blocks.alloc(TBlock {
-            stmts: vec![],
-            post: TPostecedent {
-                catch: o.blocks[t].post.catch.clone(),
-                term: Default::default(),
-                orig_span: Some(span),
-            },
-        });
-        o.blocks[t].post.term = TTerm::CondJmp {
-            cond: v,
-            if_true: then,
-            if_false: els,
-        };
-        let tmp = o.regs.alloc(());
-        o.decls.insert(tmp.clone());
-        let (a, then) = self.expr(i, o, b, then, cons)?;
-        o.blocks[then].stmts.push(TStmt {
-            left: LId::Id { id: tmp.clone() },
-            flags: ValFlags::SSA_LIKE,
-            right: Item::Just { id: a },
-            span,
-        });
-        o.blocks[then].post.term = TTerm::Jmp(done);
-        let (a, els) = self.expr(i, o, b, els, alt)?;
-        o.blocks[els].stmts.push(TStmt {
-            left: LId::Id { id: tmp.clone() },
-            flags: ValFlags::SSA_LIKE,
-            right: Item::Just { id: a },
-            span,
-        });
-        o.blocks[els].post.term = TTerm::Jmp(done);
-        Ok((tmp, done))
-    }
-    // Converts a MemberProp to an Expr or literal, as needed
-    fn member_prop_expr(
-        &mut self,
-        i: &Cfg,
-        o: &mut TCfg,
-        b: Id<Block>,
-        t: Id<TBlock>,
-        prop: &MemberProp,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
-        match prop {
-            MemberProp::Ident(ident_name) => {
-                let lit = Lit::Str(Str {
-                    span: ident_name.span,
-                    value: ident_name.sym.clone().into(),
-                    raw: None,
-                });
-                let tmp = o.regs.alloc(());
-                o.blocks[t].stmts.push(TStmt {
-                    left: LId::Id { id: tmp.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::Lit { lit },
-                    span: ident_name.span,
-                });
-                o.decls.insert(tmp.clone());
-                Ok((tmp, t))
-            }
-            MemberProp::PrivateName(private_name) => {
-                // TODO: handle private names if needed
-                anyhow::bail!("PrivateName not supported in member_prop_expr")
-            }
-            MemberProp::Computed(computed_prop_name) => {
-                self.expr(i, o, b, t, &*computed_prop_name.expr)
-            }
-        }
-    }
-    // Private helper for tail call conversion
+impl ToTACConverterCore<'_> {
     fn convert_call_expr(
         &mut self,
         i: &Cfg,
@@ -401,122 +104,6 @@ impl ToTACConverter<'_> {
             })
             .collect::<anyhow::Result<_>>()?;
         Ok((callee, args, t))
-    }
-    // Private helper for block/term conversion
-    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
-        loop {
-            if let Some(a) = self.map.get(&b) {
-                return Ok(*a);
-            }
-            let t = o.blocks.alloc(TBlock {
-                stmts: vec![],
-                post: TPostecedent {
-                    catch: self.recatch.clone(),
-                    term: Default::default(),
-                    orig_span: i.blocks[b].end.orig_span.clone(),
-                },
-            });
-            self.map.insert(b, t);
-            if let Catch::Jump { pat, k } = &i.blocks[b].end.catch {
-                match pat {
-                    Pat::Ident(id) => {
-                        let k = self.trans(i, o, *k)?;
-                        o.blocks[t].post.catch = TCatch::Jump {
-                            pat: id.id.clone().into(),
-                            k,
-                        };
-                    }
-                    _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
-                }
-            }
-            let mut t = t;
-            for s in i.blocks[b].stmts.iter() {
-                t = self.stmt(i, o, b, t, s)?;
-            }
-            let term = self.convert_terminator(i, o, b, t)?;
-            o.blocks[t].post.term = term;
-        }
-    }
-    // Private helper for terminator conversion
-    fn convert_terminator(
-        &mut self,
-        i: &Cfg,
-        o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
-    ) -> anyhow::Result<TTerm> {
-        match &i.blocks[b].end.term {
-            swc_cfg::Term::Return(expr) => match self.ret_to.clone() {
-                None => match expr {
-                    None => Ok(TTerm::Return(None)),
-                    Some(a) => match a {
-                        Expr::Call(call) => {
-                            let (callee, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
-                            t = t2;
-                            Ok(TTerm::Tail { callee, args })
-                        }
-                        a => {
-                            let c;
-                            (c, t) = self.expr(i, o, b, t, a)?;
-                            Ok(TTerm::Return(Some(c)))
-                        }
-                    },
-                },
-                Some((i2, b2)) => {
-                    if let Some(a) = expr {
-                        let c;
-                        (c, t) = self.expr(i, o, b, t, a)?;
-                        o.blocks[t].stmts.push(TStmt {
-                            left: LId::Id { id: i2.clone() },
-                            flags: Default::default(),
-                            right: Item::Just { id: c },
-                            span: i.blocks[b]
-                                .end
-                                .orig_span
-                                .clone()
-                                .unwrap_or_else(|| Span::dummy_with_cmt()),
-                        });
-                    }
-                    Ok(TTerm::Jmp(b2))
-                }
-            },
-            swc_cfg::Term::Throw(expr) => {
-                let c;
-                (c, t) = self.expr(i, o, b, t, expr)?;
-                Ok(TTerm::Throw(c))
-            }
-            swc_cfg::Term::Jmp(id) => Ok(TTerm::Jmp(self.trans(i, o, *id)?)),
-            swc_cfg::Term::CondJmp {
-                cond,
-                if_true,
-                if_false,
-            } => {
-                let c;
-                (c, t) = self.expr(i, o, b, t, cond)?;
-                Ok(TTerm::CondJmp {
-                    cond: c,
-                    if_true: self.trans(i, o, *if_true)?,
-                    if_false: self.trans(i, o, *if_false)?,
-                })
-            }
-            swc_cfg::Term::Switch { x, blocks, default } => {
-                let y;
-                (y, t) = self.expr(i, o, b, t, x)?;
-                let mut m2 = HashMap::new();
-                for (a, b2) in blocks.iter() {
-                    let b2 = self.trans(i, o, *b2)?;
-                    let c;
-                    (c, t) = self.expr(i, o, b, t, a)?;
-                    m2.insert(c, b2);
-                }
-                Ok(TTerm::Switch {
-                    x: y,
-                    blocks: m2.into_iter().collect(),
-                    default: self.trans(i, o, *default)?,
-                })
-            }
-            swc_cfg::Term::Default => Ok(TTerm::Default),
-        }
     }
     pub fn stmt(
         &mut self,
@@ -1616,21 +1203,15 @@ impl ToTACConverter<'_> {
                 self.convert_cond_expr(i, o, b, t, v, &c.cons, &c.alt, c.span)
             }
             Expr::This(this) => {
-                let id = match self.this.clone() {
-                    Some(a) => a,
-                    None => {
-                        let tmp = o.regs.alloc(());
-                        o.blocks[t].stmts.push(TStmt {
-                            left: LId::Id { id: tmp.clone() },
-                            flags: ValFlags::SSA_LIKE,
-                            right: Item::This,
-                            span: this.span(),
-                        });
-                        o.decls.insert(tmp.clone());
-                        tmp
-                    }
-                };
-                return Ok((id, t));
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::This,
+                    span: this.span(),
+                });
+                o.decls.insert(tmp.clone());
+                Ok((tmp, t))
             }
             Expr::Ident(id) => match self
                 .mapper
@@ -2137,6 +1718,401 @@ impl ToTACConverter<'_> {
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
     }
+
+    fn convert_cond_prop(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        test: Ident,
+        cons: &MemberProp,
+        alt: &MemberProp,
+        span: Span,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match (cons, alt) {
+            (MemberProp::Computed(cons), MemberProp::Computed(alt)) => {
+                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &alt.expr, span)
+            }
+            (MemberProp::Ident(a), MemberProp::Ident(b)) => {
+                let [a, b] = [a, b].map(|v| {
+                    let val = o.regs.alloc(());
+                    o.decls.insert(val.clone());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: val.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Lit {
+                            lit: Lit::Str(Str {
+                                span: v.span,
+                                value: v.sym.clone().into(),
+                                raw: None,
+                            }),
+                        },
+                        span,
+                    });
+                    val
+                });
+                let mut tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Select {
+                        cond: test.clone(),
+                        then: a,
+                        otherwise: b,
+                    },
+                    span,
+                });
+                o.decls.insert(tmp.clone());
+                return Ok((tmp, t));
+            }
+            (MemberProp::Computed(cons), alt) => {
+                self.convert_cond_expr(i, o, b, t, test, &cons.expr, &imp(alt.clone()), span)
+            }
+            (cons, MemberProp::Computed(alt)) => {
+                self.convert_cond_expr(i, o, b, t, test, &imp(cons.clone()), &alt.expr, span)
+            }
+            _ => todo!(),
+        }
+    }
+    /// Converts a conditional expression (CondExpr) to TAC, factoring out test, cons, alt, and span.
+    fn convert_cond_expr(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+        test: Ident,
+        cons: &Expr,
+        alt: &Expr,
+        span: Span,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        let v = test;
+        match o.def(LId::Id { id: v.clone() }) {
+            Some(Item::Lit { lit: Lit::Bool(b2) }) => {
+                let w;
+                (w, t) = self.expr(i, o, b, t, if b2.value { cons } else { alt })?;
+                return Ok((w, t));
+            }
+            _ => {}
+        }
+        fn try_get_frames<'a, 'b: 'a>(
+            a: &'a Expr,
+            b: &'b Expr,
+        ) -> Option<(Vec<Frame<'a>>, &'a Expr, &'b Expr)> {
+            if (a.is_pure() && b.is_pure()) || a.eq_ignore_span(b) {
+                Some((vec![], a, b))
+            } else {
+                match (a, b) {
+                    (Expr::Assign(a), Expr::Assign(b))
+                        if a.left.eq_ignore_span(&b.left)
+                            && a.left.as_simple().is_some_and(|s| s.is_ident())
+                            && a.op == b.op =>
+                    {
+                        let (mut e, a2, b) = try_get_frames(&a.right, &b.right)?;
+                        e.push(Frame::Assign(&a.left, a.op));
+                        Some((e, a2, b))
+                    }
+                    (Expr::Member(a), Expr::Member(b)) if a.prop.eq_ignore_span(&b.prop) => {
+                        let (mut e, a2, b) = try_get_frames(&a.obj, &b.obj)?;
+                        e.push(Frame::Member(&a.prop));
+                        Some((e, a2, b))
+                    }
+                    (Expr::Member(a), Expr::Member(b))
+                        if !(a.prop.is_private_name() || b.prop.is_private_name()) =>
+                    {
+                        let (mut e, a2, b2) = try_get_frames(&a.obj, &b.obj)?;
+                        e.push(Frame::Member2(&a.prop, &b.prop));
+                        Some((e, a2, b2))
+                    }
+                    (Expr::Await(a), Expr::Await(b)) => {
+                        let (mut e, a2, b2) = try_get_frames(&a.arg, &b.arg)?;
+                        e.push(Frame::Await);
+                        Some((e, a2, b2))
+                    }
+                    (Expr::Yield(a), Expr::Yield(b)) if a.delegate == b.delegate => {
+                        let (mut e, a2, b2) = try_get_frames(a.arg.as_ref()?, b.arg.as_ref()?)?;
+                        e.push(Frame::Yield {
+                            delegate: a.delegate,
+                        });
+                        Some((e, a2, b2))
+                    }
+                    (Expr::Cond(a), Expr::Cond(b)) => {
+                        let (mut e, a2, b2) = try_get_frames(&a.test, &b.test)?;
+                        let (fra, thena, elsea) = try_get_frames(&a.cons, &a.alt)?;
+                        let (frb, thenb, elseb) = try_get_frames(&b.cons, &b.alt)?;
+                        e.push(Frame::Cond {
+                            thena,
+                            elsea,
+                            fra,
+                            thenb,
+                            elseb,
+                            frb,
+                        });
+                        Some((e, a2, b2))
+                    }
+                    (Expr::Call(a), Expr::Call(b)) if a.args.len() == b.args.len() => {
+                        let (Callee::Expr(a2), Callee::Expr(b2)) = (&a.callee, &b.callee) else {
+                            return None;
+                        };
+                        match (&**a2, &**b2) {
+                            (Expr::Member(a2), Expr::Member(b2))
+                                if a2.prop.eq_ignore_span(&b2.prop) =>
+                            {
+                                let (mut e, a2_, b2) = try_get_frames(&a2.obj, &b2.obj)?;
+                                e.push(Frame::CallMember(
+                                    &a2.prop,
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                ));
+                                Some((e, a2_, b2))
+                            }
+                            (Expr::Member(aa), Expr::Member(bb))
+                                if !aa.prop.is_private_name() && !bb.prop.is_private_name() =>
+                            {
+                                let (mut e, a2_, b2) = try_get_frames(&aa.obj, &bb.obj)?;
+                                e.push(Frame::CallMember2(
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    &aa.prop,
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                    &bb.prop,
+                                ));
+                                Some((e, a2_, b2))
+                            }
+                            (Expr::Member(_), _) | (_, Expr::Member(_)) => None,
+                            (Expr::Ident(i), j) | (j, Expr::Ident(i))
+                                if !i.optional
+                                    && i.sym == "eval"
+                                    && match j {
+                                        Expr::Ident(j) => !j.eq_ignore_span(i),
+                                        _ => true,
+                                    } =>
+                            {
+                                None
+                            }
+                            (a2, b2) => {
+                                let (mut e, a2, b2) = try_get_frames(a2, b2)?;
+                                e.push(Frame::Call(
+                                    a.args.iter().map(|a| &*a.expr).collect(),
+                                    b.args.iter().map(|a| &*a.expr).collect(),
+                                ));
+                                Some((e, a2, b2))
+                            }
+                        }
+                    }
+                    _ => None,
+                }
+            }
+        }
+        if let Some((frames, c2, a2)) = try_get_frames(&cons, &alt) {
+            let cons;
+            let alt;
+            (cons, t) = self.expr(i, o, b, t, &c2)?;
+            (alt, t) = self.expr(i, o, b, t, &a2)?;
+            let mut tmp = o.regs.alloc(());
+            o.blocks[t].stmts.push(TStmt {
+                left: LId::Id { id: tmp.clone() },
+                flags: ValFlags::SSA_LIKE,
+                right: Item::Select {
+                    cond: v.clone(),
+                    then: cons,
+                    otherwise: alt,
+                },
+                span,
+            });
+            o.decls.insert(tmp.clone());
+            for f in frames.into_iter() {
+                (tmp, t) = self.frame(i, o, b, t, f, tmp, v.clone())?;
+            }
+            return Ok((tmp, t));
+        };
+        let then = o.blocks.alloc(TBlock {
+            stmts: vec![],
+            post: TPostecedent {
+                catch: o.blocks[t].post.catch.clone(),
+                term: Default::default(),
+                orig_span: Some(span),
+            },
+        });
+        let els = o.blocks.alloc(TBlock {
+            stmts: vec![],
+            post: TPostecedent {
+                catch: o.blocks[t].post.catch.clone(),
+                term: Default::default(),
+                orig_span: Some(span),
+            },
+        });
+        let done = o.blocks.alloc(TBlock {
+            stmts: vec![],
+            post: TPostecedent {
+                catch: o.blocks[t].post.catch.clone(),
+                term: Default::default(),
+                orig_span: Some(span),
+            },
+        });
+        o.blocks[t].post.term = TTerm::CondJmp {
+            cond: v,
+            if_true: then,
+            if_false: els,
+        };
+        let tmp = o.regs.alloc(());
+        o.decls.insert(tmp.clone());
+        let (a, then) = self.expr(i, o, b, then, cons)?;
+        o.blocks[then].stmts.push(TStmt {
+            left: LId::Id { id: tmp.clone() },
+            flags: ValFlags::SSA_LIKE,
+            right: Item::Just { id: a },
+            span,
+        });
+        o.blocks[then].post.term = TTerm::Jmp(done);
+        let (a, els) = self.expr(i, o, b, els, alt)?;
+        o.blocks[els].stmts.push(TStmt {
+            left: LId::Id { id: tmp.clone() },
+            flags: ValFlags::SSA_LIKE,
+            right: Item::Just { id: a },
+            span,
+        });
+        o.blocks[els].post.term = TTerm::Jmp(done);
+        Ok((tmp, done))
+    }
+    // Converts a MemberProp to an Expr or literal, as needed
+    fn member_prop_expr(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        t: Id<TBlock>,
+        prop: &MemberProp,
+    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+        match prop {
+            MemberProp::Ident(ident_name) => {
+                let lit = Lit::Str(Str {
+                    span: ident_name.span,
+                    value: ident_name.sym.clone().into(),
+                    raw: None,
+                });
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Lit { lit },
+                    span: ident_name.span,
+                });
+                o.decls.insert(tmp.clone());
+                Ok((tmp, t))
+            }
+            MemberProp::PrivateName(private_name) => {
+                // TODO: handle private names if needed
+                anyhow::bail!("PrivateName not supported in member_prop_expr")
+            }
+            MemberProp::Computed(computed_prop_name) => {
+                self.expr(i, o, b, t, &*computed_prop_name.expr)
+            }
+        }
+    }
+    // Private helper for tail call conversion
+}
+impl ToTACConverter<'_> {
+    pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
+        self.convert_block(i, o, b)
+    }
+    // Private helper for block/term conversion
+    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
+        loop {
+            if let Some(a) = self.map.get(&b) {
+                return Ok(*a);
+            }
+            let t = o.blocks.alloc(TBlock {
+                stmts: vec![],
+                post: TPostecedent {
+                    catch: TCatch::Throw,
+                    term: Default::default(),
+                    orig_span: i.blocks[b].end.orig_span.clone(),
+                },
+            });
+            self.map.insert(b, t);
+            if let Catch::Jump { pat, k } = &i.blocks[b].end.catch {
+                match pat {
+                    Pat::Ident(id) => {
+                        let k = self.trans(i, o, *k)?;
+                        o.blocks[t].post.catch = TCatch::Jump {
+                            pat: id.id.clone().into(),
+                            k,
+                        };
+                    }
+                    _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                }
+            }
+            let mut t = t;
+            for s in i.blocks[b].stmts.iter() {
+                t = self.core.stmt(i, o, b, t, s)?;
+            }
+            let term = self.convert_terminator(i, o, b, t)?;
+            o.blocks[t].post.term = term;
+        }
+    }
+    // Private helper for terminator conversion
+    fn convert_terminator(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: Id<Block>,
+        mut t: Id<TBlock>,
+    ) -> anyhow::Result<TTerm> {
+        match &i.blocks[b].end.term {
+            swc_cfg::Term::Return(expr) => match expr {
+                None => Ok(TTerm::Return(None)),
+                Some(a) => match a {
+                    Expr::Call(call) => {
+                        let (callee, args, t2) = self.core.convert_call_expr(i, o, b, t, call)?;
+                        t = t2;
+                        Ok(TTerm::Tail { callee, args })
+                    }
+                    a => {
+                        let c;
+                        (c, t) = self.core.expr(i, o, b, t, a)?;
+                        Ok(TTerm::Return(Some(c)))
+                    }
+                },
+            },
+            swc_cfg::Term::Throw(expr) => {
+                let c;
+                (c, t) = self.core.expr(i, o, b, t, expr)?;
+                Ok(TTerm::Throw(c))
+            }
+            swc_cfg::Term::Jmp(id) => Ok(TTerm::Jmp(self.trans(i, o, *id)?)),
+            swc_cfg::Term::CondJmp {
+                cond,
+                if_true,
+                if_false,
+            } => {
+                let c;
+                (c, t) = self.core.expr(i, o, b, t, cond)?;
+                Ok(TTerm::CondJmp {
+                    cond: c,
+                    if_true: self.trans(i, o, *if_true)?,
+                    if_false: self.trans(i, o, *if_false)?,
+                })
+            }
+            swc_cfg::Term::Switch { x, blocks, default } => {
+                let y;
+                (y, t) = self.core.expr(i, o, b, t, x)?;
+                let mut m2 = HashMap::new();
+                for (a, b2) in blocks.iter() {
+                    let b2 = self.trans(i, o, *b2)?;
+                    let c;
+                    (c, t) = self.core.expr(i, o, b, t, a)?;
+                    m2.insert(c, b2);
+                }
+                Ok(TTerm::Switch {
+                    x: y,
+                    blocks: m2.into_iter().collect(),
+                    default: self.trans(i, o, *default)?,
+                })
+            }
+            swc_cfg::Term::Default => Ok(TTerm::Default),
+        }
+    }
 }
 impl TFunc {
     pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
@@ -2144,10 +2120,7 @@ impl TFunc {
         cfg.regs = LAM::new(mapper.vars.clone());
         let mut conv = ToTACConverter {
             map: BTreeMap::new(),
-            ret_to: None,
-            recatch: TCatch::Throw,
-            this: None,
-            mapper,
+            core: ToTACConverterCore { mapper },
         };
         let mut entry = conv.trans(&value.cfg, &mut cfg, value.entry)?;
         cfg.ts_retty = value.cfg.ts_retty.clone();
@@ -2167,7 +2140,7 @@ impl TFunc {
                 right: Item::Arguments,
                 span,
             });
-            let k = conv.bind_array_contents(
+            let k = conv.core.bind_array_contents(
                 &value.cfg,
                 &mut cfg,
                 value.entry,
@@ -2195,7 +2168,7 @@ impl TFunc {
                             ts_params.push(None);
                             let e2 = cfg.blocks.alloc(Default::default());
                             let i = cfg.regs.alloc(());
-                            let k = conv.bind(
+                            let k = conv.core.bind(
                                 &value.cfg,
                                 &mut cfg,
                                 value.entry,
