@@ -72,6 +72,7 @@ use id_arena::{Arena, Id};
 use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
+use swc_ecma_visit::Visit;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
@@ -83,7 +84,7 @@ use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
 use swc_tac::{
     Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags,
-    lam::{AtomResolver, DefaultAtomResolver},
+    lam::{AtomResolver, DefaultAtomResolver}, mapped,
 };
 use swc_tac::{LId, inlinable};
 pub mod consts;
@@ -807,4 +808,28 @@ impl SCfg {
             }
         }
     }
+}
+struct TestVisitor;
+impl Visit for TestVisitor{
+    fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
+        
+        let tfunc = TFunc::try_from(node.clone()).unwrap();
+     
+        SFunc::try_from(tfunc).unwrap();
+    }
+}
+#[cfg(test)]
+mod tests{
+    use swc_ecma_visit::VisitWith;
+
+    use crate::TestVisitor;
+
+    portal_solutions_swibb::simple_module_test!(test_conv ["
+    export function foo(a, b){
+    return a + b 
+    }
+    "] => |sm,module|{
+     
+        module.visit_with(&mut TestVisitor);
+    });
 }

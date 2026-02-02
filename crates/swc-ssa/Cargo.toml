@@ -24,6 +24,10 @@ swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
 num-traits = "0.2.19"
 portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", path = "../portal-jsc-common" }
+portal-solutions-swibb.workspace = true
 
 [features]
 # simpl=["dep:portal-jsc-simpl-js","swc-tac/simpl"]
+
+[dev-dependencies]
+portal-solutions-swibb = {workspace = true,features = ["test"]}

@@ -45,12 +45,13 @@ pub struct ToSSAConverter {
     pub all: BTreeSet<Ident>,
     /// Special undefined value for uninitialized variables
     pub undef: Id<SValueW>,
-    /// Dominance tree for control flow analysis
-    pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
+    // /// Dominance tree for control flow analysis
+    // pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
 }
 impl ToSSAConverter {
     fn safe_to_carry(&self, target: Id<TBlock>, src: Id<TBlock>) -> bool {
-        dominates::<TFunc>(&self.domtree, Some(src), Some(target))
+        // dominates::<TFunc>(&self.domtree, Some(src), Some(target))
+        false
     }
     // pub fn from_undef(undef: Id<SValueW>) -> Self {
     //     Self {
@@ -136,9 +137,9 @@ impl ToSSAConverter {
         i: &TCfg,
         o: &mut SCfg,
         k: Id<TBlock>,
-        app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
+        // app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
     ) -> anyhow::Result<Id<SBlock>> {
-        self.convert_block(i, o, k, app)
+        self.convert_block(i, o, k)
     }
     // Private helper for block/term conversion
     fn convert_block(
@@ -146,8 +147,9 @@ impl ToSSAConverter {
         i: &TCfg,
         o: &mut SCfg,
         k: Id<TBlock>,
-        app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
+        // app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
     ) -> anyhow::Result<Id<SBlock>> {
+ 
         loop {
             if let Some(a) = self.map.get(&k) {
                 return Ok(*a);
@@ -158,7 +160,7 @@ impl ToSSAConverter {
                 postcedent: SPostcedent::default(),
             });
             self.map.insert(k, t);
-            let app: BTreeMap<_, _> = app.collect();
+            // let app: BTreeMap<_, _> = app.collect();
             let ok = k;
             let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
@@ -175,14 +177,14 @@ impl ToSSAConverter {
                         .chain(
                             self.all
                                 .iter()
-                                .filter(|a| {
-                                    !d || i.blocks.iter().all(|k| {
-                                        k.1.stmts.iter().all(|i| {
-                                            !i.will_store(a)
-                                                || !i.flags.contains(ValFlags::SSA_LIKE)
-                                        })
-                                    })
-                                })
+                                // .filter(|a| {
+                                //     !d || i.blocks.iter().all(|k| {
+                                //         k.1.stmts.iter().all(|i| {
+                                //             !i.will_store(a)
+                                //                 || !i.flags.contains(ValFlags::SSA_LIKE)
+                                //         })
+                                //     })
+                                // })
                                 .filter(|a| *a != pat)
                                 .cloned(),
                         )
@@ -200,10 +202,8 @@ impl ToSSAConverter {
                         .collect::<Vec<_>>();
                     let t = STerm::Jmp(STarget {
                         block: self.trans(
-                            i,
-                            o,
-                            b,
-                            &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
+                            i, o, b,
+                            // &mut app.iter().map(|(k, v)| (k.clone(), v.clone())),
                         )?,
                         args: p,
                     });
@@ -214,13 +214,13 @@ impl ToSSAConverter {
             let mut state = self
                 .all
                 .iter()
-                .filter(|a| !app.contains_key(&**a))
+                // .filter(|a| !app.contains_key(&**a))
                 .map(|a| (a.clone(), (o.add_blockparam(t), ValFlags::all())))
-                .chain(
-                    app.iter()
-                        .map(|(a, b)| (a.clone(), b.clone()))
-                        .map(|(a, b)| (a, (b, ValFlags::all()))),
-                )
+                // .chain(
+                //     app.iter()
+                //         .map(|(a, b)| (a.clone(), b.clone()))
+                //         .map(|(a, b)| (a, (b, ValFlags::all()))),
+                // )
                 .collect::<BTreeMap<_, _>>();
             self.apply_shim(o, &state, &shim, t);
             let mut cache = BTreeMap::new();
@@ -297,49 +297,50 @@ impl ToSSAConverter {
                 }
             }
             let params = |this: &Self, k2: Id<TBlock>| {
-                let d = this.safe_to_carry(k2, k);
+                // let d = this.safe_to_carry(k2, k);
                 this.all
                     .iter()
-                    .filter(|a| {
-                        !d || i.blocks.iter().all(|k| {
-                            k.1.stmts.iter().all(|i| {
-                                i.left != LId::Id { id: (**a).clone() }
-                                    || !i.flags.contains(ValFlags::SSA_LIKE)
-                            })
-                        })
-                    })
+                    // .filter(|a| {
+                    //     !d || i.blocks.iter().all(|k| {
+                    //         k.1.stmts.iter().all(|i| {
+                    //             i.left != LId::Id { id: (**a).clone() }
+                    //                 || !i.flags.contains(ValFlags::SSA_LIKE)
+                    //         })
+                    //     })
+                    // })
                     .filter_map(|a| state.get(a))
                     .map(|a| &a.0)
                     .cloned()
                     .collect::<Vec<_>>()
             };
-            let dtc = |this: &Self, k2: Id<TBlock>| {
-                let d = this.safe_to_carry(k2, k);
-                if d {
-                    app.clone()
-                        .into_iter()
-                        .chain(
-                            this.all
-                                .iter()
-                                .filter(|a| {
-                                    !i.blocks.iter().all(|k| {
-                                        k.1.stmts.iter().all(|i| {
-                                            i.left != LId::Id { id: (**a).clone() }
-                                                || !i.flags.contains(ValFlags::SSA_LIKE)
-                                        })
-                                    })
-                                })
-                                .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0))),
-                        )
-                        .collect::<BTreeMap<_, _>>()
-                } else {
-                    app.clone()
-                }
-            };
+            // let dtc = |this: &Self, k2: Id<TBlock>| {
+            //     let d = this.safe_to_carry(k2, k);
+            //     if d {
+            //         app.clone()
+            //             .into_iter()
+            //             .chain(
+            //                 this.all
+            //                     .iter()
+            //                     .filter(|a| {
+            //                         !i.blocks.iter().all(|k| {
+            //                             k.1.stmts.iter().all(|i| {
+            //                                 i.left != LId::Id { id: (**a).clone() }
+            //                                     || !i.flags.contains(ValFlags::SSA_LIKE)
+            //                             })
+            //                         })
+            //                     })
+            //                     .filter_map(|a| state.get(a).map(|b| (a.clone(), b.0))),
+            //             )
+            //             .collect::<BTreeMap<_, _>>()
+            //     } else {
+            //         app.clone()
+            //     }
+            // };
             let term = i.blocks[k].post.term.as_ref().map(
                 &mut (&mut *self, &mut *o),
                 &mut |(this, o), id| {
-                    let id2 = this.trans(i, o, *id, &mut dtc(this, *id).into_iter())?;
+                    let id2 = this.trans(i, o, *id)?;
+                    // , &mut dtc(this, *id).into_iter())?;
                     Ok(STarget {
                         block: id2,
                         args: params(this, *id),
@@ -430,10 +431,12 @@ impl ToSSAConverter {
 impl<'a> TryFrom<&'a TFunc> for SFunc {
     type Error = anyhow::Error;
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
-        let domtree = ssa_impls::dom::domtree(value)
-            .into_iter()
-            // .map(|(a, b)| (a, Some(b)))
-            .collect::<BTreeMap<_, _>>();
+  
+        // let domtree = ssa_impls::dom::domtree(value)
+        //     .into_iter()
+        //     // .map(|(a, b)| (a, Some(b)))
+        //     .collect::<BTreeMap<_, _>>();
+        // panic!("fixme");
         let mut decls = value.cfg.decls.clone();
         let mut d = BTreeSet::new();
         for e in value.cfg.externs().collect::<BTreeSet<_>>() {
@@ -449,6 +452,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             ts_retty: None,
             resolver: value.cfg.regs.resolver.clone(),
         };
+       
         let entry2 = cfg.blocks.alloc(Default::default());
         let params = value
             .params
@@ -468,9 +472,11 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             map: BTreeMap::new(),
             all: decls.clone(),
             undef,
-            domtree,
+            // domtree,
         };
-        let entry = trans.trans(&value.cfg, &mut cfg, value.entry, &mut empty())?;
+              
+        let entry = trans.trans(&value.cfg, &mut cfg, value.entry)?;
+        // , &mut empty())?;
         let target = STarget {
             block: entry,
             args: decls
