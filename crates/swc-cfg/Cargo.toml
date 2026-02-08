@@ -22,3 +22,6 @@ swc_common.workspace = true
 swc_ecma_ast.workspace = true
 swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
+
+[features]
+rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl"]
