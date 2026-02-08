@@ -56,7 +56,7 @@ bitflags! {
     ///
     /// These flags track whether a member is static (class-level) or private.
     #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
     pub struct MemberFlags: u64{
         /// Member is static (belongs to the class, not instances)
         const STATIC = 0x1;
@@ -124,7 +124,8 @@ pub mod ext;
 /// Private field identifier (JavaScript private class fields).
 ///
 /// Represents a private field name using the `#field` syntax in JavaScript classes.
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Private {
     /// The symbol/name of the private field
     pub sym: Atom,
@@ -133,12 +134,14 @@ pub struct Private {
     /// Source span
     pub span: Span,
 }
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub enum PrivateKind {
     Private(SyntaxContext),
     Public,
 }
-#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct PropSym<C = ()> {
     pub sym: Atom,
     /// Dummy when not a real span
@@ -149,7 +152,8 @@ pub struct PropSym<C = ()> {
 /// Object property key.
 ///
 /// Represents either a literal identifier key or a computed (dynamic) key expression.
-#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[non_exhaustive]
 pub enum PropKey<I, C = ()> {
     /// Literal identifier key (e.g., `obj.foo`)
@@ -183,7 +187,8 @@ impl<I, C: Clone> PropKey<I, C> {
 /// Object property value.
 ///
 /// Represents the different kinds of object property values in JavaScript.
-#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Ord, PartialEq, PartialOrd, Eq, Debug)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[non_exhaustive]
 pub enum PropVal<I, F> {
     /// Regular value property
@@ -229,7 +234,8 @@ impl<I, F> PropVal<I, F> {
 /// Call target specification.
 ///
 /// Represents the different ways a function can be called in JavaScript.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub enum TCallee<I> {
     /// Direct value call (e.g., `fn()`)
     Val(I),
@@ -353,14 +359,16 @@ pub fn inlinable<I: Clone, F>(d: &Item<I, F>, tcfg: &(dyn ItemGetter<I, F> + '_)
 ///
 /// Used in array literals and function arguments to represent both
 /// regular values and spread values (e.g., `...arr`).
-#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct SpreadOr<I> {
     /// The value (either a single value or what's being spread)
     pub value: I,
     /// Whether this is a spread operation
     pub is_spread: bool,
 }
-#[derive(Clone,Debug,PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone,Debug,PartialEq, Eq)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct TClass<I,F>{
     pub superclass: Option<I>,
     pub members: Vec<(MemberFlags, PropKey<I, PrivateKind>, PropVal<Option<I>, F>)>,
@@ -387,7 +395,8 @@ pub struct TClass<I,F>{
 /// - Object and array literals
 /// - Control flow (yield, await, select)
 /// - Special values (this, arguments, undefined)
-#[derive(Clone, Debug, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[non_exhaustive]
 pub enum Item<I, F> {
     /// Reference to another identifier/value
