@@ -10,7 +10,7 @@ repository.workspace = true
 anyhow.workspace = true
 arena-traits.workspace = true
 id-arena.workspace = true
-rkyv.workspace = true
+rkyv = {workspace = true,optional = true}
 
 cfg-traits.workspace = true
 

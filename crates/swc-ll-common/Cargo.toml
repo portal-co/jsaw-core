@@ -12,7 +12,7 @@ arena-traits.workspace = true
 cfg-traits.workspace = true
 ssa-impls.workspace = true
 ssa-reloop.workspace = true
-rkyv.workspace = true
+rkyv = {workspace = true,optional = true}
 relooper.workspace = true
 either = "1.13.0"
 num-traits = "0.2.19"

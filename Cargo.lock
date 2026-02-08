@@ -151,6 +151,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c60b5ce37e0b883c37eb89f79a1e26fbe9c1081945d024eee93e8d91a7e18b3"
 dependencies = [
  "bytes",
+ "rkyv",
  "serde",
 ]
 
@@ -1383,8 +1384,11 @@ version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b40c2b43a19b5d0706aca8669ae5b77b92bd141f7f8ce5e980e0e52430f54b20"
 dependencies = [
+ "bytecheck",
  "hstr",
  "once_cell",
+ "rancor",
+ "rkyv",
  "serde",
 ]
 
@@ -1397,12 +1401,15 @@ dependencies = [
  "anyhow",
  "ast_node",
  "better_scoped_tls",
+ "bytecheck",
  "bytes-str",
  "either",
  "from_variant",
  "new_debug_unreachable",
  "num-bigint",
  "once_cell",
+ "rancor",
+ "rkyv",
  "rustc-hash",
  "serde",
  "siphasher 0.3.11",
@@ -1422,10 +1429,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8bb0e5aaa6e077f178a28d29bc7da4a8ddaf012b3c21c043cb5f72a0b9779"
 dependencies = [
  "bitflags",
+ "bytecheck",
  "is-macro",
  "num-bigint",
  "once_cell",
  "phf",
+ "rancor",
+ "rkyv",
  "rustc-hash",
  "string_enum",
  "swc_atoms",

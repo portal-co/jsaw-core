@@ -12,7 +12,7 @@ arena-traits.workspace = true
 cfg-traits.workspace = true
 id-arena.workspace = true
 ssa-traits.workspace = true
-rkyv.workspace = true
+rkyv = {workspace = true,optional = true}
 ssa-impls.workspace = true
 swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
 swc-tac.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-tac", package = "portal-jsc-swc-tac" }
