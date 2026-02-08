@@ -13,6 +13,7 @@ cfg-traits.workspace = true
 id-arena.workspace = true
 relooper.workspace = true
 ssa-impls.workspace = true
+rkyv.workspace = true
 ssa-reloop.workspace = true
 arena-traits.workspace = true
 

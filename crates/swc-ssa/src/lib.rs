@@ -94,7 +94,7 @@ pub mod impls;
 pub mod opt_stub;
 pub mod rew;
 pub mod simplify;
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum EdgeKind {
     Forward,
     Backward,
@@ -207,7 +207,7 @@ impl SCfg {
 /// - `is_generator`: Whether this is a generator function
 /// - `is_async`: Whether this is an async function
 /// - `ts_params`: Optional TypeScript type annotations for parameters
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SFunc {
     /// The SSA control flow graph
     pub cfg: SCfg,
@@ -241,7 +241,7 @@ impl TryFrom<TFunc> for SFunc {
 /// - `generics`: Optional generic type parameters
 /// - `ts_retty`: Optional TypeScript return type annotation
 /// - `resolver`: Atom resolver for generating fresh variable names
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SCfg {
     /// Arena containing all basic blocks
     pub blocks: Arena<SBlock>,
@@ -373,7 +373,7 @@ impl SCfg {
 /// - `params`: Block parameters (replace φ-functions for merging values)
 /// - `stmts`: SSA value computations in this block
 /// - `postcedent`: Terminator specifying control flow and exception handling
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SBlock {
     /// Block parameters (each is an SSA value ID with metadata)
     pub params: Vec<(Id<SValueW>, ())>,
@@ -396,7 +396,7 @@ pub struct SBlock {
 ///
 /// - `term`: Normal control flow terminator with target blocks
 /// - `catch`: Exception handler specification
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SPostcedent<I = Id<SValueW>, B = Id<SBlock>> {
     /// Normal control flow terminator
     pub term: STerm<I, B>,
@@ -431,7 +431,7 @@ impl<I, B> Default for SPostcedent<I, B> {
 /// - `LoadId`: Load a non-SSA variable by name
 /// - `StoreId`: Store to a non-SSA variable by name
 /// - `EdgeBlocker`: A temporary barrier for managing SSA construction on edges
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[non_exhaustive]
 pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
     /// A block parameter (bound when jumping to the block)
@@ -651,7 +651,7 @@ impl<I, B, F> SValue<I, B, F> {
 /// with a unique ID. The `#[repr(transparent)]` ensures there's no overhead
 /// from the wrapper.
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SValueW {
     /// The wrapped SSA value
     pub value: SValue,
@@ -675,7 +675,7 @@ impl From<SValueW> for SValue {
 ///
 /// - `I`: SSA value identifier type (defaults to `Id<SValueW>`)
 /// - `B`: Block identifier type (defaults to `Id<SBlock>`)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[non_exhaustive]
 pub enum SCatch<I = Id<SValueW>, B = Id<SBlock>> {
     /// No exception handler - propagate to caller
@@ -713,7 +713,7 @@ impl<I, B> Default for SCatch<I, B> {
 /// // Jump to block 5 with arguments [v1, v2]
 /// STarget { block: 5, args: vec![v1, v2] }
 /// ```
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
     /// The target block to jump to
     pub block: B,

@@ -14,6 +14,7 @@ arena-traits.workspace = true
 cfg-traits.workspace = true
 ssa-impls.workspace = true
 ssa-reloop.workspace = true
+rkyv.workspace = true
 relooper.workspace = true
 either = "1.13.0"
 id-arena.workspace = true

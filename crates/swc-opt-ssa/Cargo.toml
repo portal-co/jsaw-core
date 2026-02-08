@@ -10,6 +10,7 @@ repository.workspace = true
 anyhow.workspace = true
 arena-traits.workspace = true
 id-arena.workspace = true
+rkyv.workspace = true
 
 cfg-traits.workspace = true
 
@@ -29,4 +30,3 @@ ssa-impls.workspace = true
 num-traits = "0.2.19"
 
 [features]
-# simpl=["dep:portal-jsc-simpl-js","swc-tac/simpl","swc-ssa/simpl"]

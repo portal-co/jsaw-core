@@ -99,7 +99,7 @@ pub mod splat;
 /// // Private field: obj.#private = ...
 /// LId::Private { obj, id: private_symbol }
 /// ```
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[non_exhaustive]
 pub enum LId<I = Ident, M = [I; 1]> {
     /// A simple variable identifier
@@ -180,7 +180,7 @@ where
 }
 #[cfg(feature = "simpl-legacy")]
 pub mod simpl_legacy;
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, linearize::Linearize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, linearize::Linearize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[non_exhaustive]
 pub enum ImportMapperReq {
     // Native,
@@ -207,7 +207,7 @@ bitflags! {
     /// These flags track properties of values that are useful for optimization
     /// and analysis.
     #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
     pub struct ValFlags: u64{
         /// Indicates this value is in SSA-like form.
         ///
@@ -231,7 +231,7 @@ bitflags! {
 /// - `ts_params`: Optional TypeScript type annotations for parameters
 /// - `is_generator`: Whether this is a generator function
 /// - `is_async`: Whether this is an async function
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TFunc {
     /// The control flow graph containing all basic blocks
     pub cfg: TCfg,
@@ -324,7 +324,7 @@ impl Default for TFunc {
 /// - `type_annotations`: TypeScript type annotations for variables
 /// - `generics`: Optional generic type parameters for the function
 /// - `ts_retty`: Optional TypeScript return type annotation
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TCfg {
     /// Arena containing all basic blocks
     pub blocks: Arena<TBlock>,
@@ -1092,7 +1092,7 @@ impl Externs<Ident> for TCfg {
 /// - `flags`: Properties of this value (e.g., SSA_LIKE)
 /// - `right`: The value being computed and assigned
 /// - `span`: Source location information for error reporting
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TStmt {
     /// The left-hand side (target) of the assignment
     pub left: LId,
@@ -1148,7 +1148,7 @@ impl TStmt {
 ///
 /// - `stmts`: Sequence of statements executed in order
 /// - `post`: The postcedent (terminator and exception handler) that ends the block
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TBlock {
     /// Statements in this basic block, executed sequentially
     pub stmts: Vec<TStmt>,
@@ -1171,7 +1171,7 @@ pub struct TBlock {
 /// - `catch`: Exception handler for this block
 /// - `term`: The terminator specifying normal control flow
 /// - `orig_span`: Original source span for debugging
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TPostecedent<B = Id<TBlock>, I = Ident> {
     /// Exception handler specification
     pub catch: TCatch<B, I>,
@@ -1204,7 +1204,7 @@ pub mod impls;
 ///
 /// - `Throw`: Propagate the exception to the caller (no catch handler)
 /// - `Jump`: Jump to a catch handler block, binding the exception to a pattern
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum TCatch<B = Id<TBlock>, I = Ident> {
     // #[default]
     /// No exception handler - throw to caller
@@ -1270,7 +1270,7 @@ impl<B, I> TCatch<B, I> {
 /// - `CondJmp`: Conditional branch (if-then-else)
 /// - `Switch`: Multi-way branch based on a value
 /// - `Default`: Placeholder/unreachable terminator
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum TTerm<B = Id<TBlock>, I = Ident> {
     /// Return from function, optionally with a value
     Return(Option<I>),
