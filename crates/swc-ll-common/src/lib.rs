@@ -64,6 +64,36 @@ bitflags! {
         // const PRIVATE = 0x2;
     }
 }
+
+#[cfg(feature = "rkyv-impl")]
+impl rkyv::Archive for MemberFlags {
+    type Archived = rkyv::Archived<u64>;
+    type Resolver = rkyv::Resolver<u64>;
+
+    #[inline]
+    unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+        self.bits().resolve(pos, resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv-impl")]
+impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for MemberFlags {
+    #[inline]
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        self.bits().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv-impl")]
+impl<D: rkyv::de::Fallible + ?Sized> rkyv::Deserialize<MemberFlags, D> for rkyv::Archived<u64> {
+    #[inline]
+    fn deserialize(&self, deserializer: &mut D) -> Result<MemberFlags, D::Error> {
+        Ok(MemberFlags::from_bits_truncate(
+            rkyv::Deserialize::<u64, D>::deserialize(self, deserializer)?,
+        ))
+    }
+}
+
 /// Trait for getting items and identifiers from a data structure.
 ///
 /// This trait provides a uniform interface for resolving item references

@@ -219,6 +219,36 @@ bitflags! {
         const SSA_LIKE = 0x1;
     }
 }
+
+#[cfg(feature = "rkyv-impl")]
+impl rkyv::Archive for ValFlags {
+    type Archived = rkyv::Archived<u64>;
+    type Resolver = rkyv::Resolver<u64>;
+
+    #[inline]
+    unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+        self.bits().resolve(pos, resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv-impl")]
+impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for ValFlags {
+    #[inline]
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        self.bits().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv-impl")]
+impl<D: rkyv::de::Fallible + ?Sized> rkyv::Deserialize<ValFlags, D> for rkyv::Archived<u64> {
+    #[inline]
+    fn deserialize(&self, deserializer: &mut D) -> Result<ValFlags, D::Error> {
+        Ok(ValFlags::from_bits_truncate(
+            rkyv::Deserialize::<u64, D>::deserialize(self, deserializer)?,
+        ))
+    }
+}
+
 /// A function in Three-Address Code (TAC) form.
 ///
 /// This represents a complete function with its control flow graph, parameters,
