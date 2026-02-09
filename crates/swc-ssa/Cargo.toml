@@ -28,7 +28,7 @@ portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", path = "../po
 portal-solutions-swibb.workspace = true
 
 [features]
-rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-tac/rkyv-impl"]
+rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-tac/rkyv-impl", "portal-jsc-swc-util/rkyv-impl", "portal-jsc-common/rkyv-impl"]
 # simpl=["dep:portal-jsc-simpl-js","swc-tac/simpl"]
 
 [dev-dependencies]

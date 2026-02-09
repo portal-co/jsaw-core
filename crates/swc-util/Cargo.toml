@@ -22,6 +22,6 @@ portal-solutions-swibb.workspace = true
 swc_ecma_transforms_base.workspace = true
 
 [features]
-rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl"]
+rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "portal-jsc-common/rkyv-impl"]
 ty=[]
 cli=["swc_common/tty-emitter"]

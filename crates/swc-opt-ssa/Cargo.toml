@@ -30,5 +30,5 @@ ssa-impls.workspace = true
 num-traits = "0.2.19"
 
 [features]
-rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-tac/rkyv-impl", "swc-ssa/rkyv-impl"]
+rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-tac/rkyv-impl", "swc-ssa/rkyv-impl", "portal-jsc-swc-util/rkyv-impl"]
 # simpl=["dep:portal-jsc-simpl-js","swc-tac/simpl","swc-ssa/simpl"]

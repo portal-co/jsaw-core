@@ -18,5 +18,5 @@ portal-jsc-swc-util.workspace = true
 typenum.workspace = true
 
 [features]
-rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl"]
+rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "portal-jsc-swc-util/rkyv-impl"]
 
