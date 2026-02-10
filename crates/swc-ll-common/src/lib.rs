@@ -20,6 +20,136 @@
 //! # Modules
 //!
 //! - [`fetch`]: Utilities for fetching and resolving items
+//!
+//! # Macros
+//!
+//! - [`define_arena!`]: Macro for generating specialized arena and ID types
+
+/// Macro to generate a specialized arena type and its corresponding ID type.
+/// 
+/// This creates:
+/// - A specialized arena type (e.g., `BlockArena`)
+/// - A specialized ID type (e.g., `BlockId`)
+/// - All necessary trait implementations including rkyv support
+/// 
+/// # Example
+/// 
+/// ```ignore
+/// use swc_ll_common::define_arena;
+/// 
+/// define_arena!(pub BlockArena, pub BlockId for Block);
+/// 
+/// // Now you can use:
+/// let mut arena = BlockArena::new();
+/// let id: BlockId = arena.alloc(Block::default());
+/// let block: &Block = &arena[id];
+/// ```
+#[macro_export]
+macro_rules! define_arena {
+    ($arena_vis:vis $arena_name:ident, $id_vis:vis $id_name:ident for $item_type:ty) => {
+        // The specialized ID type
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+        #[repr(transparent)]
+        $id_vis struct $id_name(usize);
+        
+        impl $id_name {
+            /// Create a new ID from a raw index.
+            #[inline]
+            pub fn new(index: usize) -> Self {
+                Self(index)
+            }
+            
+            /// Get the raw index value.
+            #[inline]
+            pub fn index(self) -> usize {
+                self.0
+            }
+        }
+        
+        // The specialized Arena type
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+        $arena_vis struct $arena_name {
+            items: Vec<$item_type>,
+        }
+        
+        impl $arena_name {
+            /// Create a new empty arena.
+            #[inline]
+            pub fn new() -> Self {
+                Self { items: Vec::new() }
+            }
+            
+            /// Allocate a value in the arena and return its ID.
+            #[inline]
+            pub fn alloc(&mut self, value: $item_type) -> $id_name {
+                let index = self.items.len();
+                self.items.push(value);
+                $id_name(index)
+            }
+            
+            /// Get a reference to a value by ID.
+            #[inline]
+            pub fn get(&self, id: $id_name) -> Option<&$item_type> {
+                self.items.get(id.0)
+            }
+            
+            /// Get a mutable reference to a value by ID.
+            #[inline]
+            pub fn get_mut(&mut self, id: $id_name) -> Option<&mut $item_type> {
+                self.items.get_mut(id.0)
+            }
+            
+            /// Iterate over all (ID, value) pairs.
+            #[inline]
+            pub fn iter(&self) -> impl Iterator<Item = ($id_name, &$item_type)> {
+                self.items.iter().enumerate().map(|(idx, item)| ($id_name(idx), item))
+            }
+            
+            /// Iterate mutably over all (ID, value) pairs.
+            #[inline]
+            pub fn iter_mut(&mut self) -> impl Iterator<Item = ($id_name, &mut $item_type)> {
+                self.items.iter_mut().enumerate().map(|(idx, item)| ($id_name(idx), item))
+            }
+            
+            /// Get the number of items in the arena.
+            #[inline]
+            pub fn len(&self) -> usize {
+                self.items.len()
+            }
+            
+            /// Check if the arena is empty.
+            #[inline]
+            pub fn is_empty(&self) -> bool {
+                self.items.is_empty()
+            }
+        }
+        
+        impl Default for $arena_name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+        
+        // Indexing support
+        impl std::ops::Index<$id_name> for $arena_name {
+            type Output = $item_type;
+            
+            #[inline]
+            fn index(&self, id: $id_name) -> &Self::Output {
+                &self.items[id.0]
+            }
+        }
+        
+        impl std::ops::IndexMut<$id_name> for $arena_name {
+            #[inline]
+            fn index_mut(&mut self, id: $id_name) -> &mut Self::Output {
+                &mut self.items[id.0]
+            }
+        }
+    };
+}
 
 use anyhow::Context;
 use arena_traits::IndexAlloc;

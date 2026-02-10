@@ -12,7 +12,7 @@ use crate::*;
 ///
 /// Tracks the break and continue targets for a loop during CFG construction.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Loop<T = Id<Block>> {
+pub struct Loop<T = BlockId> {
     pub r#break: T,
     pub r#continue: T,
 }
@@ -28,9 +28,9 @@ pub trait ToCfg {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>>;
+    ) -> anyhow::Result<BlockId>;
 }
 impl<T: ToCfg + ?Sized> ToCfg for &'_ T {
     fn transform(
@@ -38,9 +38,9 @@ impl<T: ToCfg + ?Sized> ToCfg for &'_ T {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         (&**self).transform(ctx, cfg, current, label)
     }
 }
@@ -50,9 +50,9 @@ impl<T: ToCfg> ToCfg for Vec<T> {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        mut current: Id<Block>,
+        mut current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         return ctx.transform_all(cfg, &self, current, label);
     }
 }
@@ -62,9 +62,9 @@ impl<T: ToCfg> ToCfg for &'_ [T] {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        mut current: Id<Block>,
+        mut current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         return ctx.transform_all(cfg, &self, current, label);
     }
 }
@@ -90,9 +90,9 @@ impl ToCfg for DoWhile<'_> {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         let do_while_stmt = self;
         let next = ctx.new_block(cfg);
         let cont = ctx.new_block(cfg);
@@ -122,9 +122,9 @@ impl ToCfg for If<'_> {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         let if_stmt = self;
         let span = if_stmt.span;
         let next = ctx.new_block(cfg);
@@ -163,9 +163,9 @@ impl ToCfg for While<'_> {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         return ctx.transform(
             cfg,
             // &Stmt::If(IfStmt {
@@ -199,9 +199,9 @@ impl ToCfg for Stmt {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         let statement = self;
         if let Stmt::Throw(throw_stmt) = statement {
             cfg.blocks[current].end.orig_span = Some(throw_stmt.span());
@@ -448,7 +448,7 @@ impl ToCfg for Stmt {
     }
 }
 impl ToCfgConversionCtx {
-    pub fn new_block(&self, cfg: &mut Cfg) -> Id<Block> {
+    pub fn new_block(&self, cfg: &mut Cfg) -> BlockId {
         return cfg.blocks.alloc(Block {
             stmts: vec![],
             end: End {
@@ -462,9 +462,9 @@ impl ToCfgConversionCtx {
         &self,
         cfg: &mut Cfg,
         statements: &[impl ToCfg],
-        mut current: Id<Block>,
+        mut current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         for statement in statements {
             current = self.transform(cfg, statement, current, label.clone())?;
         }
@@ -474,9 +474,9 @@ impl ToCfgConversionCtx {
         &self,
         cfg: &mut Cfg,
         statement: &(dyn ToCfg + '_),
-        current: Id<Block>,
+        current: BlockId,
         label: Option<Ident>,
-    ) -> anyhow::Result<Id<Block>> {
+    ) -> anyhow::Result<BlockId> {
         return statement.transform(self, cfg, current, label);
     }
 }

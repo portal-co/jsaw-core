@@ -4,7 +4,7 @@
 //! typically used for transformations that need to create a new CFG from an existing one.
 
 use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
-use id_arena::Id;
+use crate::BlockId;
 use std::collections::{BTreeMap, HashMap};
 
 /// CFG restructuring state.
@@ -12,15 +12,15 @@ use std::collections::{BTreeMap, HashMap};
 /// Maintains mapping from input blocks to output blocks during CFG reconstruction.
 #[derive(Default)]
 pub struct Recfg {
-    pub map: BTreeMap<Id<Block>, Id<Block>>,
+    pub map: BTreeMap<BlockId, BlockId>,
 }
 impl Recfg {
     pub fn go(
         &mut self,
         input_cfg: &Cfg,
         output_cfg: &mut Cfg,
-        block_id: Id<Block>,
-    ) -> anyhow::Result<Id<Block>> {
+        block_id: BlockId,
+    ) -> anyhow::Result<BlockId> {
         loop {
             if let Some(existing_block_id) = self.map.get(&block_id) {
                 return Ok(*existing_block_id);

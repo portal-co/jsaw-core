@@ -844,7 +844,7 @@ dependencies = [
  "anyhow",
  "arena-traits",
  "cfg-traits",
- "id-arena",
+ "portal-jsc-swc-ll-common",
  "relooper",
  "rkyv",
  "ssa-impls",

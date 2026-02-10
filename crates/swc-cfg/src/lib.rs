@@ -16,6 +16,8 @@
 //! - [`Func`]: A function represented as a CFG
 //! - [`Cfg`]: The control flow graph structure
 //! - [`Block`]: A basic block containing statements
+//! - [`BlockArena`]: Specialized arena for storing blocks
+//! - [`BlockId`]: Specialized identifier for blocks
 //! - [`Term`]: A terminator (return, jump, branch, etc.)
 //! - [`Catch`]: Exception handler specification
 //!
@@ -34,7 +36,6 @@
 //! - [`to_cfg`]: Conversion from AST to CFG
 
 use anyhow::Context;
-use id_arena::{Arena, Id};
 use relooper::ShapedBlock;
 use std::{collections::HashMap, iter::once};
 use swc_atoms::Atom;
@@ -65,7 +66,7 @@ pub struct Func {
     /// The control flow graph
     pub cfg: Cfg,
     /// The entry block identifier
-    pub entry: Id<Block>,
+    pub entry: BlockId,
     /// Function parameters
     pub params: Vec<Param>,
     /// Whether this is a generator function (function*)
@@ -141,18 +142,18 @@ impl Into<Function> for Func {
 /// - `blocks`: Arena of all basic blocks in the CFG
 /// - `generics`: Optional generic type parameters (for TypeScript)
 /// - `ts_retty`: Optional return type annotation (for TypeScript)
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Cfg {
     /// Arena containing all basic blocks
-    pub blocks: Arena<Block>,
+    pub blocks: BlockArena,
     /// Generic type parameters (TypeScript)
     pub generics: Option<TsTypeParamDecl>,
     /// Return type annotation (TypeScript)
     pub ts_retty: Option<TsTypeAnn>,
 }
 impl Cfg {
-    pub fn recfg(&self, entry: Id<Block>) -> (Cfg, Id<Block>) {
+    pub fn recfg(&self, entry: BlockId) -> (Cfg, BlockId) {
         let mut res = Cfg::default();
         res.generics = self.generics.clone();
         res.ts_retty = self.ts_retty.clone();
@@ -161,7 +162,7 @@ impl Cfg {
         };
         return (res, entry);
     }
-    // pub fn reloop_block(&self, entry: Id<Block>) -> ShapedBlock<Id<Block>> {
+    // pub fn reloop_block(&self, entry: BlockId) -> ShapedBlock<BlockId> {
     //     return *relooper::reloop(
     //         self.blocks
     //             .iter()
@@ -201,7 +202,7 @@ impl Cfg {
     // }
     pub fn process_block(
         &self,
-        k: &ShapedBlock<Id<Block>>,
+        k: &ShapedBlock<BlockId>,
         span: Span,
         ctxt: SyntaxContext,
     ) -> Vec<Stmt> {
@@ -211,7 +212,7 @@ impl Cfg {
                     None => span,
                     Some(s) => s,
                 };
-                let jmp = |target_block: Id<Block>| {
+                let jmp = |target_block: BlockId| {
                     vec![Stmt::Expr(ExprStmt {
                         span,
                         expr: Box::new(Expr::Assign(AssignExpr {
@@ -448,8 +449,8 @@ impl Cfg {
     }
 }
 impl cfg_traits::Func for Func {
-    type Block = Id<Block>;
-    type Blocks = Arena<Block>;
+    type Block = BlockId;
+    type Blocks = BlockArena;
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
@@ -470,7 +471,7 @@ impl cfg_traits::Block<Func> for Block {
     }
 }
 impl cfg_traits::Term<Func> for End {
-    type Target = Id<Block>;
+    type Target = BlockId;
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         Func: 'a,
@@ -530,8 +531,8 @@ impl cfg_traits::Term<Func> for End {
         )
     }
 }
-impl cfg_traits::Term<Func> for Id<Block> {
-    type Target = Id<Block>;
+impl cfg_traits::Term<Func> for BlockId {
+    type Target = BlockId;
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         Func: 'a,
@@ -545,7 +546,7 @@ impl cfg_traits::Term<Func> for Id<Block> {
         Box::new(once(self))
     }
 }
-impl cfg_traits::Target<Func> for Id<Block> {
+impl cfg_traits::Target<Func> for BlockId {
     fn block(&self) -> <Func as cfg_traits::Func>::Block {
         *self
     }
@@ -562,7 +563,7 @@ impl cfg_traits::Target<Func> for Id<Block> {
 ///
 /// - `stmts`: Sequential statements in this block (as SWC AST `Stmt` nodes)
 /// - `end`: The block's terminator and exception handler
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Block {
     /// Statements executed sequentially in this block
@@ -570,6 +571,9 @@ pub struct Block {
     /// Terminator and exception handler
     pub end: End,
 }
+
+// Define specialized BlockArena and BlockId types for this Block type
+swc_ll_common::define_arena!(pub BlockArena, pub BlockId for Block);
 
 /// The end (exit point) of a basic block.
 ///
@@ -581,7 +585,7 @@ pub struct Block {
 /// - `catch`: Exception handler specification
 /// - `term`: Normal control flow terminator
 /// - `orig_span`: Original source location
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct End {
     /// Exception handler
@@ -595,7 +599,7 @@ pub struct End {
 ///
 /// Specifies what happens when an exception is thrown during block execution.
 /// Similar to TAC's `TCatch` but uses SWC AST types.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub enum Catch {
     /// No exception handler - propagate to caller
@@ -606,7 +610,7 @@ pub enum Catch {
         /// Pattern to bind the exception value to
         pat: Pat,
         /// The catch handler block
-        k: Id<Block>,
+        k: BlockId,
     },
 }
 
@@ -615,7 +619,7 @@ pub enum Catch {
 /// Each basic block ends with exactly one terminator that determines where
 /// control flow goes next. This is similar to TAC's `TTerm` but uses SWC AST
 /// expression nodes for values.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub enum Term {
     /// Return from function, optionally with a value
@@ -623,24 +627,24 @@ pub enum Term {
     /// Throw an exception with the given expression
     Throw(Expr),
     /// Unconditional jump to another block
-    Jmp(Id<Block>),
+    Jmp(BlockId),
     /// Conditional jump based on a boolean expression
     CondJmp {
         /// The condition expression
         cond: Expr,
         /// Block to jump to if condition is truthy
-        if_true: Id<Block>,
+        if_true: BlockId,
         /// Block to jump to if condition is falsy
-        if_false: Id<Block>,
+        if_false: BlockId,
     },
     /// Multi-way branch (switch statement)
     Switch {
         /// The expression being switched on
         x: Expr,
         /// Map from case values to target blocks
-        blocks: HashMap<Expr, Id<Block>>,
+        blocks: HashMap<Expr, BlockId>,
         /// Default block if no case matches
-        default: Id<Block>,
+        default: BlockId,
     },
     /// Placeholder or unreachable terminator
     #[default]

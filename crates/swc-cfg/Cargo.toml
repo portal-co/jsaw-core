@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 cfg-traits.workspace = true
-id-arena.workspace = true
+swc-ll-common.workspace = true
 relooper.workspace = true
 ssa-impls.workspace = true
 rkyv = {workspace = true,optional = true}
