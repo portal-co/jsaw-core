@@ -24,7 +24,6 @@
 //! - [`impls`]: Trait implementations for optimized SSA types
 //! - [`into`]: Conversion from basic SSA to optimized SSA
 
-use id_arena::{Arena, Id};
 use std::collections::BTreeSet;
 use swc_ecma_ast::Lit;
 use swc_ssa::{SCatch, SPostcedent, STarget, STerm, SValue, simplify::SValGetter, sval_item};
@@ -52,7 +51,7 @@ pub use portal_jsc_swc_util::r#type::{ObjType, OptType};
 /// - `Emit`: A value with type information that can be emitted
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum OptValue<I = Id<OptValueW>, B = Id<OptBlock>, F = OptFunc, D = ()> {
+pub enum OptValue<I = OptValueId, B = OptBlockId, F = OptFunc, D = ()> {
     /// Deoptimization point - fallback if speculation fails
     Deopt {
         /// The value being deoptimized
@@ -130,20 +129,28 @@ impl<I, B, F, D> OptValue<I, B, F, D> {
 pub struct OptValueW {
     pub value: OptValue,
 }
+
+// Define specialized OptValueArena and OptValueId types
+swc_ll_common::define_arena!(pub OptValueArena, pub OptValueId for OptValueW);
+
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct OptBlock {
-    pub params: Vec<(Id<OptValueW>, Option<OptType>)>,
-    pub insts: Vec<Id<OptValueW>>,
+    pub params: Vec<(OptValueId, Option<OptType>)>,
+    pub insts: Vec<OptValueId>,
     pub postcedent: OptPostcedent,
 }
-pub type OptPostcedent = SPostcedent<Id<OptValueW>, Id<OptBlock>>;
-pub type OptTarget = STarget<Id<OptValueW>, Id<OptBlock>>;
-pub type OptTerm = STerm<Id<OptValueW>, Id<OptBlock>>;
-pub type OptCatch = SCatch<Id<OptValueW>, Id<OptBlock>>;
+
+// Define specialized OptBlockArena and OptBlockId types
+swc_ll_common::define_arena!(pub OptBlockArena, pub OptBlockId for OptBlock);
+
+pub type OptPostcedent = SPostcedent<OptValueId, OptBlockId>;
+pub type OptTarget = STarget<OptValueId, OptBlockId>;
+pub type OptTerm = STerm<OptValueId, OptBlockId>;
+pub type OptCatch = SCatch<OptValueId, OptBlockId>;
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct OptCfg {
-    pub values: Arena<OptValueW>,
-    pub blocks: Arena<OptBlock>,
+    pub values: OptValueArena,
+    pub blocks: OptBlockArena,
     pub decls: BTreeSet<swc_ecma_ast::Id>,
 }
 impl OptValueW {
@@ -171,12 +178,12 @@ impl OptValueW {
         }
     }
 }
-impl<Ctx: Clone> SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc, Ctx> for OptCfg {
+impl<Ctx: Clone> SValGetter<OptValueId, OptBlockId, OptFunc, Ctx> for OptCfg {
     fn val(
         &self,
-        id: Id<OptValueW>,
+        id: OptValueId,
         ctx: Ctx,
-    ) -> Option<&SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
+    ) -> Option<&SValue<OptValueId, OptBlockId, OptFunc>> {
         match &self.values[id].value {
             OptValue::Deopt { value: a, .. } => self.val(*a, ctx),
             OptValue::Assert { val, ty } => self.val(*val, ctx),
@@ -185,9 +192,9 @@ impl<Ctx: Clone> SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc, Ctx> for OptCf
     }
     fn val_mut(
         &mut self,
-        id: Id<OptValueW>,
+        id: OptValueId,
         ctx: Ctx,
-    ) -> Option<&mut SValue<Id<OptValueW>, Id<OptBlock>, OptFunc>> {
+    ) -> Option<&mut SValue<OptValueId, OptBlockId, OptFunc>> {
         let v: *mut OptValue = &mut self.values[id].value as *mut _;
         //SAFETY: only borrowed once; values are moved before recursing
         match unsafe { &mut *v } {
@@ -200,16 +207,16 @@ impl<Ctx: Clone> SValGetter<Id<OptValueW>, Id<OptBlock>, OptFunc, Ctx> for OptCf
         }
     }
 }
-sval_item!(OptCfg [block Id<OptBlock>]);
+sval_item!(OptCfg [block OptBlockId]);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptFunc {
     pub cfg: OptCfg,
-    pub entry: Id<OptBlock>,
+    pub entry: OptBlockId,
     pub is_generator: bool,
     pub is_async: bool,
 }
 impl OptCfg {
-    pub fn add_blockparam(&mut self, k: Id<OptBlock>, ty: Option<OptType>) -> Id<OptValueW> {
+    pub fn add_blockparam(&mut self, k: OptBlockId, ty: Option<OptType>) -> OptValueId {
         let v = self.values.alloc(OptValueW {
             value: OptValue::Emit {
                 val: SValue::Param {

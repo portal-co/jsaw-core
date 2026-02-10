@@ -29,7 +29,7 @@ use portal_jsc_swc_util::SemanticCfg;
 /// custom logic for value transformations.
 pub struct OptStub {
     /// Mapping from input blocks to output blocks
-    map: BTreeMap<Id<SBlock>, Id<SBlock>>,
+    map: BTreeMap<SBlockId, SBlockId>,
 }
 impl OptStub {
     fn go(
@@ -37,15 +37,15 @@ impl OptStub {
         i: &SCfg,
         o: &mut SCfg,
         sematic: &SemanticCfg,
-        k: Id<SBlock>,
-    ) -> anyhow::Result<Id<SBlock>> {
+        k: SBlockId,
+    ) -> anyhow::Result<SBlockId> {
         loop {
             if let Some(k) = self.map.get(&k) {
                 return Ok(*k);
             }
             let l = o.blocks.alloc(Default::default());
             self.map.insert(k, l);
-            let baseline: BTreeMap<Id<SValueW>, Id<SValueW>> = i.blocks[k]
+            let baseline: BTreeMap<SValueId, SValueId> = i.blocks[k]
                 .params
                 .iter()
                 .map(|a| (a.0, o.add_blockparam(l)))
@@ -64,7 +64,7 @@ impl OptStub {
                     },
                 },
             };
-            let mut variants: BTreeMap<Id<SBlock>, BTreeMap<Id<SValueW>, Id<SValueW>>> =
+            let mut variants: BTreeMap<SBlockId, BTreeMap<SValueId, SValueId>> =
                 [(l, baseline)].into_iter().collect();
             for ins in i.blocks[k].stmts.iter().cloned() {
                 for (a, mut b) in take(&mut variants) {

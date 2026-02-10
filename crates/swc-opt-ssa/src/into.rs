@@ -7,9 +7,8 @@
 //! - Prepares for type-based optimizations
 //! - Handles deoptimization paths
 
-use crate::{OptBlock, OptCfg, OptFunc, OptType, OptValue, OptValueW};
+use crate::{OptBlock, OptBlockId, OptValueId, OptCfg, OptFunc, OptType, OptValue, OptValueW};
 use anyhow::Context;
-use id_arena::Id;
 use portal_jsc_swc_util::SemanticCfg;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -21,14 +20,14 @@ use swc_tac::{Item, SpreadOr};
 
 /// Conversion state for SSA to optimized SSA transformation.
 pub struct Convert {
-    pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<OptType>>, Id<OptBlock>>>,
+    pub all: BTreeMap<swc_ssa::SBlockId, HashMap<Vec<Option<OptType>>, OptBlockId>>,
 }
 fn deopt(
     out: &mut OptCfg,
-    k: Id<OptBlock>,
-    mut v: Id<OptValueW>,
+    k: OptBlockId,
+    mut v: OptValueId,
     mut ty: Option<OptType>,
-) -> anyhow::Result<Id<OptValueW>> {
+) -> anyhow::Result<OptValueId> {
     while let Some(t) = ty {
         let w = out.values.alloc(OptValueW {
             value: OptValue::Deopt {
@@ -44,12 +43,12 @@ fn deopt(
 }
 fn bi_id_deopt(
     out: &mut OptCfg,
-    k: Id<OptBlock>,
-    mut v1: Id<OptValueW>,
+    k: OptBlockId,
+    mut v1: OptValueId,
     mut ty1: Option<OptType>,
-    mut v2: Id<OptValueW>,
+    mut v2: OptValueId,
     mut ty2: Option<OptType>,
-) -> anyhow::Result<(Id<OptValueW>, Id<OptValueW>, Option<OptType>)> {
+) -> anyhow::Result<(OptValueId, OptValueId, Option<OptType>)> {
     let mut s = false;
     while ty1 != ty2 {
         if let Some(t) = ty1 {
@@ -78,10 +77,10 @@ impl Convert {
         &mut self,
         inp: &SCfg,
         out: &mut OptCfg,
-        i: Id<SBlock>,
+        i: swc_ssa::SBlockId,
         tys: Vec<Option<OptType>>,
         semantic: &SemanticCfg,
-    ) -> anyhow::Result<Id<OptBlock>> {
+    ) -> anyhow::Result<OptBlockId> {
         loop {
             if let Some(k) = self.all.get(&i).and_then(|v| v.get(&tys)) {
                 return Ok(*k);
@@ -152,7 +151,7 @@ impl Convert {
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
                             match (cnstl, cnstr) {
                                 (Some(_), Some(_)) => {
-                                    let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
+                                    let v: SValue<OptValueId, OptBlockId, OptFunc> =
                                         SValue::Item {
                                             item: Item::Bin {
                                                 left,
@@ -324,7 +323,7 @@ impl Convert {
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
                             match cnst {
                                 Some(k) => {
-                                    let v: SValue<Id<OptValueW>, Id<OptBlock>, OptFunc> =
+                                    let v: SValue<OptValueId, OptBlockId, OptFunc> =
                                         SValue::Item {
                                             item: Item::Un {
                                                 arg: arg,

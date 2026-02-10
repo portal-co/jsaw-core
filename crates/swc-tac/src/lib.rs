@@ -42,7 +42,6 @@ use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
 use either::Either;
-use id_arena::{Arena, Id};
 use lam::LAM;
 use linearize::{StaticMap, static_map};
 use portal_jsc_common::semantic;
@@ -269,7 +268,7 @@ pub struct TFunc {
     /// The control flow graph containing all basic blocks
     pub cfg: TCfg,
     /// The entry block identifier (where execution starts)
-    pub entry: Id<TBlock>,
+    pub entry: TBlockId,
     /// Function parameter identifiers
     pub params: Vec<Ident>,
     /// Optional TypeScript type annotations for parameters
@@ -279,6 +278,21 @@ pub struct TFunc {
     /// Whether this is an async function
     pub is_async: bool,
 }
+
+// Manual PartialEq/Eq implementation
+impl PartialEq for TFunc {
+    fn eq(&self, other: &Self) -> bool {
+        self.cfg == other.cfg
+            && self.entry == other.entry
+            && self.params == other.params
+            && self.ts_params == other.ts_params
+            && self.is_generator == other.is_generator
+            && self.is_async == other.is_async
+    }
+}
+
+impl Eq for TFunc {}
+
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct Mapper<'a> {
@@ -361,7 +375,7 @@ impl Default for TFunc {
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct TCfg {
     /// Arena containing all basic blocks
-    pub blocks: Arena<TBlock>,
+    pub blocks: TBlockArena,
     /// Register allocator/manager for temporary values
     pub regs: LAM<()>,
     /// Set of all declared variables in this function
@@ -373,17 +387,32 @@ pub struct TCfg {
     /// TypeScript return type annotation
     pub ts_retty: Option<TsTypeAnn>,
 }
+
+// Manual PartialEq/Eq implementation that skips LAM comparison
+impl PartialEq for TCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.blocks == other.blocks
+            && self.decls == other.decls
+            && self.type_annotations == other.type_annotations
+            && self.generics == other.generics
+            && self.ts_retty == other.ts_retty
+        // Note: regs (LAM) is intentionally not compared
+    }
+}
+
+impl Eq for TCfg {}
+
 pub trait Externs<I> {
     fn externs(&self) -> impl Iterator<Item = I>;
 }
 impl TFunc {
     pub fn remark(&mut self) {
-        let d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>> = domtree(&*self);
+        let d: BTreeMap<Option<TBlockId>, TBlockId> = domtree(&*self);
         self.cfg.remark_with_domtree(d);
     }
 }
 impl TCfg {
-    pub fn remark_with_domtree(&mut self, domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>) {
+    pub fn remark_with_domtree(&mut self, domtree: BTreeMap<Option<TBlockId>, TBlockId>) {
         let mut ssa_counts: BTreeMap<LId, usize> = BTreeMap::new();
         for (block_id, block) in self.blocks.iter() {
             'stmt_loop: for stmt in &block.stmts {
@@ -704,7 +733,7 @@ impl TCfg {
     }
     pub fn splat_objects(
         &mut self,
-        d: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
+        d: BTreeMap<Option<TBlockId>, TBlockId>,
         semantic: SemanticCfg,
     ) {
         let mut cont = true;
@@ -1138,6 +1167,19 @@ pub struct TStmt {
     /// Source span for debugging and error reporting
     pub span: Span,
 }
+
+// Manual PartialEq/Eq implementation
+impl PartialEq for TStmt {
+    fn eq(&self, other: &Self) -> bool {
+        self.left == other.left
+            && self.flags == other.flags
+            && self.right == other.right
+            && self.span == other.span
+    }
+}
+
+impl Eq for TStmt {}
+
 impl TStmt {
     pub fn will_ruin(&self, i: &Ident) -> bool {
         self.right.will_ruin(i)
@@ -1183,7 +1225,7 @@ impl TStmt {
 ///
 /// - `stmts`: Sequence of statements executed in order
 /// - `post`: The postcedent (terminator and exception handler) that ends the block
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct TBlock {
     /// Statements in this basic block, executed sequentially
@@ -1191,6 +1233,9 @@ pub struct TBlock {
     /// The postcedent (terminator and exception handling)
     pub post: TPostecedent,
 }
+
+// Define specialized TBlockArena and TBlockId types
+swc_ll_common::define_arena!(pub TBlockArena, pub TBlockId for TBlock);
 /// The postcedent (exit point) of a basic block.
 ///
 /// Each basic block ends with a postcedent that specifies:
@@ -1199,7 +1244,7 @@ pub struct TBlock {
 ///
 /// # Type Parameters
 ///
-/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `B`: Block identifier type (defaults to `TBlockId`)
 /// - `I`: Identifier type (defaults to `Ident`)
 ///
 /// # Fields
@@ -1207,9 +1252,9 @@ pub struct TBlock {
 /// - `catch`: Exception handler for this block
 /// - `term`: The terminator specifying normal control flow
 /// - `orig_span`: Original source span for debugging
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-pub struct TPostecedent<B = Id<TBlock>, I = Ident> {
+pub struct TPostecedent<B = TBlockId, I = Ident> {
     /// Exception handler specification
     pub catch: TCatch<B, I>,
     /// Normal control flow terminator
@@ -1234,7 +1279,7 @@ pub mod impls;
 ///
 /// # Type Parameters
 ///
-/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `B`: Block identifier type (defaults to `TBlockId`)
 /// - `I`: Identifier type (defaults to `Ident`)
 ///
 /// # Variants
@@ -1243,7 +1288,7 @@ pub mod impls;
 /// - `Jump`: Jump to a catch handler block, binding the exception to a pattern
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-pub enum TCatch<B = Id<TBlock>, I = Ident> {
+pub enum TCatch<B = TBlockId, I = Ident> {
     // #[default]
     /// No exception handler - throw to caller
     Throw,
@@ -1296,7 +1341,7 @@ impl<B, I> TCatch<B, I> {
 ///
 /// # Type Parameters
 ///
-/// - `B`: Block identifier type (defaults to `Id<TBlock>`)
+/// - `B`: Block identifier type (defaults to `TBlockId`)
 /// - `I`: Identifier type (defaults to `Ident`)
 ///
 /// # Variants
@@ -1310,7 +1355,7 @@ impl<B, I> TCatch<B, I> {
 /// - `Default`: Placeholder/unreachable terminator
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-pub enum TTerm<B = Id<TBlock>, I = Ident> {
+pub enum TTerm<B = TBlockId, I = Ident> {
     /// Return from function, optionally with a value
     Return(Option<I>),
     /// Tail call - call function and immediately return its result

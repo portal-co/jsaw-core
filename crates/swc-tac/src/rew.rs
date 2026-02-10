@@ -16,9 +16,8 @@
 //!
 //! - [`Options`]: Configuration for the rewriting process
 
-use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TCallee, TCfg, TFunc};
+use crate::{Item, LId, MemberFlags, PropKey, SpreadOr, TBlock, TBlockId, TCallee, TCfg, TFunc};
 use anyhow::Context;
-use id_arena::Id;
 use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use std::collections::{BTreeMap, HashMap};
@@ -992,7 +991,7 @@ impl<I, F> Render<I, F> for LId<I> {
 // #[derive(Default)]
 #[non_exhaustive]
 pub struct Rew<'a> {
-    pub all: BTreeMap<Id<TBlock>, Id<Block>>,
+    pub all: BTreeMap<TBlockId, swc_cfg::BlockId>,
     pub options: &'a Options<'a>,
 }
 impl Rew<'_> {
@@ -1000,8 +999,8 @@ impl Rew<'_> {
         &mut self,
         cfg: &mut Cfg,
         tcfg: &TCfg,
-        block_id: Id<TBlock>,
-    ) -> anyhow::Result<Id<Block>> {
+        block_id: TBlockId,
+    ) -> anyhow::Result<swc_cfg::BlockId> {
         loop {
             if let Some(existing_block_id) = self.all.get(&block_id) {
                 return Ok(*existing_block_id);

@@ -5,12 +5,11 @@
 //! flow and SSA analysis algorithms.
 
 use crate::*;
-use id_arena::{Arena, Id};
 use ssa_traits::{Func, HasChainableValues, HasValues};
 use std::iter::{empty, once};
 impl cfg_traits::Func for OptFunc {
-    type Block = Id<OptBlock>;
-    type Blocks = Arena<OptBlock>;
+    type Block = OptBlockId;
+    type Blocks = OptBlockArena;
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
@@ -135,8 +134,8 @@ impl cfg_traits::Target<OptFunc> for OptTarget {
     }
 }
 impl ssa_traits::Func for OptFunc {
-    type Value = Id<OptValueW>;
-    type Values = Arena<OptValueW>;
+    type Value = OptValueId;
+    type Values = OptValueArena;
     fn values(&self) -> &Self::Values {
         &self.cfg.values
     }

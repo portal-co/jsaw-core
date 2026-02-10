@@ -12,8 +12,7 @@
 //! - `cfg_traits::Target` for `STarget`
 //! - `ssa_traits::HasValues` and `ssa_traits::HasChainableValues` for SSA types
 
-use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
-use id_arena::{Arena, Id};
+use crate::{SBlock, SBlockId, SValueId, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
 use ssa_traits::{HasChainableValues, HasValues};
 use std::{
     convert::Infallible,
@@ -21,8 +20,8 @@ use std::{
 };
 use swc_tac::SpreadOr;
 impl cfg_traits::Func for SFunc {
-    type Block = Id<SBlock>;
-    type Blocks = Arena<SBlock>;
+    type Block = crate::SBlockId;
+    type Blocks = crate::SBlockArena;
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
@@ -143,8 +142,8 @@ impl cfg_traits::Target<SFunc> for STarget {
     }
 }
 impl ssa_traits::Func for SFunc {
-    type Value = Id<SValueW>;
-    type Values = Arena<SValueW>;
+    type Value = SValueId;
+    type Values = crate::SValueArena;
     fn values(&self) -> &Self::Values {
         &self.cfg.values
     }

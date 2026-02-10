@@ -83,7 +83,7 @@ impl SCfg {
         while take(&mut redo) {
             for ref_ in self.values.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 redo = redo
-                    | ItemGetterExt::<id_arena::Id<SValueW>, SFunc, SSACtx<'_, ()>>::simplify_just(
+                    | ItemGetterExt::<crate::SValueId, SFunc, SSACtx<'_, ()>>::simplify_just(
                         &mut *self,
                         ref_,
                         SSACtx {
@@ -248,34 +248,34 @@ macro_rules! sval_item {
         }
     };
 }
-impl<Ctx: Clone> SValGetter<Id<SValueW>, Id<SBlock>, SFunc, Ctx> for SCfg {
-    fn val(&self, id: Id<SValueW>, ctx: Ctx) -> Option<&SValue<Id<SValueW>, Id<SBlock>>> {
+impl<Ctx: Clone> SValGetter<crate::SValueId, SBlockId, SFunc, Ctx> for SCfg {
+    fn val(&self, id: crate::SValueId, ctx: Ctx) -> Option<&SValue<crate::SValueId, SBlockId>> {
         Some(&self.values[id].value)
     }
     fn val_mut(
         &mut self,
-        id: Id<SValueW>,
+        id: crate::SValueId,
         ctx: Ctx,
-    ) -> Option<&mut SValue<Id<SValueW>, Id<SBlock>, SFunc>> {
+    ) -> Option<&mut SValue<crate::SValueId, SBlockId, SFunc>> {
         Some(&mut self.values[id].value)
     }
     fn inputs<'a>(
         &'a self,
-        block: &Id<SBlock>,
+        block: &SBlockId,
         param: usize,
         ctx: Ctx,
-    ) -> Box<dyn Iterator<Item = Id<SValueW>> + 'a>
+    ) -> Box<dyn Iterator<Item = crate::SValueId> + 'a>
     where
-        Id<SValueW>: 'a,
-        Id<SBlock>: 'a,
+        crate::SValueId: 'a,
+        SBlockId: 'a,
     {
         Box::new(SCfg::inputs(self, *block, param))
     }
-    fn taints_object(&self, id: Id<SValueW>, ctx: Ctx) -> bool {
+    fn taints_object(&self, id: crate::SValueId, ctx: Ctx) -> bool {
         SCfg::taints_object(self, &id)
     }
 }
-sval_item!(SCfg [block Id<SBlock>]);
+sval_item!(SCfg [block SBlockId]);
 
 // impl<I: Copy + Eq, B: Clone, F> SValue<I, B, F> {
 //     pub fn array_in(

@@ -10,7 +10,7 @@ repository.workspace = true
 anyhow.workspace = true
 arena-traits.workspace = true
 cfg-traits.workspace = true
-id-arena.workspace = true
+swc-ll-common.workspace = true
 ssa-traits.workspace = true
 rkyv = {workspace = true,optional = true}
 ssa-impls.workspace = true

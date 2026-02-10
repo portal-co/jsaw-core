@@ -14,7 +14,7 @@ impl<D: TacDialect<Tag = Infallible>> ConvTacDialect for D {}
 
 /// Converter from Simpl TAC to standard TAC.
 pub struct SimplTacConverter<D: ConvTacDialect> {
-    pub map: BTreeMap<Id<TSimplBlock<D>>, Id<TBlock>>,
+    pub map: BTreeMap<Id<TSimplBlock<D>>, TBlockId>,
 }
 impl<D: ConvTacDialect> SimplTacConverter<D> {
     pub fn convert_block(
@@ -22,7 +22,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         loop {
             if let Some(k) = self.map.get(&k) {
                 return Ok(*k);
@@ -147,7 +147,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-        mut n: Id<TBlock>,
+        mut n: TBlockId,
         left: &SimplPathId,
         span: &Span,
     ) -> LId {
@@ -208,7 +208,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-        mut n: Id<TBlock>,
+        mut n: TBlockId,
         left: &SimplPathId,
         span: &Span,
     ) -> crate::Ident {
@@ -244,7 +244,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-        mut n: Id<TBlock>,
+        mut n: TBlockId,
         left: &SimplPathId,
         ids: impl Iterator<Item = (&'a crate::Ident, impl Iterator<Item = &'b SimplPathId>)>,
         span: &Span,
@@ -337,7 +337,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-        mut n: Id<TBlock>,
+        mut n: TBlockId,
         TSimplStmt {
             left,
             mark,
@@ -345,7 +345,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             right,
             span,
         }: &TSimplStmt<D>,
-    ) -> anyhow::Result<(TStmt, Id<TBlock>)> {
+    ) -> anyhow::Result<(TStmt, TBlockId)> {
         macro_rules! lid {
             ($e:expr) => {
                 match $e {

@@ -25,7 +25,6 @@
 
 use crate::*;
 use arena_traits::{Arena as TArena, IndexAlloc};
-use id_arena::{Arena, Id};
 use portal_jsc_simpl_js::{
     self as simpl_ast, Dialect, FuncId, SimplExpr, SimplPath, SimplPathId, SimplStmt,
 };

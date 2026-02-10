@@ -1,16 +1,15 @@
 use std::collections::BTreeMap;
-use id_arena::Id;
-use crate::{SBlock, SCatch, SCfg};
+use crate::{SBlock, SBlockId, SCatch, SCfg};
 pub struct Idw {
-    pub map: BTreeMap<Id<SBlock>, Id<SBlock>>,
+    pub map: BTreeMap<SBlockId, SBlockId>,
 }
 impl Idw {
     pub fn trans(
         &mut self,
         orig: &SCfg,
         new: &mut SCfg,
-        block_id: Id<SBlock>,
-    ) -> anyhow::Result<Id<SBlock>> {
+        block_id: SBlockId,
+    ) -> anyhow::Result<SBlockId> {
         loop {
             if let Some(mapped_id) = self.map.get(&block_id).cloned() {
                 return Ok(mapped_id);

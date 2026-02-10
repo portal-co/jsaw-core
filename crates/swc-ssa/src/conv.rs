@@ -40,20 +40,20 @@ use ssa_impls::dom::dominates;
 #[non_exhaustive]
 pub struct ToSSAConverter {
     /// Mapping from TAC block IDs to SSA block IDs
-    pub map: BTreeMap<Id<TBlock>, Id<SBlock>>,
+    pub map: BTreeMap<swc_tac::TBlockId, crate::SBlockId>,
     /// Set of all variables encountered
     pub all: BTreeSet<Ident>,
     /// Special undefined value for uninitialized variables
-    pub undef: Id<SValueW>,
+    pub undef: SValueId,
     // /// Dominance tree for control flow analysis
-    // pub domtree: BTreeMap<Option<Id<TBlock>>, Id<TBlock>>,
+    // pub domtree: BTreeMap<Option<swc_tac::TBlockId>, swc_tac::TBlockId>,
 }
 impl ToSSAConverter {
-    fn safe_to_carry(&self, target: Id<TBlock>, src: Id<TBlock>) -> bool {
+    fn safe_to_carry(&self, target: swc_tac::TBlockId, src: swc_tac::TBlockId) -> bool {
         // dominates::<TFunc>(&self.domtree, Some(src), Some(target))
         false
     }
-    // pub fn from_undef(undef: Id<SValueW>) -> Self {
+    // pub fn from_undef(undef: SValueId) -> Self {
     //     Self {
     //         map: Default::default(),
     //         all: Default::default(),
@@ -63,9 +63,9 @@ impl ToSSAConverter {
     pub fn apply_shim(
         &self,
         o: &mut SCfg,
-        state: &BTreeMap<Ident, (Id<SValueW>, ValFlags)>,
-        s: &Option<(Id<SBlock>, Vec<Ident>)>,
-        x: Id<SBlock>,
+        state: &BTreeMap<Ident, (SValueId, ValFlags)>,
+        s: &Option<(crate::SBlockId, Vec<Ident>)>,
+        x: crate::SBlockId,
     ) {
         let Some((a, b)) = s else {
             o.blocks[x].postcedent.catch = SCatch::Throw;
@@ -86,13 +86,13 @@ impl ToSSAConverter {
     }
     pub fn load(
         &self,
-        state: &BTreeMap<Ident, (Id<SValueW>, ValFlags)>,
+        state: &BTreeMap<Ident, (SValueId, ValFlags)>,
         i: &TCfg,
         o: &mut SCfg,
-        t: Id<SBlock>,
+        t: crate::SBlockId,
         a: Ident,
-        cache: &BTreeMap<Ident, Id<SValueW>>,
-    ) -> anyhow::Result<Id<SValueW>> {
+        cache: &BTreeMap<Ident, SValueId>,
+    ) -> anyhow::Result<SValueId> {
         if let Some(k) = cache.get(&a) {
             return Ok(*k);
         }
@@ -136,9 +136,9 @@ impl ToSSAConverter {
         &mut self,
         i: &TCfg,
         o: &mut SCfg,
-        k: Id<TBlock>,
-        // app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
-    ) -> anyhow::Result<Id<SBlock>> {
+        k: swc_tac::TBlockId,
+        // app: &mut (dyn Iterator<Item = (Ident, SValueId)> + '_),
+    ) -> anyhow::Result<crate::SBlockId> {
         self.convert_block(i, o, k)
     }
     // Private helper for block/term conversion
@@ -146,9 +146,9 @@ impl ToSSAConverter {
         &mut self,
         i: &TCfg,
         o: &mut SCfg,
-        k: Id<TBlock>,
-        // app: &mut (dyn Iterator<Item = (Ident, Id<SValueW>)> + '_),
-    ) -> anyhow::Result<Id<SBlock>> {
+        k: swc_tac::TBlockId,
+        // app: &mut (dyn Iterator<Item = (Ident, SValueId)> + '_),
+    ) -> anyhow::Result<crate::SBlockId> {
  
         loop {
             if let Some(a) = self.map.get(&k) {
@@ -162,7 +162,7 @@ impl ToSSAConverter {
             self.map.insert(k, t);
             // let app: BTreeMap<_, _> = app.collect();
             let ok = k;
-            let shim: Option<(Id<SBlock>, Vec<Ident>)> = match &i.blocks[k].post.catch {
+            let shim: Option<(crate::SBlockId, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
                 swc_tac::TCatch::Jump { pat, k: b } => {
                     let a = o.blocks.alloc(SBlock {
@@ -296,7 +296,7 @@ impl ToSSAConverter {
                     }
                 }
             }
-            let params = |this: &Self, k2: Id<TBlock>| {
+            let params = |this: &Self, k2: swc_tac::TBlockId| {
                 // let d = this.safe_to_carry(k2, k);
                 this.all
                     .iter()
@@ -313,7 +313,7 @@ impl ToSSAConverter {
                     .cloned()
                     .collect::<Vec<_>>()
             };
-            // let dtc = |this: &Self, k2: Id<TBlock>| {
+            // let dtc = |this: &Self, k2: swc_tac::TBlockId| {
             //     let d = this.safe_to_carry(k2, k);
             //     if d {
             //         app.clone()

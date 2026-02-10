@@ -19,8 +19,7 @@
 //! SSA value IDs are converted to unique TAC variable names using a prefix
 //! and syntax context to avoid name collisions.
 
-use crate::{SBlock, SFunc, STarget, STerm, SValue, SValueW};
-use id_arena::Id;
+use crate::{SBlock, SBlockId, SValueId, SFunc, STarget, STerm, SValue, SValueW};
 use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
 use swc_atoms::Atom;
 use swc_common::{Mark, Span, SyntaxContext};
@@ -80,13 +79,13 @@ impl TryFrom<SFunc> for TFunc {
 #[derive(Default)]
 #[non_exhaustive]
 pub struct Rew {
-    pub blocks: BTreeMap<BlockEntry, Id<TBlock>>,
+    pub blocks: BTreeMap<BlockEntry, swc_tac::TBlockId>,
     pub ctxt: OnceLock<SyntaxContext>,
     pub prefix: Atom,
 }
 #[derive(Clone, Ord, PartialEq, PartialOrd, Eq)]
 pub enum BlockEntry {
-    Block(Id<SBlock>),
+    Block(crate::SBlockId),
     Target(STarget, Option<Ident>),
 }
 impl Rew {
@@ -95,7 +94,7 @@ impl Rew {
         func: &SFunc,
         cfg: &mut TCfg,
         block_entry: BlockEntry,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<swc_tac::TBlockId> {
         let ctxt = self
             .ctxt
             .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()))
@@ -282,7 +281,7 @@ impl Rew {
 pub fn mangle_param(
     prefix: Atom,
     ctxt: SyntaxContext,
-    block_id: Id<SBlock>,
+    block_id: crate::SBlockId,
     index: usize,
 ) -> Ident {
     (
@@ -294,7 +293,7 @@ pub fn mangle_value(
     prefix: Atom,
     ctxt: SyntaxContext,
     func: &SFunc,
-    value_id: Id<SValueW>,
+    value_id: SValueId,
 ) -> Ident {
     match &func.cfg.values[value_id].value {
         SValue::Param { block, idx, ty } => {

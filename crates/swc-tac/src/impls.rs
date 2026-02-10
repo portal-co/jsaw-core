@@ -9,12 +9,12 @@
 //! - `cfg_traits::Func` for `TFunc`
 //! - `cfg_traits::Block` for `TBlock`
 //! - `cfg_traits::Term` for `TPostecedent`
-//! - `cfg_traits::Target` for `Id<TBlock>`
+//! - `cfg_traits::Target` for `TBlockId`
 
 use crate::*;
 impl cfg_traits::Func for TFunc {
-    type Block = Id<TBlock>;
-    type Blocks = Arena<TBlock>;
+    type Block = TBlockId;
+    type Blocks = TBlockArena;
     fn blocks(&self) -> &Self::Blocks {
         &self.cfg.blocks
     }
@@ -35,7 +35,7 @@ impl cfg_traits::Block<TFunc> for TBlock {
     }
 }
 impl cfg_traits::Term<TFunc> for TPostecedent {
-    type Target = Id<TBlock>;
+    type Target = TBlockId;
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         TFunc: 'a,
@@ -93,7 +93,7 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
         )
     }
 }
-impl cfg_traits::Target<TFunc> for Id<TBlock> {
+impl cfg_traits::Target<TFunc> for TBlockId {
     fn block(&self) -> <TFunc as cfg_traits::Func>::Block {
         *self
     }
@@ -101,8 +101,8 @@ impl cfg_traits::Target<TFunc> for Id<TBlock> {
         self
     }
 }
-impl cfg_traits::Term<TFunc> for Id<TBlock> {
-    type Target = Id<TBlock>;
+impl cfg_traits::Term<TFunc> for TBlockId {
+    type Target = TBlockId;
     fn targets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Self::Target> + 'a>
     where
         TFunc: 'a,

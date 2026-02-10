@@ -70,11 +70,11 @@ impl TFunc {
 #[derive(Default)]
 pub struct Splatting {
     /// Cache mapping input blocks to output blocks (for memoization)
-    pub cache: BTreeMap<Id<TBlock>, Id<TBlock>>,
+    pub cache: BTreeMap<TBlockId, TBlockId>,
     /// Current exception handler context
     pub catch: TCatch,
     /// Return target for inlined function: (result variable, continuation block, arguments array)
-    pub ret: Option<(LId, Id<TBlock>, Ident)>,
+    pub ret: Option<(LId, TBlockId, Ident)>,
     /// The `this` binding for the inlined function
     pub this_val: Option<Ident>,
     /// Functions currently being inlined (prevents infinite recursion)
@@ -86,9 +86,9 @@ impl Splatting {
         value: Ident,
         arrow: ThisArg<(Atom, SyntaxContext)>,
         output: &TCfg,
-        out_block: Id<TBlock>,
+        out_block: TBlockId,
         stmt: &TStmt,
-        d: Id<TBlock>,
+        d: TBlockId,
         argv: Ident,
         func: &TFunc,
     ) -> Self {
@@ -110,7 +110,7 @@ impl Splatting {
     }
     fn sub(
         &self,
-        mut out_block: Id<TBlock>,
+        mut out_block: TBlockId,
         output: &mut TCfg,
         value: Ident,
         arrow: ThisArg<(Atom, SyntaxContext)>,
@@ -118,7 +118,7 @@ impl Splatting {
         func: &TFunc,
         args: &[SpreadOr<Ident>],
         map: Mapper<'_>,
-    ) -> (Id<TBlock>) {
+    ) -> (TBlockId) {
         let argv = output.regs.alloc(());
         output.decls.insert(argv.clone());
         output.blocks[out_block].stmts.push(TStmt {
@@ -191,9 +191,9 @@ impl Splatting {
         &mut self,
         input: &TCfg,
         output: &mut TCfg,
-        in_block: Id<TBlock>,
+        in_block: TBlockId,
         map: Mapper<'_>,
-    ) -> Id<TBlock> {
+    ) -> TBlockId {
         let semantic = map.semantic;
         let consts = map.consts.as_deref();
         loop {

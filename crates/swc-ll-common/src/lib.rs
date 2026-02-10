@@ -170,7 +170,6 @@ use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
 use either::Either;
-use id_arena::{Arena, Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::iter::{empty, once};

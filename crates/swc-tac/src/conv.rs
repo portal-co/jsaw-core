@@ -38,7 +38,7 @@ use swc_ecma_ast::{
 #[non_exhaustive]
 pub struct ToTACConverter<'a> {
     /// Mapping from CFG block IDs to TAC block IDs
-    pub map: BTreeMap<Id<Block>, Id<TBlock>>,
+    pub map: BTreeMap<swc_cfg::BlockId, TBlockId>,
 
     pub core: ToTACConverterCore<'a>,
 }
@@ -51,13 +51,13 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         call: &CallExpr,
     ) -> anyhow::Result<(
         TCallee<Ident>,
         Vec<SpreadOr<(Atom, SyntaxContext)>>,
-        Id<TBlock>,
+        TBlockId,
     )> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
@@ -109,10 +109,10 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         s: &Stmt,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         match s {
             Stmt::Expr(e) => {
                 (_, t) = self.expr(i, o, b, t, &e.expr)?;
@@ -172,12 +172,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         p: &Pat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         match p {
             Pat::Ident(i2) => self.bind_ident(i, o, b, t, i2, f, decl),
             Pat::Object(op) => self.bind_object(i, o, b, t, op, f, decl),
@@ -189,12 +189,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         assign_pat: &AssignPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         let g;
         g = o.regs.alloc(());
         o.decls.insert(g.clone());
@@ -256,12 +256,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         p: &ArrayPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         let mut ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
         self.bind_array_contents(i, o, b, t, ps, p, f, decl)
     }
@@ -269,13 +269,13 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         ps: Vec<Option<&Pat>>,
         p: &(dyn Spanned + '_),
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         let mut ix = 0;
         let r = loop {
             if let Some(a) = ps.get(ix).and_then(|a| *a) {
@@ -395,12 +395,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         p: &ObjectPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         let mut a = BTreeSet::new();
         for prop in p.props.iter() {
             match prop {
@@ -532,12 +532,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         i2: &BindingIdent,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<Id<TBlock>> {
+    ) -> anyhow::Result<TBlockId> {
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id {
                 id: i2.id.clone().into(),
@@ -558,10 +558,10 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         s: &MemberExpr,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         let obj;
         (obj, t) = self.expr(i, o, b, t, &s.obj)?;
         self.member_prop(i, o, b, t, &s.prop, obj)
@@ -570,11 +570,11 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         s: &MemberProp,
         obj: Ident,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         let i = match s {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
@@ -610,10 +610,10 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         s: &Class,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         let superclass = match &s.super_class {
             None => None,
             Some(a) => Some({
@@ -798,12 +798,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         tgt: &AssignTarget,
         op: &AssignOp,
         mut right: Ident,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         match tgt {
             swc_ecma_ast::AssignTarget::Simple(simple_assign_target) => match &simple_assign_target
             {
@@ -943,12 +943,12 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         f: Frame<'_>,
         s: Ident,
         r: Ident,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         match f {
             Frame::Assign(assign_target, assign_op) => {
                 self.assign(i, o, b, t, &assign_target, &assign_op, s)
@@ -1161,10 +1161,10 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         s: &Expr,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         // if let Some(i2) = self.import_mapper[ImportMapperReq::Native].as_deref() {
         //     if let Some(n) = s.resolve_natives(i2) {
         //         let arg = n.map(&mut |e| {
@@ -1723,13 +1723,13 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         test: Ident,
         cons: &MemberProp,
         alt: &MemberProp,
         span: Span,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         match (cons, alt) {
             (MemberProp::Computed(cons), MemberProp::Computed(alt)) => {
                 self.convert_cond_expr(i, o, b, t, test, &cons.expr, &alt.expr, span)
@@ -1780,13 +1780,13 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
         test: Ident,
         cons: &Expr,
         alt: &Expr,
         span: Span,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         let v = test;
         match o.def(LId::Id { id: v.clone() }) {
             Some(Item::Lit { lit: Lit::Bool(b2) }) => {
@@ -1980,10 +1980,10 @@ impl ToTACConverterCore<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        t: TBlockId,
         prop: &MemberProp,
-    ) -> anyhow::Result<(Ident, Id<TBlock>)> {
+    ) -> anyhow::Result<(Ident, TBlockId)> {
         match prop {
             MemberProp::Ident(ident_name) => {
                 let lit = Lit::Str(Str {
@@ -2013,11 +2013,11 @@ impl ToTACConverterCore<'_> {
     // Private helper for tail call conversion
 }
 impl ToTACConverter<'_> {
-    pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
+    pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: swc_cfg::BlockId) -> anyhow::Result<TBlockId> {
         self.convert_block(i, o, b)
     }
     // Private helper for block/term conversion
-    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: Id<Block>) -> anyhow::Result<Id<TBlock>> {
+    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: swc_cfg::BlockId) -> anyhow::Result<TBlockId> {
         loop {
             if let Some(a) = self.map.get(&b) {
                 return Ok(*a);
@@ -2056,8 +2056,8 @@ impl ToTACConverter<'_> {
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
-        b: Id<Block>,
-        mut t: Id<TBlock>,
+        b: swc_cfg::BlockId,
+        mut t: TBlockId,
     ) -> anyhow::Result<TTerm> {
         match &i.blocks[b].end.term {
             swc_cfg::Term::Return(expr) => match expr {

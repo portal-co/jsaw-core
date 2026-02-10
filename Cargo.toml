@@ -39,8 +39,7 @@ portal-jsc-common = { version = "^0.8.0-pre.10", path = "crates/portal-jsc-commo
 
 anyhow = "^1.0.87"
 bimap = "^0.6.3"
-id-arena = "^2.2.1"
-arena-traits = { version = "^0.2.3", features = ["id-arena"] }
+arena-traits = { version = "^0.2.3" }
 ssa-traits = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
 cfg-traits = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
 ssa-impls =  {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}

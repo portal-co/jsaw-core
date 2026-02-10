@@ -68,7 +68,6 @@
 
 use anyhow::Context;
 use cfg_traits::Term;
-use id_arena::{Arena, Id};
 use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
@@ -214,7 +213,7 @@ pub struct SFunc {
     /// The SSA control flow graph
     pub cfg: SCfg,
     /// The entry block (where execution begins)
-    pub entry: Id<SBlock>,
+    pub entry: SBlockId,
     /// Whether this is a generator function (function*)
     pub is_generator: bool,
     /// Whether this is an async function
@@ -222,6 +221,20 @@ pub struct SFunc {
     /// Optional TypeScript type annotations for parameters
     pub ts_params: Vec<Option<TsType>>,
 }
+
+// Manual PartialEq/Eq for SFunc (SCfg contains arenas)
+impl PartialEq for SFunc {
+    fn eq(&self, other: &Self) -> bool {
+        self.cfg == other.cfg
+            && self.entry == other.entry
+            && self.is_generator == other.is_generator
+            && self.is_async == other.is_async
+            && self.ts_params == other.ts_params
+    }
+}
+
+impl Eq for SFunc {}
+
 impl TryFrom<TFunc> for SFunc {
     type Error = anyhow::Error;
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
@@ -247,11 +260,11 @@ impl TryFrom<TFunc> for SFunc {
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct SCfg {
     /// Arena containing all basic blocks
-    pub blocks: Arena<SBlock>,
+    pub blocks: SBlockArena,
     /// Arena containing all SSA values
-    pub values: Arena<SValueW>,
+    pub values: SValueArena,
     /// TypeScript type annotations for values
-    pub ts: BTreeMap<Id<SValueW>, TsType>,
+    pub ts: BTreeMap<SValueId, TsType>,
     /// Set of declared variables (may be accessed non-SSA style)
     pub decls: BTreeSet<Ident>,
     /// Generic type parameters (if this is a generic function)
@@ -261,6 +274,22 @@ pub struct SCfg {
     /// Atom resolver for generating fresh identifiers
     pub resolver: Arc<dyn AtomResolver>,
 }
+
+// Manual PartialEq/Eq for SCfg (AtomResolver is not comparable)
+impl PartialEq for SCfg {
+    fn eq(&self, other: &Self) -> bool {
+        self.blocks == other.blocks
+            && self.values == other.values
+            && self.ts == other.ts
+            && self.decls == other.decls
+            && self.generics == other.generics
+            && self.ts_retty == other.ts_retty
+        // Note: resolver (AtomResolver) is intentionally not compared
+    }
+}
+
+impl Eq for SCfg {}
+
 impl Default for SCfg {
     fn default() -> Self {
         Self {
@@ -275,7 +304,7 @@ impl Default for SCfg {
     }
 }
 impl SCfg {
-    pub fn inputs(&self, block: Id<SBlock>, param: usize) -> impl Iterator<Item = Id<SValueW>> {
+    pub fn inputs(&self, block: SBlockId, param: usize) -> impl Iterator<Item = SValueId> {
         return self.blocks.iter().flat_map(move |k| {
             k.1.postcedent
                 .term
@@ -296,7 +325,7 @@ impl SCfg {
                 }))
         });
     }
-    pub fn input(&self, block: Id<SBlock>, param: usize) -> Option<Id<SValueW>> {
+    pub fn input(&self, block: SBlockId, param: usize) -> Option<SValueId> {
         let mut i = self.inputs(block, param);
         let a = i.next()?;
         for j in i {
@@ -306,7 +335,7 @@ impl SCfg {
         }
         return Some(a);
     }
-    pub fn taints_object(&self, value_id: &Id<SValueW>) -> bool {
+    pub fn taints_object(&self, value_id: &SValueId) -> bool {
         return self.blocks.iter().any(|block_entry| {
             block_entry.1.stmts.iter().any(|stmt_id| {
                 let mut current_value = *stmt_id;
@@ -380,12 +409,15 @@ impl SCfg {
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct SBlock {
     /// Block parameters (each is an SSA value ID with metadata)
-    pub params: Vec<(Id<SValueW>, ())>,
+    pub params: Vec<(SValueId, ())>,
     /// SSA values computed in this block (references into the value arena)
-    pub stmts: Vec<Id<SValueW>>,
+    pub stmts: Vec<SValueId>,
     /// Block terminator and exception handler
     pub postcedent: SPostcedent,
 }
+
+// Define specialized SBlockArena and SBlockId types
+swc_ll_common::define_arena!(pub SBlockArena, pub SBlockId for SBlock);
 /// The postcedent (exit point) of an SSA basic block.
 ///
 /// Similar to TAC's `TPostcedent`, but with SSA-specific semantics where
@@ -393,8 +425,8 @@ pub struct SBlock {
 ///
 /// # Type Parameters
 ///
-/// - `I`: SSA value identifier type (defaults to `Id<SValueW>`)
-/// - `B`: Block identifier type (defaults to `Id<SBlock>`)
+/// - `I`: SSA value identifier type (defaults to `SValueId`)
+/// - `B`: Block identifier type (defaults to `SBlockId`)
 ///
 /// # Fields
 ///
@@ -402,7 +434,7 @@ pub struct SBlock {
 /// - `catch`: Exception handler specification
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-pub struct SPostcedent<I = Id<SValueW>, B = Id<SBlock>> {
+pub struct SPostcedent<I = SValueId, B = SBlockId> {
     /// Normal control flow terminator
     pub term: STerm<I, B>,
     /// Exception handler
@@ -424,8 +456,8 @@ impl<I, B> Default for SPostcedent<I, B> {
 ///
 /// # Type Parameters
 ///
-/// - `I`: SSA value identifier type (defaults to `Id<SValueW>`)
-/// - `B`: Block identifier type (defaults to `Id<SBlock>`)
+/// - `I`: SSA value identifier type (defaults to `SValueId`)
+/// - `B`: Block identifier type (defaults to `SBlockId`)
 /// - `F`: Function type (defaults to `SFunc`)
 ///
 /// # Variants
@@ -439,7 +471,7 @@ impl<I, B> Default for SPostcedent<I, B> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[non_exhaustive]
-pub enum SValue<I = Id<SValueW>, B = Id<SBlock>, F = SFunc> {
+pub enum SValue<I = SValueId, B = SBlockId, F = SFunc> {
     /// A block parameter (bound when jumping to the block)
     Param {
         /// The block this parameter belongs to
@@ -663,6 +695,18 @@ pub struct SValueW {
     /// The wrapped SSA value
     pub value: SValue,
 }
+
+// Manual PartialEq/Eq implementation for SValueW
+impl PartialEq for SValueW {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Eq for SValueW {}
+
+// Define specialized SValueArena and SValueId types
+swc_ll_common::define_arena!(pub SValueArena, pub SValueId for SValueW);
 impl From<SValue> for SValueW {
     fn from(value: SValue) -> Self {
         Self { value }
@@ -680,12 +724,12 @@ impl From<SValueW> for SValue {
 ///
 /// # Type Parameters
 ///
-/// - `I`: SSA value identifier type (defaults to `Id<SValueW>`)
-/// - `B`: Block identifier type (defaults to `Id<SBlock>`)
+/// - `I`: SSA value identifier type (defaults to `SValueId`)
+/// - `B`: Block identifier type (defaults to `SBlockId`)
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[non_exhaustive]
-pub enum SCatch<I = Id<SValueW>, B = Id<SBlock>> {
+pub enum SCatch<I = SValueId, B = SBlockId> {
     /// No exception handler - propagate to caller
     Throw,
     /// Jump to catch handler with exception as argument
@@ -707,8 +751,8 @@ impl<I, B> Default for SCatch<I, B> {
 ///
 /// # Type Parameters
 ///
-/// - `I`: SSA value identifier type (defaults to `Id<SValueW>`)
-/// - `B`: Block identifier type (defaults to `Id<SBlock>`)
+/// - `I`: SSA value identifier type (defaults to `SValueId`)
+/// - `B`: Block identifier type (defaults to `SBlockId`)
 ///
 /// # Fields
 ///
@@ -723,7 +767,7 @@ impl<I, B> Default for SCatch<I, B> {
 /// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
+pub struct STarget<I = SValueId, B = SBlockId> {
     /// The target block to jump to
     pub block: B,
     /// Arguments to pass to the block's parameters
@@ -743,10 +787,10 @@ pub struct STarget<I = Id<SValueW>, B = Id<SBlock>> {
 /// - `CondJmp`: Conditional branch with arguments for both targets
 /// - `Switch`: Multi-way branch with arguments for each case
 /// - `Tail`: Tail call
-pub type STerm<I = Id<SValueW>, B = Id<SBlock>> = TTerm<STarget<I, B>, I>;
+pub type STerm<I = SValueId, B = SBlockId> = TTerm<STarget<I, B>, I>;
 // #[derive(Clone, Debug, PartialEq, Eq)]
 // #[non_exhaustive]
-// pub enum STerm<I = Id<SValueW>, B = Id<SBlock>> {
+// pub enum STerm<I = SValueId, B = SBlockId> {
 //     Throw(I),
 //     Return(Option<I>),
 //     Jmp(STarget<I, B>),
@@ -768,7 +812,7 @@ pub type STerm<I = Id<SValueW>, B = Id<SBlock>> = TTerm<STarget<I, B>, I>;
 //     }
 // }
 impl SCfg {
-    pub fn add_blockparam(&mut self, block_id: Id<SBlock>) -> Id<SValueW> {
+    pub fn add_blockparam(&mut self, block_id: SBlockId) -> SValueId {
         let val = SValue::Param {
             block: block_id,
             idx: self.blocks[block_id].params.len(),

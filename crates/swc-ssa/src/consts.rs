@@ -11,7 +11,7 @@ pub enum ConstVal {
     Undef,
 }
 pub struct ConstantInstantiator {
-    pub all: BTreeMap<Id<SBlock>, HashMap<Vec<Option<ConstVal>>, Id<SBlock>>>,
+    pub all: BTreeMap<crate::SBlockId, HashMap<Vec<Option<ConstVal>>, crate::SBlockId>>,
 }
 pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyhow::Result<SFunc> {
     let mut new_cfg = SCfg::default();
@@ -37,9 +37,9 @@ impl ConstantInstantiator {
         &mut self,
         inp: &SCfg,
         out: &mut SCfg,
-        k: Id<SBlock>,
+        k: crate::SBlockId,
         semantic: &SemanticCfg,
-    ) -> anyhow::Result<Id<SBlock>> {
+    ) -> anyhow::Result<crate::SBlockId> {
         let lits = inp.blocks[k].params.iter().map(|_| None).collect();
         return self.go(inp, out, k, lits, semantic);
     }
@@ -47,11 +47,11 @@ impl ConstantInstantiator {
         &mut self,
         inp: &SCfg,
         out: &mut SCfg,
-        k: Id<SBlock>,
+        k: crate::SBlockId,
         lits: Vec<Option<ConstVal>>,
         semantic: &SemanticCfg,
-        // lsk: &BTreeMap<Id<SBlock>, NonZeroUsize>,
-    ) -> anyhow::Result<Id<SBlock>> {
+        // lsk: &BTreeMap<crate::SBlockId, NonZeroUsize>,
+    ) -> anyhow::Result<crate::SBlockId> {
         let lits: Vec<Option<ConstVal>> = lits
             .into_iter()
             .map(|a| match a {
