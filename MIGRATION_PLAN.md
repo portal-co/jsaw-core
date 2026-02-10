@@ -1,5 +1,37 @@
 # Migration Plan: Replace `id-arena::Id` with Custom Identifier Types
 
+# Migration Plan: Replace `id-arena` with Custom Identifier Types
+
+**STATUS: Phase 2 Complete - swc-cfg migrated successfully! ✅**
+
+## Progress Summary
+
+- ✅ **Phase 1**: Infrastructure complete - `define_arena!` macro created with full trait support
+- ✅ **Phase 2**: swc-cfg migrated - `BlockArena` and `BlockId` working perfectly
+- ⏳ **Phase 3**: swc-tac migration - NEXT
+- ⏳ **Phase 4**: swc-ssa migration  
+- ⏳ **Phase 5**: swc-opt-ssa migration
+- ⏳ **Phase 6**: Remove id-arena dependency
+
+## Recent Accomplishments
+
+### Successfully Implemented (2026-02-10)
+
+1. **Created `define_arena!` macro** in `swc-ll-common` that generates:
+   - Specialized arena type (e.g., `BlockArena`)
+   - Specialized ID type (e.g., `BlockId`)
+   - Full rkyv serialization support
+   - `Index` and `IndexMut` traits
+   - `arena_traits::IndexAlloc` trait
+   - `arena_traits::IndexIter` trait
+
+2. **Migrated swc-cfg** completely:
+   - Replaced `id_arena::Arena<Block>` → `BlockArena`
+   - Replaced `id_arena::Id<Block>` → `BlockId`
+   - Updated all modules (lib.rs, recfg.rs, to_cfg.rs, simplify.rs)
+   - Added necessary derives (Debug, PartialEq, Eq)
+   - **Compiles with zero errors!**
+
 ## Overview
 
 **For 0.8.0 Breaking Release**: Replace `id-arena` entirely with specialized arena and identifier types that provide:

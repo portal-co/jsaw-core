@@ -148,6 +148,21 @@ macro_rules! define_arena {
                 &mut self.items[id.0]
             }
         }
+        
+        // arena-traits support
+        impl arena_traits::IndexAlloc<$id_name> for $arena_name {
+            #[inline]
+            fn alloc(&mut self, value: Self::Output) -> $id_name {
+                $arena_name::alloc(self, value)
+            }
+        }
+        
+        impl arena_traits::IndexIter<$id_name> for $arena_name {
+            #[inline]
+            fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = $id_name> + 'a> {
+                Box::new(self.items.iter().enumerate().map(|(idx, _)| $id_name(idx)))
+            }
+        }
     };
 }
 
