@@ -61,9 +61,9 @@ fn emit_base_intrinsics(source_root: &str) {
                 format!("export const {a}_number: (a: number) => number = (globalThis as any)['~Natives_{a}_number'] ??( (a: number) => a)"),
                 format!("export const {a}_static_fn: (a: Function) => Function = (globalThis as any)['~Natives_{a}_static_fn'] ?? ((a: Function) => a)"),
             ])).chain([
-                format!("export const inlineme: () => void = (globalThis as any)['~Natives_inlineme'] ?? (()=>{{}})"),
-                format!("export const inlineme_n: (n: number) => void = (globalThis as any)['~Natives_inlineme_n'] ?? ((n: number)=>{{}})"),
-                format!("export const trim: () => never = (globalThis as any)['~Natives_trim'] ?? ((...args: any[]) => {{throw new TypeError(`trimmed: ${{args.join(',')}}]`);}})")
+                "export const inlineme: () => void = (globalThis as any)['~Natives_inlineme'] ?? (()=>{})".to_string(),
+                "export const inlineme_n: (n: number) => void = (globalThis as any)['~Natives_inlineme_n'] ?? ((n: number)=>{})".to_string(),
+                "export const trim: () => never = (globalThis as any)['~Natives_trim'] ?? ((...args: any[]) => {throw new TypeError(`trimmed: ${args.join(',')}]`);})".to_string()
             ])
             .join("\n")
         ),

@@ -42,7 +42,7 @@ pub trait AtomResolver: Debug {
 }
 impl<T: AtomResolver + ?Sized> AtomResolver for Arc<T> {
     fn resolve(&self, len: usize) -> Atom {
-        (&**self).resolve(len)
+        (**self).resolve(len)
     }
 }
 #[derive(Debug, Default)]
@@ -108,11 +108,11 @@ impl<T> Index<Id> for LAM<T> {
 }
 impl<T: Default> IndexMut<Id> for LAM<T> {
     fn index_mut(&mut self, index: Id) -> &mut Self::Output {
-        self.map.entry(index).or_insert(T::default())
+        self.map.entry(index).or_default()
     }
 }
 impl<T: Default> IndexIter<Id> for LAM<T> {
-    fn iter<'a>(&'a self) -> Box<(dyn Iterator<Item = Id> + 'a)> {
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = Id> + 'a> {
         Box::new(self.map.keys().cloned())
     }
 }
@@ -126,6 +126,6 @@ impl<T: Default> IndexAlloc<Id> for LAM<T> {
                 .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()))),
         );
         self[root.clone()] = value;
-        return root;
+        root
     }
 }

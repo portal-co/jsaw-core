@@ -19,12 +19,12 @@
 //! SSA value IDs are converted to unique TAC variable names using a prefix
 //! and syntax context to avoid name collisions.
 
-use crate::{SBlock, SBlockId, SFunc, STarget, STerm, SValue, SValueId, SValueW};
-use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
+use crate::{SFunc, STarget, SValue, SValueId};
+use std::{collections::BTreeMap, sync::OnceLock};
 use swc_atoms::Atom;
 use swc_common::{Mark, Span, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
-use swc_tac::{Item, LId, TBlock, TCatch, TCfg, TFunc, TStmt, TTerm, ValFlags};
+use swc_tac::{Item, LId, TCatch, TCfg, TFunc, TStmt, ValFlags};
 impl SFunc {
     pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
         let value = self;
@@ -36,19 +36,18 @@ impl SFunc {
             ctxt: Default::default(),
             prefix: prefix.clone(),
         };
-        let entry = rew.trans(&value, &mut cfg, BlockEntry::Block(value.entry))?;
-        let ctxt = rew
+        let entry = rew.trans(value, &mut cfg, BlockEntry::Block(value.entry))?;
+        let ctxt = *rew
             .ctxt
-            .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()))
-            .clone();
+            .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()));
         let params = value.cfg.blocks[value.entry]
             .params
             .iter()
-            .map(|v| mangle_value(prefix.clone(), ctxt, &value, v.0))
+            .map(|v| mangle_value(prefix.clone(), ctxt, value, v.0))
             .collect();
         for (value_id, ts_type) in value.cfg.ts.clone().into_iter() {
             cfg.type_annotations.insert(
-                mangle_value(prefix.clone(), ctxt, &value, value_id),
+                mangle_value(prefix.clone(), ctxt, value, value_id),
                 ts_type,
             );
         }
@@ -95,10 +94,9 @@ impl Rew {
         cfg: &mut TCfg,
         block_entry: BlockEntry,
     ) -> anyhow::Result<swc_tac::TBlockId> {
-        let ctxt = self
+        let ctxt = *self
             .ctxt
-            .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()))
-            .clone();
+            .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()));
         loop {
             if let Some(existing_block) = self.blocks.get(&block_entry) {
                 return Ok(*existing_block);
@@ -128,9 +126,9 @@ impl Rew {
                     cfg.blocks[new_block_id].post.catch = catch_clause;
                     for statement in func.cfg.blocks[*block_id].stmts.iter() {
                         match &func.cfg.values[*statement].value {
-                            SValue::Param { block, idx, ty } => todo!(),
+                            SValue::Param { block: _, idx: _, ty: _ } => todo!(),
                             SValue::Item { item, span } => match item {
-                                Item::Just { id } => {}
+                                Item::Just { id: _ } => {}
                                 item => {
                                     let item_id = item.as_ref().map2(
                                         &mut (),
@@ -157,9 +155,8 @@ impl Rew {
                                         },
                                         flags: ValFlags::SSA_LIKE,
                                         right: item_id,
-                                        span: span
-                                            .clone()
-                                            .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                        span: (*span)
+                                            .unwrap_or_else(Span::dummy_with_cmt),
                                     });
                                     cfg.decls.insert(mangle_value(
                                         self.prefix.clone(),
@@ -174,7 +171,7 @@ impl Rew {
                                     let mangled =
                                         mangle_value(self.prefix.clone(), ctxt, func, value);
                                     cfg.decls.insert(mangled.clone());
-                                    return anyhow::Ok(mangled);
+                                    anyhow::Ok(mangled)
                                 })?;
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: target_id,
@@ -216,7 +213,7 @@ impl Rew {
                                     span: Span::dummy_with_cmt(),
                                 });
                             }
-                            SValue::EdgeBlocker { value: v, span } => {
+                            SValue::EdgeBlocker { value: _v, span: _ } => {
                                 // cfg.blocks[new_block_id].stmts.push(TStmt {
                                 //     left: LId::Id {
                                 //         id: mangle_value(ctxt, func, *statement),
@@ -291,16 +288,16 @@ pub fn mangle_param(
 }
 pub fn mangle_value(prefix: Atom, ctxt: SyntaxContext, func: &SFunc, value_id: SValueId) -> Ident {
     match &func.cfg.values[value_id].value {
-        SValue::Param { block, idx, ty } => {
-            return mangle_param(prefix, ctxt, *block, *idx);
+        SValue::Param { block, idx, ty: _ } => {
+            mangle_param(prefix, ctxt, *block, *idx)
         }
         SValue::Item {
             item: Item::Just { id },
-            span,
+            span: _,
         } => mangle_value(prefix, ctxt, func, *id),
-        SValue::EdgeBlocker { value, span } => mangle_value(prefix, ctxt, func, *value),
+        SValue::EdgeBlocker { value, span: _ } => mangle_value(prefix, ctxt, func, *value),
         _ => {
-            return (Atom::new(format!("{prefix}$v{}", value_id.index())), ctxt);
+            (Atom::new(format!("{prefix}$v{}", value_id.index())), ctxt)
         }
     }
 }

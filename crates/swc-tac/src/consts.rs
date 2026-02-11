@@ -16,7 +16,7 @@ impl<Ctx> ItemGetter<Ident, TFunc, Ctx> for TCfg {
     fn get_item<'a>(
         &'a self,
         i: (Atom, SyntaxContext),
-        ctx: Ctx,
+        _ctx: Ctx,
     ) -> Option<&'a Item<(Atom, SyntaxContext), TFunc>>
     where
         Ctx: 'a,
@@ -26,14 +26,14 @@ impl<Ctx> ItemGetter<Ident, TFunc, Ctx> for TCfg {
     fn get_mut_item<'a>(
         &'a mut self,
         i: (Atom, SyntaxContext),
-        ctx: Ctx,
+        _ctx: Ctx,
     ) -> Option<&'a mut Item<(Atom, SyntaxContext), TFunc>>
     where
         Ctx: 'a,
     {
         self.def_mut(LId::Id { id: i })
     }
-    fn get_ident<'a>(&'a self, i: (Atom, SyntaxContext), ctx: Ctx) -> Option<Ident>
+    fn get_ident<'a>(&'a self, i: (Atom, SyntaxContext), _ctx: Ctx) -> Option<Ident>
     where
         Ctx: 'a,
     {

@@ -43,7 +43,7 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
         Box::new(
             match &self.catch {
                 TCatch::Throw => None,
-                TCatch::Jump { pat, k } => Some(k),
+                TCatch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
             .chain(match &self.term {
@@ -53,11 +53,11 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                 TTerm::Throw(_) => Box::new(empty()),
                 TTerm::Jmp(id) => Box::new(once(id)),
                 TTerm::CondJmp {
-                    cond,
+                    cond: _,
                     if_true,
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
-                TTerm::Switch { x, blocks, default } => {
+                TTerm::Switch { x: _, blocks, default } => {
                     Box::new(blocks.iter().map(|a| &a.1).chain([default]))
                 }
                 TTerm::Default | TTerm::Tail { .. } => Box::new(empty()),
@@ -71,7 +71,7 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
         Box::new(
             match &mut self.catch {
                 TCatch::Throw => None,
-                TCatch::Jump { pat, k } => Some(k),
+                TCatch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
             .chain(match &mut self.term {
@@ -81,11 +81,11 @@ impl cfg_traits::Term<TFunc> for TPostecedent {
                 TTerm::Throw(_) => Box::new(empty()),
                 TTerm::Jmp(id) => Box::new(once(id)),
                 TTerm::CondJmp {
-                    cond,
+                    cond: _,
                     if_true,
                     if_false,
                 } => Box::new([if_true, if_false].into_iter()),
-                TTerm::Switch { x, blocks, default } => {
+                TTerm::Switch { x: _, blocks, default } => {
                     Box::new(blocks.iter_mut().map(|a| &mut a.1).chain([default]))
                 }
                 TTerm::Default | TTerm::Tail { .. } => Box::new(empty()),

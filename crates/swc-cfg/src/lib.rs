@@ -42,9 +42,9 @@ use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     ArrayLit, AssignExpr, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr, CatchClause,
-    ContinueStmt, Decl, DoWhileStmt, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
+    ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
     IdentName, IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
-    SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl, WhileStmt,
+    SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl,
 };
 pub mod recfg;
 pub mod simplify;
@@ -97,7 +97,7 @@ impl TryFrom<Function> for Func {
         let entry = cfg.blocks.alloc(Default::default());
         let exit = to_cfg::ToCfgConversionCtx::default().transform_all(
             &mut cfg,
-            &value.body.map(|a| a.stmts).unwrap_or_else(Vec::new),
+            &value.body.map(|a| a.stmts).unwrap_or_default(),
             entry,
             None,
         )?;
@@ -105,21 +105,21 @@ impl TryFrom<Function> for Func {
         cfg.simplify();
         cfg.generics = value.type_params.map(|a| *a);
         cfg.ts_retty = value.return_type.map(|a| *a);
-        return Ok(Self {
+        Ok(Self {
             cfg,
             entry,
             params: value.params,
             is_generator: value.is_generator,
             is_async: value.is_async,
-        });
+        })
     }
 }
-impl Into<Function> for Func {
-    fn into(self) -> Function {
-        let k = ssa_reloop::go(&self, self.entry);
-        let stmts = Cfg::process_block(&self.cfg, &k, Span::dummy_with_cmt(), Default::default());
-        return Function {
-            params: self.params,
+impl From<Func> for Function {
+    fn from(val: Func) -> Self {
+        let k = ssa_reloop::go(&val, val.entry);
+        let stmts = Cfg::process_block(&val.cfg, &k, Span::dummy_with_cmt(), Default::default());
+        Function {
+            params: val.params,
             decorators: vec![],
             span: Span::dummy_with_cmt(),
             ctxt: Default::default(),
@@ -128,11 +128,11 @@ impl Into<Function> for Func {
                 ctxt: Default::default(),
                 stmts,
             }),
-            is_generator: self.is_generator,
-            is_async: self.is_async,
-            type_params: self.cfg.generics.map(Box::new),
-            return_type: self.cfg.ts_retty.map(Box::new),
-        };
+            is_generator: val.is_generator,
+            is_async: val.is_async,
+            type_params: val.cfg.generics.map(Box::new),
+            return_type: val.cfg.ts_retty.map(Box::new),
+        }
     }
 }
 /// A control flow graph containing basic blocks.
@@ -166,7 +166,7 @@ impl Cfg {
         let Ok(entry) = recfg::Recfg::default().go(self, &mut res, entry) else {
             return (self.clone(), entry);
         };
-        return (res, entry);
+        (res, entry)
     }
     // pub fn reloop_block(&self, entry: BlockId) -> ShapedBlock<BlockId> {
     //     return *relooper::reloop(
@@ -214,7 +214,7 @@ impl Cfg {
     ) -> Vec<Stmt> {
         match k {
             ShapedBlock::Simple(simple_block) => {
-                let span = match self.blocks[simple_block.label].end.orig_span.clone() {
+                let span = match self.blocks[simple_block.label].end.orig_span {
                     None => span,
                     Some(s) => s,
                 };
@@ -265,13 +265,12 @@ impl Cfg {
                                     vec![Stmt::Break(BreakStmt { span, label: None })]
                                 }
                             },
-                        }
-                        .into_iter(),
+                        },
                     )
                     .collect::<Vec<_>>()
                 };
                 let l = simple_block.label;
-                let body = self.blocks[l].stmts.iter().cloned().collect::<Vec<_>>();
+                let body = self.blocks[l].stmts.to_vec();
                 let mut body = match &self.blocks[l].end.catch {
                     Catch::Throw => body,
                     Catch::Jump { pat, k } => {
@@ -316,7 +315,7 @@ impl Cfg {
                         span,
                         arg: Box::new(expr.clone()),
                     })),
-                    Term::Jmp(id) => body.extend(jmp(*id).into_iter()),
+                    Term::Jmp(id) => body.extend(jmp(*id)),
                     Term::CondJmp {
                         cond,
                         if_true,
@@ -362,7 +361,7 @@ impl Cfg {
                             .flat_map(|i| self.process_block(i.as_ref(), span, ctxt)),
                     );
                 }
-                return body;
+                body
             }
             ShapedBlock::Loop(loop_block) => once(Stmt::Labeled(LabeledStmt {
                 span,
@@ -375,7 +374,7 @@ impl Cfg {
                     body: Box::new(Stmt::Block(BlockStmt {
                         span,
                         ctxt,
-                        stmts: self.process_block(&*loop_block.inner, span, ctxt),
+                        stmts: self.process_block(&loop_block.inner, span, ctxt),
                     })),
                 })),
             }))
@@ -384,7 +383,7 @@ impl Cfg {
                     .next
                     .as_ref()
                     .into_iter()
-                    .flat_map(|a| self.process_block(&*a, span, ctxt).into_iter()),
+                    .flat_map(|a| self.process_block(a, span, ctxt).into_iter()),
             )
             .collect(),
             ShapedBlock::Multiple(multiple_block) => vec![Stmt::Switch(SwitchStmt {
@@ -485,25 +484,24 @@ impl cfg_traits::Term<Func> for End {
         Box::new(
             match &self.catch {
                 Catch::Throw => None,
-                Catch::Jump { pat, k } => Some(k),
+                Catch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
             .chain(
                 match &self.term {
-                    Term::Return(expr) => vec![],
-                    Term::Throw(expr) => vec![],
+                    Term::Return(_expr) => vec![],
+                    Term::Throw(_expr) => vec![],
                     Term::Jmp(id) => vec![id],
                     Term::CondJmp {
-                        cond,
+                        cond: _,
                         if_true,
                         if_false,
                     } => vec![if_true, if_false],
-                    Term::Switch { x, blocks, default } => {
+                    Term::Switch { x: _, blocks, default } => {
                         blocks.values().chain(once(default)).collect()
                     }
                     Term::Default => vec![],
-                }
-                .into_iter(),
+                },
             ),
         )
     }
@@ -514,25 +512,24 @@ impl cfg_traits::Term<Func> for End {
         Box::new(
             match &mut self.catch {
                 Catch::Throw => None,
-                Catch::Jump { pat, k } => Some(k),
+                Catch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
             .chain(
                 match &mut self.term {
-                    Term::Return(expr) => vec![],
-                    Term::Throw(expr) => vec![],
+                    Term::Return(_expr) => vec![],
+                    Term::Throw(_expr) => vec![],
                     Term::Jmp(id) => vec![id],
                     Term::CondJmp {
-                        cond,
+                        cond: _,
                         if_true,
                         if_false,
                     } => vec![if_true, if_false],
-                    Term::Switch { x, blocks, default } => {
+                    Term::Switch { x: _, blocks, default } => {
                         blocks.values_mut().chain(once(default)).collect()
                     }
                     Term::Default => vec![],
-                }
-                .into_iter(),
+                },
             ),
         )
     }

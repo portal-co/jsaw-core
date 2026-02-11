@@ -166,32 +166,20 @@ macro_rules! define_arena {
     };
 }
 
-use anyhow::Context;
-use arena_traits::IndexAlloc;
 use bitflags::bitflags;
-use either::Either;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::iter::{empty, once};
-use std::mem::take;
-use std::sync::Arc;
 // use lam::LAM;
-use linearize::{StaticMap, static_map};
 use portal_jsc_common::natives::Primordial;
 use portal_jsc_common::{natives::Native, syntax::Asm, syntax::ThisArg};
-use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
-use portal_solutions_swibb::ConstCollector;
-use ssa_impls::dom::{dominates, domtree};
+use portal_jsc_swc_util::{SemanticCfg, SemanticFlags, ses_method};
 use swc_atoms::Atom;
 // use swc_cfg::{Block, Catch, Cfg, Func};
-use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
+use swc_common::{EqIgnoreSpan, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
-    AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
-    ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
-    Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    BinaryOp, Bool, Callee, Expr, Function, Lit, MemberProp, MetaPropKind, Number, Str, UnaryOp,
 };
-use swc_ecma_ast::{Id as Ident, IdentName};
+use swc_ecma_ast::Id as Ident;
 
 use crate::ext::ItemGetterExt;
 pub mod fetch;
@@ -256,15 +244,15 @@ pub trait ItemGetter<I, F, Ctx = ()> {
     where
         Ctx: 'b;
 }
-impl<'a, I, F, Ctx, T: ItemGetter<I, F, Ctx> + ?Sized> ItemGetter<I, F, Ctx> for &'a T {
+impl<I, F, Ctx, T: ItemGetter<I, F, Ctx> + ?Sized> ItemGetter<I, F, Ctx> for &T {
     fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>>
     where
         Ctx: 'b,
     {
-        (&**self).get_item(i, ctx)
+        (**self).get_item(i, ctx)
     }
 
-    fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>>
+    fn get_mut_item<'b>(&'b mut self, _i: I, _ctx: Ctx) -> Option<&'b mut Item<I, F>>
     where
         Ctx: 'b,
     {
@@ -275,29 +263,29 @@ impl<'a, I, F, Ctx, T: ItemGetter<I, F, Ctx> + ?Sized> ItemGetter<I, F, Ctx> for
     where
         Ctx: 'b,
     {
-        (&**self).get_ident(i, ctx)
+        (**self).get_ident(i, ctx)
     }
 }
-impl<'a, I, F, Ctx, T: ItemGetter<I, F, Ctx> + ?Sized> ItemGetter<I, F, Ctx> for &'a mut T {
+impl<I, F, Ctx, T: ItemGetter<I, F, Ctx> + ?Sized> ItemGetter<I, F, Ctx> for &mut T {
     fn get_item<'b>(&'b self, i: I, ctx: Ctx) -> Option<&'b Item<I, F>>
     where
         Ctx: 'b,
     {
-        (&**self).get_item(i, ctx)
+        (**self).get_item(i, ctx)
     }
 
     fn get_mut_item<'b>(&'b mut self, i: I, ctx: Ctx) -> Option<&'b mut Item<I, F>>
     where
         Ctx: 'b,
     {
-        (&mut **self).get_mut_item(i, ctx)
+        (**self).get_mut_item(i, ctx)
     }
 
     fn get_ident<'b>(&'b self, i: I, ctx: Ctx) -> Option<Ident>
     where
         Ctx: 'b,
     {
-        (&**self).get_ident(i, ctx)
+        (**self).get_ident(i, ctx)
     }
 }
 pub mod ext;
@@ -499,10 +487,10 @@ impl<I> TCallee<I> {
 impl<I: PartialEq, F> Item<I, F> {
     pub fn will_ruin(&self, i: &I) -> bool {
         match self {
-            Item::Mem { obj, mem } => mem == i,
+            Item::Mem { obj: _, mem } => mem == i,
             Item::Call {
                 callee: TCallee::Eval,
-                args,
+                args: _,
             } => true,
             a => a.refs().any(|r| r == i),
         }
@@ -524,11 +512,11 @@ impl<I, F> Item<I, F> {
             _ => false,
         }
     }
-    pub fn will_store(&self, i: &Ident) -> bool {
+    pub fn will_store(&self, _i: &Ident) -> bool {
         match self {
             Item::Call {
                 callee: TCallee::Eval,
-                args,
+                args: _,
             } => true,
             _ => false,
         }
@@ -759,8 +747,8 @@ impl<I, F> Item<I, F> {
                             c.as_ref()
                                 .map(
                                     &mut (),
-                                    &mut |cx, a: &Option<I>| Ok::<_, Infallible>(a.as_ref()),
-                                    &mut |cx, b| Ok(b),
+                                    &mut |_cx, a: &Option<I>| Ok::<_, Infallible>(a.as_ref()),
+                                    &mut |_cx, b| Ok(b),
                                 )
                                 .unwrap(),
                         )
@@ -891,8 +879,8 @@ impl<I, F> Item<I, F> {
                             c.as_mut()
                                 .map(
                                     &mut (),
-                                    &mut |cx, a| Ok::<_, Infallible>(a.as_mut()),
-                                    &mut |cx, b| Ok(b),
+                                    &mut |_cx, a| Ok::<_, Infallible>(a.as_mut()),
+                                    &mut |_cx, b| Ok(b),
                                 )
                                 .unwrap(),
                         )
@@ -1011,7 +999,7 @@ impl<I, F> Item<I, F> {
                     None => None,
                     Some(a) => Some(f(cx, a)?),
                 },
-                delegate: delegate,
+                delegate,
             },
             Item::Await { value } => Item::Await {
                 value: f(cx, value)?,
@@ -1077,13 +1065,13 @@ impl<I, F> Item<I, F> {
     }
     pub fn funcs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a F> + 'a> {
         match self {
-            Item::Func { func, arrow } => Box::new(once(func)),
+            Item::Func { func, arrow: _ } => Box::new(once(func)),
             Item::Obj { members } => Box::new(members.iter().filter_map(|m| match &m.1 {
                 PropVal::Getter(f) | PropVal::Setter(f) | PropVal::Method(f) => Some(f),
                 _ => None,
             })),
             Item::Class(TClass {
-                superclass,
+                superclass: _,
                 members,
                 constructor,
             }) => Box::new(
@@ -1102,12 +1090,12 @@ impl<I, F> Item<I, F> {
         use crate as swc_tac;
         match self {
             swc_tac::Item::Just { id } => Box::new(once(id)),
-            swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
-            swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
+            swc_tac::Item::Bin { left, right, op: _ } => Box::new([left, right].into_iter()),
+            swc_tac::Item::Un { arg, op: _ } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem } | Item::HasPrivateMem { obj, mem } => Box::new(once(obj)),
-            swc_tac::Item::Func { func, arrow } => Box::new(empty()),
-            swc_tac::Item::Lit { lit } => Box::new(empty()),
+            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => Box::new(once(obj)),
+            swc_tac::Item::Func { func: _, arrow: _ } => Box::new(empty()),
+            swc_tac::Item::Lit { lit: _ } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
                     swc_tac::TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
@@ -1127,7 +1115,7 @@ impl<I, F> Item<I, F> {
             Item::New { class, args } => Box::new(args.iter().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &I> + '_> = match &m.1 {
-                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                    PropVal::Getter(_a) | PropVal::Setter(_a) | PropVal::Method(_a) => {
                         Box::new(empty())
                     }
                     PropVal::Item(i) => Box::new(once(i)),
@@ -1144,7 +1132,7 @@ impl<I, F> Item<I, F> {
                      is_spread: _,
                  }| a,
             )),
-            swc_tac::Item::Yield { value, delegate } => Box::new(value.iter()),
+            swc_tac::Item::Yield { value, delegate: _ } => Box::new(value.iter()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
                 Box::new(empty())
@@ -1153,10 +1141,10 @@ impl<I, F> Item<I, F> {
             Item::Class(TClass {
                 superclass,
                 members,
-                constructor,
+                constructor: _,
             }) => Box::new(superclass.iter().chain(members.iter().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &I> + '_> = match &m.2 {
-                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                    PropVal::Getter(_a) | PropVal::Setter(_a) | PropVal::Method(_a) => {
                         Box::new(empty())
                     }
                     PropVal::Item(i) => Box::new(i.iter()),
@@ -1173,8 +1161,8 @@ impl<I, F> Item<I, F> {
                 otherwise,
             } => Box::new([cond, then, otherwise].into_iter()),
             Item::StaticSubArray {
-                begin,
-                end,
+                begin: _,
+                end: _,
                 wrapped,
             } => Box::new(once(wrapped)),
             Item::StaticSubObject { wrapped, keys } => {
@@ -1201,12 +1189,12 @@ impl<I, F> Item<I, F> {
                 otherwise,
             } => Box::new([cond, then, otherwise].into_iter()),
             swc_tac::Item::Just { id } => Box::new(once(id)),
-            swc_tac::Item::Bin { left, right, op } => Box::new([left, right].into_iter()),
-            swc_tac::Item::Un { arg, op } => Box::new(once(arg)),
+            swc_tac::Item::Bin { left, right, op: _ } => Box::new([left, right].into_iter()),
+            swc_tac::Item::Un { arg, op: _ } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem } | Item::HasPrivateMem { obj, mem } => Box::new(once(obj)),
-            swc_tac::Item::Func { func, arrow } => Box::new(empty()),
-            swc_tac::Item::Lit { lit } => Box::new(empty()),
+            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => Box::new(once(obj)),
+            swc_tac::Item::Func { func: _, arrow: _ } => Box::new(empty()),
+            swc_tac::Item::Lit { lit: _ } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
                 match callee {
                     swc_tac::TCallee::Val(a) | TCallee::PrivateMember { func: a, member: _ } => {
@@ -1226,7 +1214,7 @@ impl<I, F> Item<I, F> {
             Item::New { class, args } => Box::new(args.iter_mut().chain([class])),
             swc_tac::Item::Obj { members } => Box::new(members.iter_mut().flat_map(|m| {
                 let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.1 {
-                    PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                    PropVal::Getter(_a) | PropVal::Setter(_a) | PropVal::Method(_a) => {
                         Box::new(empty())
                     }
                     PropVal::Item(i) => Box::new(once(i)),
@@ -1243,7 +1231,7 @@ impl<I, F> Item<I, F> {
                      is_spread: _,
                  }| a,
             )),
-            swc_tac::Item::Yield { value, delegate } => Box::new(value.iter_mut()),
+            swc_tac::Item::Yield { value, delegate: _ } => Box::new(value.iter_mut()),
             swc_tac::Item::Await { value } => Box::new(once(value)),
             swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
                 Box::new(empty())
@@ -1252,13 +1240,13 @@ impl<I, F> Item<I, F> {
             Item::Class(TClass {
                 superclass,
                 members,
-                constructor,
+                constructor: _,
             }) => Box::new(
                 superclass
                     .iter_mut()
                     .chain(members.iter_mut().flat_map(|m| {
                         let v: Box<dyn Iterator<Item = &mut I> + '_> = match &mut m.2 {
-                            PropVal::Getter(a) | PropVal::Setter(a) | PropVal::Method(a) => {
+                            PropVal::Getter(_a) | PropVal::Setter(_a) | PropVal::Method(_a) => {
                                 Box::new(empty())
                             }
                             PropVal::Item(i) => Box::new(i.iter_mut()),
@@ -1271,8 +1259,8 @@ impl<I, F> Item<I, F> {
                     })),
             ),
             Item::StaticSubArray {
-                begin,
-                end,
+                begin: _,
+                end: _,
                 wrapped,
             } => Box::new(once(wrapped)),
             Item::StaticSubObject { wrapped, keys } => {

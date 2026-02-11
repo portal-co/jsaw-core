@@ -74,7 +74,7 @@ impl OptStub {
                                 self,
                                 &mut |_, i| b.get(i).cloned().context("in getting the value"),
                                 &mut |s, b| s.go(i, o, sematic, *b),
-                                &mut |_, f| todo!(),
+                                &mut |_, _f| todo!(),
                             )?;
                             let c = o.values.alloc(SValueW { value: v });
                             o.blocks[a].stmts.push(c);
@@ -103,7 +103,7 @@ impl OptStub {
                 o.blocks[var].postcedent.term = i.blocks[k].postcedent.term.as_ref().map(
                     &mut (),
                     &mut |_, target| Ok(tgt!(target)),
-                    &mut |_, a| (baseline.get(a).cloned().context("in getting the value")),
+                    &mut |_, a| baseline.get(a).cloned().context("in getting the value"),
                 )?;
             }
         }

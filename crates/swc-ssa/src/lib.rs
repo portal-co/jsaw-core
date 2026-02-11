@@ -68,7 +68,6 @@
 
 use anyhow::Context;
 use cfg_traits::Term;
-use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
 use std::{
@@ -79,12 +78,11 @@ use std::{
     sync::Arc,
 };
 use swc_common::Span;
-use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
+use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl};
 use swc_ecma_visit::Visit;
 use swc_tac::{
-    Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags,
+    Item, TCfg, TFunc, TStmt, TTerm, ValFlags,
     lam::{AtomResolver, DefaultAtomResolver},
-    mapped,
 };
 use swc_tac::{LId, inlinable};
 pub mod consts;
@@ -142,7 +140,7 @@ impl SCfg {
         for (a, b) in self.values.iter() {
             if let SValue::Item {
                 item: Item::Just { id },
-                span,
+                span: _,
             } = &b.value
             {
                 map.insert(a, *id);
@@ -171,15 +169,12 @@ impl SCfg {
     pub fn strip_useless(&mut self) {
         let mut set = BTreeSet::new();
         for (val, SValueW { value }) in self.values.iter_mut() {
-            match value {
-                SValue::Item { item, span } => match item {
-                    Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
-                        set.insert(val);
-                    }
-                    _ => {}
-                },
+            if let SValue::Item { item, span: _ } = value { match item {
+                Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
+                    set.insert(val);
+                }
                 _ => {}
-            }
+            } }
         }
         for (_, b) in self.values.iter_mut() {
             for r in b.value.vals_mut() {
@@ -315,7 +310,7 @@ impl Default for SCfg {
 }
 impl SCfg {
     pub fn inputs(&self, block: SBlockId, param: usize) -> impl Iterator<Item = SValueId> {
-        return self.blocks.iter().flat_map(move |k| {
+        self.blocks.iter().flat_map(move |k| {
             k.1.postcedent
                 .term
                 .targets()
@@ -333,7 +328,7 @@ impl SCfg {
                         None
                     }
                 }))
-        });
+        })
     }
     pub fn input(&self, block: SBlockId, param: usize) -> Option<SValueId> {
         let mut i = self.inputs(block, param);
@@ -343,7 +338,7 @@ impl SCfg {
                 return None;
             }
         }
-        return Some(a);
+        Some(a)
     }
     pub fn taints_object(&self, value_id: &SValueId) -> bool {
         return self.blocks.iter().any(|block_entry| {
@@ -351,9 +346,9 @@ impl SCfg {
                 let mut current_value = *stmt_id;
                 loop {
                     return match &self.values[current_value].value {
-                        SValue::Assign { target, val } => target.taints_object(value_id),
-                        SValue::Item { item, span } => item.taints_object(value_id),
-                        SValue::Param { block, idx, ty } => match self.input(*block, *idx) {
+                        SValue::Assign { target, val: _ } => target.taints_object(value_id),
+                        SValue::Item { item, span: _ } => item.taints_object(value_id),
+                        SValue::Param { block, idx, ty: _ } => match self.input(*block, *idx) {
                             None => true,
                             Some(input_value) => {
                                 current_value = input_value;
@@ -367,26 +362,26 @@ impl SCfg {
         });
     }
     pub fn refs(&self) -> BTreeSet<Ident> {
-        return self
+        self
             .values
             .iter()
             .flat_map(|(_value_id, value_wrapper)| match &value_wrapper.value {
                 SValue::LoadId(target) | SValue::StoreId { target, val: _ } => {
                     [target.clone()].into_iter().collect::<BTreeSet<Ident>>()
                 }
-                SValue::Item { item, span } => {
+                SValue::Item { item, span: _ } => {
                     item.funcs().flat_map(|func| func.cfg.externals()).collect()
                 }
                 _ => Default::default(),
             })
-            .collect();
+            .collect()
     }
     pub fn externals(&self) -> BTreeSet<Ident> {
-        return self
+        self
             .refs()
             .into_iter()
-            .filter(|ident| !self.decls.contains(&*ident))
-            .collect();
+            .filter(|ident| !self.decls.contains(ident))
+            .collect()
     }
 }
 /// An SSA basic block with parameters.
@@ -534,12 +529,12 @@ pub enum SValue<I = SValueId, B = SBlockId, F = SFunc> {
 impl<I, B, F> SValue<I, B, F> {
     pub fn nothrow(&self) -> bool {
         match self {
-            SValue::Param { block, idx, ty } => true,
-            SValue::Item { item, span } => item.nothrow(),
-            SValue::Assign { target, val } => target.nothrow(),
+            SValue::Param { block: _, idx: _, ty: _ } => true,
+            SValue::Item { item, span: _ } => item.nothrow(),
+            SValue::Assign { target, val: _ } => target.nothrow(),
             SValue::LoadId(_) => true,
-            SValue::StoreId { target, val } => true,
-            SValue::EdgeBlocker { value, span } => true,
+            SValue::StoreId { target: _, val: _ } => true,
+            SValue::EdgeBlocker { value: _, span: _ } => true,
         }
     }
     pub fn will_store(&self, id: &Ident) -> bool {
@@ -553,20 +548,20 @@ impl<I, B, F> SValue<I, B, F> {
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
         match self {
-            SValue::Param { block, idx, ty } => Box::new(empty()),
-            SValue::Item { item, span } => Box::new(item.refs().map(|a| *a)),
+            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Item { item, span: _ } => Box::new(item.refs().copied()),
             SValue::Assign { target, val } => {
                 let v = once(*val);
                 let w: Box<dyn Iterator<Item = &I> + '_> = match target {
-                    LId::Id { id } => todo!(),
+                    LId::Id { id: _ } => todo!(),
                     LId::Member { obj, mem } => Box::new([obj, &mem[0]].into_iter()),
                     _ => todo!(),
                 };
                 Box::new(v.chain(w.cloned()))
             }
             SValue::LoadId(_) => Box::new(empty()),
-            SValue::StoreId { target, val } => Box::new(once(*val)),
-            SValue::EdgeBlocker { value: a, span } => Box::new(once(*a)),
+            SValue::StoreId { target: _, val } => Box::new(once(*val)),
+            SValue::EdgeBlocker { value: a, span: _ } => Box::new(once(*a)),
         }
     }
 }
@@ -667,38 +662,38 @@ impl<I, B, F> SValue<I, B, F> {
     }
     pub fn vals_ref<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
         match self {
-            SValue::Param { block, idx, ty } => Box::new(empty()),
-            SValue::Item { item, span } => Box::new(item.refs()),
+            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Item { item, span: _ } => Box::new(item.refs()),
             SValue::Assign { target, val } => {
                 let v = once(val);
                 let w: Box<dyn Iterator<Item = &I> + '_> = match target {
-                    LId::Id { id } => todo!(),
+                    LId::Id { id: _ } => todo!(),
                     LId::Member { obj, mem } => Box::new([obj, &mem[0]].into_iter()),
                     _ => todo!(),
                 };
                 Box::new(v.chain(w))
             }
             SValue::LoadId(_) => Box::new(empty()),
-            SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::EdgeBlocker { value: a, span } => Box::new(once(a)),
+            SValue::StoreId { target: _, val } => Box::new(once(val)),
+            SValue::EdgeBlocker { value: a, span: _ } => Box::new(once(a)),
         }
     }
     pub fn vals_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
         match self {
-            SValue::Param { block, idx, ty } => Box::new(empty()),
-            SValue::Item { item, span } => item.refs_mut(),
+            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Item { item, span: _ } => item.refs_mut(),
             SValue::Assign { target, val } => {
                 let v = once(val);
                 let w: Box<dyn Iterator<Item = &mut I> + '_> = match target {
-                    LId::Id { id } => todo!(),
+                    LId::Id { id: _ } => todo!(),
                     LId::Member { obj, mem } => Box::new([obj, &mut mem[0]].into_iter()),
                     _ => todo!(),
                 };
                 Box::new(v.chain(w))
             }
             SValue::LoadId(_) => Box::new(empty()),
-            SValue::StoreId { target, val } => Box::new(once(val)),
-            SValue::EdgeBlocker { value: a, span } => Box::new(once(a)),
+            SValue::StoreId { target: _, val } => Box::new(once(val)),
+            SValue::EdgeBlocker { value: a, span: _ } => Box::new(once(a)),
         }
     }
 }
@@ -754,19 +749,16 @@ impl From<SValueW> for SValue {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum SCatch<I = SValueId, B = SBlockId> {
     /// No exception handler - propagate to caller
+    #[default]
     Throw,
     /// Jump to catch handler with exception as argument
     Just {
         /// Target block and arguments (exception value)
         target: STarget<I, B>,
     },
-}
-impl<I, B> Default for SCatch<I, B> {
-    fn default() -> Self {
-        Self::Throw
-    }
 }
 /// A jump target in SSA form, consisting of a block and arguments.
 ///
@@ -848,14 +840,14 @@ impl SCfg {
         };
         let val = self.values.alloc(val.into());
         self.blocks[block_id].params.push((val, ()));
-        return val;
+        val
     }
     pub fn do_consts(&mut self, semantic: &SemanticCfg) {
         self.unblock_edges();
         let mut m = BTreeMap::new();
         let mut aliases = BTreeMap::new();
         for (k, v) in self.values.iter() {
-            if let SValue::Param { block, idx, ty } = &v.value {
+            if let SValue::Param { block, idx, ty: _ } = &v.value {
                 if let Some(i) = self.input(*block, *idx) {
                     aliases.insert(k, i);
                 }
@@ -867,7 +859,7 @@ impl SCfg {
             };
             if let SValue::Item {
                 item: Item::Just { id },
-                span,
+                span: _,
             } = &v.value
             {
                 aliases.insert(k, *id);

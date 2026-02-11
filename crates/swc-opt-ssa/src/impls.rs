@@ -51,15 +51,15 @@ impl cfg_traits::Term<OptFunc> for OptTerm {
         OptFunc: 'a,
     {
         match self {
-            OptTerm::Throw(id) => Box::new(empty()),
-            OptTerm::Return(id) => Box::new(empty()),
+            OptTerm::Throw(_id) => Box::new(empty()),
+            OptTerm::Return(_id) => Box::new(empty()),
             OptTerm::Jmp(starget) => Box::new(once(starget)),
             OptTerm::CondJmp {
-                cond,
+                cond: _,
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            OptTerm::Switch { x, blocks, default } => {
+            OptTerm::Switch { x: _, blocks, default } => {
                 Box::new(blocks.iter().map(|a| &a.1).chain(once(default)))
             }
             OptTerm::Default => Box::new(empty()),
@@ -71,15 +71,15 @@ impl cfg_traits::Term<OptFunc> for OptTerm {
         OptFunc: 'a,
     {
         match self {
-            OptTerm::Throw(id) => Box::new(empty()),
-            OptTerm::Return(id) => Box::new(empty()),
+            OptTerm::Throw(_id) => Box::new(empty()),
+            OptTerm::Return(_id) => Box::new(empty()),
             OptTerm::Jmp(starget) => Box::new(once(starget)),
             OptTerm::CondJmp {
-                cond,
+                cond: _,
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            OptTerm::Switch { x, blocks, default } => {
+            OptTerm::Switch { x: _, blocks, default } => {
                 Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default)))
             }
             OptTerm::Default => Box::new(empty()),
@@ -149,9 +149,9 @@ impl ssa_traits::HasChainableValues<OptFunc> for OptValueW {
         &'a self,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         match &self.value {
-            OptValue::Emit { val, ty } => val.vals(),
+            OptValue::Emit { val, ty: _ } => val.vals(),
             OptValue::Deopt { value: a, .. } => Box::new(once(*a)),
-            OptValue::Assert { val, ty } => Box::new(once(*val)),
+            OptValue::Assert { val, ty: _ } => Box::new(once(*val)),
         }
     }
     fn values_chain_mut<'a>(
@@ -162,22 +162,22 @@ impl ssa_traits::HasChainableValues<OptFunc> for OptValueW {
         OptFunc: 'a,
     {
         match &mut self.value {
-            OptValue::Emit { val, ty } => val.vals_mut(),
+            OptValue::Emit { val, ty: _ } => val.vals_mut(),
             OptValue::Deopt { value: a, .. } => Box::new(once(a)),
-            OptValue::Assert { val, ty } => Box::new(once(val)),
+            OptValue::Assert { val, ty: _ } => Box::new(once(val)),
         }
     }
 }
 impl HasValues<OptFunc> for OptValueW {
     fn values<'a>(
         &'a self,
-        f: &'a OptFunc,
+        _f: &'a OptFunc,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut OptFunc,
+        _g: &'a mut OptFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <OptFunc as ssa_traits::Func>::Value> + 'a>
     where
         OptFunc: 'a,
@@ -229,13 +229,13 @@ impl HasChainableValues<OptFunc> for OptTarget {
 impl HasValues<OptFunc> for OptTarget {
     fn values<'a>(
         &'a self,
-        f: &'a OptFunc,
+        _f: &'a OptFunc,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut OptFunc,
+        _g: &'a mut OptFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <OptFunc as ssa_traits::Func>::Value> + 'a>
     where
         OptFunc: 'a,
@@ -347,13 +347,13 @@ impl HasChainableValues<OptFunc> for OptPostcedent {
 impl HasValues<OptFunc> for OptTerm {
     fn values<'a>(
         &'a self,
-        f: &'a OptFunc,
+        _f: &'a OptFunc,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut OptFunc,
+        _g: &'a mut OptFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <OptFunc as ssa_traits::Func>::Value> + 'a>
     where
         OptFunc: 'a,
@@ -364,13 +364,13 @@ impl HasValues<OptFunc> for OptTerm {
 impl HasValues<OptFunc> for OptCatch {
     fn values<'a>(
         &'a self,
-        f: &'a OptFunc,
+        _f: &'a OptFunc,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut OptFunc,
+        _g: &'a mut OptFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <OptFunc as ssa_traits::Func>::Value> + 'a>
     where
         OptFunc: 'a,
@@ -381,13 +381,13 @@ impl HasValues<OptFunc> for OptCatch {
 impl HasValues<OptFunc> for OptPostcedent {
     fn values<'a>(
         &'a self,
-        f: &'a OptFunc,
+        _f: &'a OptFunc,
     ) -> Box<dyn Iterator<Item = <OptFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut OptFunc,
+        _g: &'a mut OptFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <OptFunc as ssa_traits::Func>::Value> + 'a>
     where
         OptFunc: 'a,
@@ -410,7 +410,7 @@ impl ssa_traits::TypedBlock<OptFunc> for OptBlock {
             <OptFunc as ssa_traits::Func>::Value,
         ),
     > {
-        return self.params.iter().map(|(a, b)| (b.clone(), *a));
+        self.params.iter().map(|(a, b)| (b.clone(), *a))
     }
 }
 impl ssa_traits::TypedValue<OptFunc> for OptValueW {

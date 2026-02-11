@@ -60,12 +60,9 @@ impl OptType {
                     })
                 }
             }
-            OptType::Array { elem_ty } => match elem_ty.as_ref() {
-                Some(a) => Some(OptType::Array {
+            OptType::Array { elem_ty } => elem_ty.as_ref().as_ref().map(|a| OptType::Array {
                     elem_ty: Box::new(a.parent(flags)),
                 }),
-                None => None,
-            },
             OptType::Object {
                 nest,
                 extended: extensible,
@@ -81,7 +78,7 @@ impl OptType {
                     match nest {
                         ObjType::Array => {
                             let mut elem_tys = elem_tys.clone();
-                            if elem_tys.len() != 0 {
+                            if !elem_tys.is_empty() {
                                 let Some(first_type) = elem_tys.iter().find_map(|a| a.clone())
                                 else {
                                     return Some(OptType::Array {
@@ -156,7 +153,7 @@ impl OptType {
                     for p in p.iter_mut().rev() {
                         if let Some(r) = p.take() {
                             *p = r.parent(flags);
-                            return Some(OptType::Variant { parts: parts });
+                            return Some(OptType::Variant { parts });
                         }
                     }
                 }

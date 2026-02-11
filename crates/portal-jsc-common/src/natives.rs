@@ -4,7 +4,6 @@
 //! the JavaScript runtime. These are used during compilation to recognize and
 //! optimize calls to well-known functions like `Math.imul` or `Reflect.get`.
 
-use crate::*;
 
 /// Primordial (built-in) JavaScript objects and functions.
 ///
@@ -153,7 +152,7 @@ impl Native<()> {
             "trim",
         ]
         .into_iter()
-        .filter_map(|a| Self::of(a))
+        .filter_map(Self::of)
         .chain([true, false].into_iter().flat_map(|a| {
             [
                 Self::AssertNumber {
@@ -224,47 +223,47 @@ impl<E> Native<E> {
     pub fn key(&self) -> &'static str {
         match self {
             Native::Trim => "trim",
-            Native::AssertString { value, comptime } => {
+            Native::AssertString { value: _, comptime } => {
                 if *comptime {
                     "comptime_string"
                 } else {
                     "assert_string"
                 }
             }
-            Native::AssertNumber { value, comptime } => {
+            Native::AssertNumber { value: _, comptime } => {
                 if *comptime {
                     "comptime_number"
                 } else {
                     "aasert_number"
                 }
             }
-            Native::AssertStaticFn { value, comptime } => {
+            Native::AssertStaticFn { value: _, comptime } => {
                 if *comptime {
                     "comptime_static_fn"
                 } else {
                     "assert_static_fn"
                 }
             }
-            Native::FastAdd { lhs, rhs } => "fast_add",
-            Native::FastAnd { lhs, rhs } => "fast_and",
-            Native::FastOr { lhs, rhs } => "fast_or",
-            Native::FastEq { lhs, rhs } => "fast_eq",
-            Native::FastSub { lhs, rhs } => "fast_sub",
-            Native::FastMul { lhs, rhs, imul } => {
+            Native::FastAdd { lhs: _, rhs: _ } => "fast_add",
+            Native::FastAnd { lhs: _, rhs: _ } => "fast_and",
+            Native::FastOr { lhs: _, rhs: _ } => "fast_or",
+            Native::FastEq { lhs: _, rhs: _ } => "fast_eq",
+            Native::FastSub { lhs: _, rhs: _ } => "fast_sub",
+            Native::FastMul { lhs: _, rhs: _, imul } => {
                 if *imul {
                     "fast_imul"
                 } else {
                     "fast_mul"
                 }
             }
-            Native::FastShl { lhs, rhs } => "fast_shl",
+            Native::FastShl { lhs: _, rhs: _ } => "fast_shl",
             Native::InlineMe { n } => match n {
                 None => "inlineme",
                 Some(_) => "inlineme_n",
             },
         }
     }
-    pub fn as_ref<'a>(&'a self) -> Native<&'a E> {
+    pub fn as_ref(&self) -> Native<&E> {
         match self {
             Native::Trim => Native::Trim,
             Native::AssertString { value, comptime } => Native::AssertString {
@@ -293,7 +292,7 @@ impl<E> Native<E> {
             Native::InlineMe { n } => Native::InlineMe { n: n.as_ref() },
         }
     }
-    pub fn as_mut<'a>(&'a mut self) -> Native<&'a mut E> {
+    pub fn as_mut(&mut self) -> Native<&mut E> {
         match self {
             Native::Trim => Native::Trim,
             Native::AssertString { value, comptime } => Native::AssertString {

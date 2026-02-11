@@ -14,15 +14,13 @@ impl Cfg {
                 if_true,
                 if_false,
             } = &mut block_data.end.term
-            {
-                if let Expr::Lit(Lit::Bool(boolean_literal)) = cond {
+                && let Expr::Lit(Lit::Bool(boolean_literal)) = cond {
                     block_data.end.term = Term::Jmp(if boolean_literal.value {
                         *if_true
                     } else {
                         *if_false
                     })
-                }
-            };
+                };
         }
     }
 }

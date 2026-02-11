@@ -75,7 +75,7 @@ pub enum OptValue<I = OptValueId, B = OptBlockId, F = OptFunc, D = ()> {
     },
 }
 impl<I, B, F, D> OptValue<I, B, F, D> {
-    pub fn as_ref<'a>(&'a self) -> OptValue<&'a I, &'a B, &'a F, &'a D> {
+    pub fn as_ref(&self) -> OptValue<&I, &B, &F, &D> {
         match self {
             OptValue::Deopt { value, deoptimizer } => OptValue::Deopt { value, deoptimizer },
             OptValue::Assert { val, ty } => OptValue::Assert {
@@ -88,7 +88,7 @@ impl<I, B, F, D> OptValue<I, B, F, D> {
             },
         }
     }
-    pub fn as_mut<'a>(&'a mut self) -> OptValue<&'a mut I, &'a mut B, &'a mut F, &'a mut D> {
+    pub fn as_mut(&mut self) -> OptValue<&mut I, &mut B, &mut F, &mut D> {
         match self {
             OptValue::Deopt { value, deoptimizer } => OptValue::Deopt { value, deoptimizer },
             OptValue::Assert { val, ty } => OptValue::Assert {
@@ -160,16 +160,16 @@ impl OptValueW {
                 let x = cfg.values[*d].ty(cfg);
                 x.and_then(|y| y.parent(Default::default()))
             }
-            OptValue::Assert { val, ty } => ty.clone(),
-            OptValue::Emit { val, ty } => ty.clone(),
+            OptValue::Assert { val: _, ty } => ty.clone(),
+            OptValue::Emit { val: _, ty } => ty.clone(),
         }
     }
     pub fn constant(&self, cfg: &OptCfg) -> Option<Lit> {
         match &self.value {
             OptValue::Deopt { value: a, .. } => cfg.values[*a].constant(cfg),
-            OptValue::Assert { val, ty } => cfg.values[*val].constant(cfg),
-            OptValue::Emit { val, ty } => match val {
-                SValue::Item { item: i, span } => match i {
+            OptValue::Assert { val, ty: _ } => cfg.values[*val].constant(cfg),
+            OptValue::Emit { val, ty: _ } => match val {
+                SValue::Item { item: i, span: _ } => match i {
                     Item::Lit { lit } => Some(lit.clone()),
                     _ => None,
                 },
@@ -182,8 +182,8 @@ impl<Ctx: Clone> SValGetter<OptValueId, OptBlockId, OptFunc, Ctx> for OptCfg {
     fn val(&self, id: OptValueId, ctx: Ctx) -> Option<&SValue<OptValueId, OptBlockId, OptFunc>> {
         match &self.values[id].value {
             OptValue::Deopt { value: a, .. } => self.val(*a, ctx),
-            OptValue::Assert { val, ty } => self.val(*val, ctx),
-            OptValue::Emit { val, ty } => Some(val),
+            OptValue::Assert { val, ty: _ } => self.val(*val, ctx),
+            OptValue::Emit { val, ty: _ } => Some(val),
         }
     }
     fn val_mut(
@@ -196,10 +196,10 @@ impl<Ctx: Clone> SValGetter<OptValueId, OptBlockId, OptFunc, Ctx> for OptCfg {
         match unsafe { &mut *v } {
             OptValue::Deopt { value: a, .. } => {
                 let a = *a;
-                return self.val_mut(a, ctx);
+                self.val_mut(a, ctx)
             }
-            OptValue::Assert { val, ty } => self.val_mut(*val, ctx),
-            OptValue::Emit { val, ty } => Some(val),
+            OptValue::Assert { val, ty: _ } => self.val_mut(*val, ctx),
+            OptValue::Emit { val, ty: _ } => Some(val),
         }
     }
 }
@@ -224,6 +224,6 @@ impl OptCfg {
             },
         });
         self.blocks[k].params.push((v, ty));
-        return v;
+        v
     }
 }

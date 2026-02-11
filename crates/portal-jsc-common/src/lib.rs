@@ -12,7 +12,6 @@
 
 #![no_std]
 use core::{iter::once, mem::take, ops::Deref};
-use either::Either;
 pub use portal_pc_asm_common as asm;
 pub mod natives;
 pub mod semantic;
@@ -46,8 +45,8 @@ impl<'a, T: ?Sized> Deref for RefOrMut<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Ref(a) => &**a,
-            Self::Mut(a) => &**a,
+            Self::Ref(a) => a,
+            Self::Mut(a) => a,
         }
     }
 }

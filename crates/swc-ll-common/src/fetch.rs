@@ -8,7 +8,7 @@ use crate::*;
 /// Trait for types that can be fetched/converted to Item representation.
 pub trait ItemFetcher {
     type Function;
-    fn fetch<'a>(&'a self) -> Option<Item<PropKey<&'a Self>, &'a Self::Function>>;
+    fn fetch(&self) -> Option<Item<PropKey<&Self>, &Self::Function>>;
 }
 macro_rules! fetch {
     ($p:expr,$this:expr) => {
@@ -99,6 +99,6 @@ impl ItemFetcher for Expr {
     type Function = Function;
     fn fetch<'a>(&'a self) -> Option<Item<PropKey<&'a Self>, &'a Self::Function>> {
         let p = |a: &'a Self| PropKey::Computed(a);
-        return fetch!(p, self);
+        fetch!(p, self)
     }
 }

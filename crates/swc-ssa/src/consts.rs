@@ -21,16 +21,16 @@ pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyh
     .init(&input_func.cfg, &mut new_cfg, input_func.entry, semantic)?;
     new_cfg
         .decls
-        .extend(input_func.cfg.decls.clone().into_iter());
+        .extend(input_func.cfg.decls.clone());
     new_cfg.generics = input_func.cfg.generics.clone();
     new_cfg.ts_retty = input_func.cfg.ts_retty.clone();
-    return Ok(SFunc {
+    Ok(SFunc {
         cfg: new_cfg,
         entry,
         is_generator: input_func.is_generator,
         is_async: input_func.is_async,
         ts_params: input_func.ts_params.clone(),
-    });
+    })
 }
 impl ConstantInstantiator {
     pub fn init(
@@ -41,7 +41,7 @@ impl ConstantInstantiator {
         semantic: &SemanticCfg,
     ) -> anyhow::Result<crate::SBlockId> {
         let lits = inp.blocks[k].params.iter().map(|_| None).collect();
-        return self.go(inp, out, k, lits, semantic);
+        self.go(inp, out, k, lits, semantic)
     }
     pub fn go(
         &mut self,
@@ -109,7 +109,7 @@ impl ConstantInstantiator {
                 .collect::<BTreeMap<_, _>>();
             for s in inp.blocks[k].stmts.iter().cloned() {
                 let v = match inp.values[s].value.clone() {
-                    SValue::Param { block, idx, ty } => todo!(),
+                    SValue::Param { block: _, idx: _, ty: _ } => todo!(),
                     SValue::Item { item, span } => match item {
                         Item::Just { id } => {
                             params.insert(
@@ -124,7 +124,7 @@ impl ConstantInstantiator {
                                 &mut |_, a| {
                                     params.get(&a).cloned().context("in getting a variable")
                                 },
-                                &mut |_, b| Ok(b.into()),
+                                &mut |_, b| Ok(b),
                             )?,
                             span,
                         },
@@ -188,7 +188,7 @@ impl ConstantInstantiator {
                         'a: {
                             if let SValue::Item {
                                 item: Item::Lit { lit },
-                                span,
+                                span: _,
                             } = &out.values[*b].value
                             {
                                 funcs.push(Some(ConstVal::Lit(lit.clone())));
@@ -196,7 +196,7 @@ impl ConstantInstantiator {
                             };
                             if let SValue::Item {
                                 item: Item::Undef,
-                                span,
+                                span: _,
                             } = &out.values[*b].value
                             {
                                 funcs.push(Some(ConstVal::Undef));
@@ -204,7 +204,7 @@ impl ConstantInstantiator {
                             }
                         };
                         funcs.push(None);
-                        return Some(b);
+                        Some(b)
                     })
                     .cloned()
                     .collect();
@@ -257,7 +257,7 @@ impl ConstantInstantiator {
                         out.blocks[n].stmts.push(val);
                         val
                     }),
-                    Some(val) => Some(params.get(&val).cloned().context("in getting a variable")?),
+                    Some(val) => Some(params.get(val).cloned().context("in getting a variable")?),
                 }),
                 STerm::Jmp(starget) => STerm::Jmp(tgt(self, inp, out, starget, 0)?),
                 STerm::CondJmp {
@@ -269,7 +269,7 @@ impl ConstantInstantiator {
                     match &out.values[cond].value {
                         SValue::Item {
                             item: Item::Lit { lit },
-                            span,
+                            span: _,
                         } => match Expr::Lit(lit.clone()).as_pure_bool(default_ctx()) {
                             Value::Known(k) => STerm::Jmp(tgt(
                                 self,
@@ -279,13 +279,13 @@ impl ConstantInstantiator {
                                 0,
                             )?),
                             _ => STerm::CondJmp {
-                                cond: cond,
+                                cond,
                                 if_true: tgt(self, inp, out, if_true, 0)?,
                                 if_false: tgt(self, inp, out, if_false, 0)?,
                             },
                         },
                         _ => STerm::CondJmp {
-                            cond: cond,
+                            cond,
                             if_true: tgt(self, inp, out, if_true, 0)?,
                             if_false: tgt(self, inp, out, if_false, 0)?,
                         },
@@ -297,7 +297,7 @@ impl ConstantInstantiator {
                         .iter()
                         .map(|(val, t)| {
                             anyhow::Ok((
-                                params.get(&val).cloned().context("in getting a variable")?,
+                                params.get(val).cloned().context("in getting a variable")?,
                                 tgt(self, inp, out, t, 0)?,
                             ))
                         })

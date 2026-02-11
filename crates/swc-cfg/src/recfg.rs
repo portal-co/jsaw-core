@@ -4,7 +4,7 @@
 //! typically used for transformations that need to create a new CFG from an existing one.
 
 use crate::BlockId;
-use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
+use crate::{Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 use std::collections::{BTreeMap, HashMap};
 
 /// CFG restructuring state.
@@ -27,7 +27,7 @@ impl Recfg {
             }
             let new_block_id = output_cfg.blocks.alloc(Default::default());
             output_cfg.blocks[new_block_id].end.orig_span =
-                input_cfg.blocks[block_id].end.orig_span.clone();
+                input_cfg.blocks[block_id].end.orig_span;
             self.map.insert(block_id, new_block_id);
             let catch = match &input_cfg.blocks[block_id].end.catch {
                 crate::Catch::Throw => Catch::Throw,

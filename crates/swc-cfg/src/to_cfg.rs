@@ -41,7 +41,7 @@ impl<T: ToCfg + ?Sized> ToCfg for &'_ T {
         current: BlockId,
         label: Option<Ident>,
     ) -> anyhow::Result<BlockId> {
-        (&**self).transform(ctx, cfg, current, label)
+        (**self).transform(ctx, cfg, current, label)
     }
 }
 impl<T: ToCfg> ToCfg for Vec<T> {
@@ -50,10 +50,10 @@ impl<T: ToCfg> ToCfg for Vec<T> {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        mut current: BlockId,
+        current: BlockId,
         label: Option<Ident>,
     ) -> anyhow::Result<BlockId> {
-        return ctx.transform_all(cfg, &self, current, label);
+        ctx.transform_all(cfg, self, current, label)
     }
 }
 impl<T: ToCfg> ToCfg for &'_ [T] {
@@ -62,10 +62,10 @@ impl<T: ToCfg> ToCfg for &'_ [T] {
         ctx: &ToCfgConversionCtx,
         cfg: &mut Cfg,
         // statement: Stmt,
-        mut current: BlockId,
+        current: BlockId,
         label: Option<Ident>,
     ) -> anyhow::Result<BlockId> {
-        return ctx.transform_all(cfg, &self, current, label);
+        ctx.transform_all(cfg, self, current, label)
     }
 }
 struct If<'a> {
@@ -107,13 +107,13 @@ impl ToCfg for DoWhile<'_> {
             new.labelled
                 .insert(l, new.cur_loop.as_ref().cloned().unwrap());
         }
-        let k = new.transform(cfg, &*do_while_stmt.body, cont, None)?;
+        let k = new.transform(cfg, do_while_stmt.body, cont, None)?;
         cfg.blocks[k].end.term = Term::CondJmp {
             cond: do_while_stmt.test.clone(),
             if_true: cont,
             if_false: next,
         };
-        return Ok(next);
+        Ok(next)
     }
 }
 impl ToCfg for If<'_> {
@@ -131,7 +131,7 @@ impl ToCfg for If<'_> {
         let then = ctx.new_block(cfg);
         let then_end = ctx.transform(
             cfg,
-            &*if_stmt.cons,
+            if_stmt.cons,
             current,
             match if_stmt.alt.as_ref() {
                 None => label,
@@ -154,7 +154,7 @@ impl ToCfg for If<'_> {
             if_false: els,
         };
         cfg.blocks[current].end.orig_span = Some(span);
-        return Ok(next);
+        Ok(next)
     }
 }
 impl ToCfg for While<'_> {
@@ -166,7 +166,7 @@ impl ToCfg for While<'_> {
         current: BlockId,
         label: Option<Ident>,
     ) -> anyhow::Result<BlockId> {
-        return ctx.transform(
+        ctx.transform(
             cfg,
             // &Stmt::If(IfStmt {
             //     span: while_stmt.span,
@@ -181,16 +181,16 @@ impl ToCfg for While<'_> {
             &If {
                 span: self.span,
                 alt: None,
-                test: &self.test,
+                test: self.test,
                 cons: &DoWhile {
                     span: self.span,
-                    test: &self.test,
+                    test: self.test,
                     body: &self.body,
                 },
             },
             current,
             label,
-        );
+        )
     }
 }
 impl ToCfg for Stmt {
@@ -263,7 +263,7 @@ impl ToCfg for Stmt {
                 cfg,
                 &If {
                     span: if_stmt.span,
-                    test: &*if_stmt.test,
+                    test: &if_stmt.test,
                     cons: &*if_stmt.cons,
                     alt: match if_stmt.alt.as_ref() {
                         None => None,
@@ -278,7 +278,7 @@ impl ToCfg for Stmt {
             let span = switch_stmt.span();
             let next = ctx.new_block(cfg);
             let mut target = ctx.clone();
-            if let None = target.cur_loop {
+            if target.cur_loop.is_none() {
                 target.cur_loop = Some(Loop {
                     r#break: next,
                     r#continue: next,
@@ -303,8 +303,8 @@ impl ToCfg for Stmt {
             cfg.blocks[cur].end.term = Term::Jmp(next);
             cfg.blocks[current].end.term = Term::Switch {
                 x: *switch_stmt.discriminant.clone(),
-                blocks: blocks,
-                default: default,
+                blocks,
+                default,
             };
             cfg.blocks[current].end.orig_span = Some(span);
             return Ok(next);
@@ -313,7 +313,7 @@ impl ToCfg for Stmt {
             cfg.blocks[current].end.orig_span = Some(break_stmt.span());
             cfg.blocks[current].end.term = Term::Jmp(
                 match &break_stmt.label {
-                    Some(l) => ctx.labelled.get(&l),
+                    Some(l) => ctx.labelled.get(l),
                     None => ctx.cur_loop.as_ref(),
                 }
                 .context("in getting the current loop")?
@@ -325,7 +325,7 @@ impl ToCfg for Stmt {
             cfg.blocks[current].end.orig_span = Some(continue_stmt.span());
             cfg.blocks[current].end.term = Term::Jmp(
                 match &continue_stmt.label {
-                    Some(l) => ctx.labelled.get(&l),
+                    Some(l) => ctx.labelled.get(l),
                     None => ctx.cur_loop.as_ref(),
                 }
                 .context("in getting the current loop")?
@@ -424,7 +424,7 @@ impl ToCfg for Stmt {
                 // }),
                 &While {
                     span: for_stmt.span,
-                    test: for_stmt.test.as_ref().unwrap_or_else(|| &true_),
+                    test: for_stmt.test.as_ref().unwrap_or(&true_),
                     body: &[&*for_stmt.body]
                         .into_iter()
                         .chain(match &for_stmt.update {
@@ -449,14 +449,14 @@ impl ToCfg for Stmt {
 }
 impl ToCfgConversionCtx {
     pub fn new_block(&self, cfg: &mut Cfg) -> BlockId {
-        return cfg.blocks.alloc(Block {
+        cfg.blocks.alloc(Block {
             stmts: vec![],
             end: End {
                 catch: self.catch.clone(),
                 term: Term::Default,
                 orig_span: None,
             },
-        });
+        })
     }
     pub fn transform_all(
         &self,
@@ -477,6 +477,6 @@ impl ToCfgConversionCtx {
         current: BlockId,
         label: Option<Ident>,
     ) -> anyhow::Result<BlockId> {
-        return statement.transform(self, cfg, current, label);
+        statement.transform(self, cfg, current, label)
     }
 }

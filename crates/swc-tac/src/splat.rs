@@ -96,7 +96,7 @@ impl Splatting {
             cache: Default::default(),
             catch: output.blocks[out_block].post.catch.clone(),
             ret: Some((stmt.left.clone(), d, argv)),
-            this_val: if (!func.cfg.has_this()) {
+            this_val: if !func.cfg.has_this() {
                 self.this_val.clone()
             } else {
                 match arrow {
@@ -118,14 +118,14 @@ impl Splatting {
         func: &TFunc,
         args: &[SpreadOr<Ident>],
         map: Mapper<'_>,
-    ) -> (TBlockId) {
+    ) -> TBlockId {
         let argv = output.regs.alloc(());
         output.decls.insert(argv.clone());
         output.blocks[out_block].stmts.push(TStmt {
             left: LId::Id { id: argv.clone() },
             flags: ValFlags::SSA_LIKE,
             right: Item::Arr {
-                members: args.iter().cloned().collect(),
+                members: args.to_vec(),
             },
             span: Span::dummy_with_cmt(),
         });
@@ -179,12 +179,12 @@ impl Splatting {
             }
         }
         // if {
-        let mut d = output.blocks.alloc(Default::default());
+        let d = output.blocks.alloc(Default::default());
         output.blocks[d].post.catch = output.blocks[out_block].post.catch.clone();
-        let mut new = self.bud(value, arrow, output, out_block, stmt, d, argv, &func);
+        let mut new = self.bud(value, arrow, output, out_block, stmt, d, argv, func);
         let c = new.translate(&func.cfg, output, func.entry, map.bud());
         output.blocks[replace(&mut out_block, d)].post.term = TTerm::Jmp(c);
-        return out_block;
+        out_block
         // continue 'b;
     }
     pub fn translate(
@@ -195,7 +195,7 @@ impl Splatting {
         map: Mapper<'_>,
     ) -> TBlockId {
         let semantic = map.semantic;
-        let consts = map.consts.as_deref();
+        let consts = map.consts;
         loop {
             if let Some(b) = self.cache.get(&in_block) {
                 return *b;
@@ -223,16 +223,14 @@ impl Splatting {
                         Ok(f.splatted(map.bud()))
                     })
                     .unwrap();
-                if let Some(thid) = self.this_val.as_ref() {
-                    if let Item::This = &mut stmt.right {
+                if let Some(thid) = self.this_val.as_ref()
+                    && let Item::This = &mut stmt.right {
                         stmt.right = Item::Just { id: thid.clone() }
                     }
-                }
-                if let Some((_, _, a)) = self.ret.as_ref() {
-                    if let Item::Arguments = &mut stmt.right {
+                if let Some((_, _, a)) = self.ret.as_ref()
+                    && let Item::Arguments = &mut stmt.right {
                         stmt.right = Item::Just { id: a.clone() }
                     }
-                }
                 if let Item::Call { callee, args } = &stmt.right {
                     macro_rules! func {
                         ($value:expr, $func:expr, $arrow:expr) => {
@@ -261,23 +259,16 @@ impl Splatting {
                             'a: loop {
                                 if !self.stack.contains(&value) {
                                     if let Some(e) = consts
-                                        .as_deref()
                                         .and_then(|a| a.map.get(&value))
-                                        .map(|a| Box::as_ref(a))
-                                    {
-                                        match e {
-                                            Expr::Fn(f) => {
-                                                if let Ok(g) =
-                                                    (map.to_cfg)(&f.function).and_then(|a| {
-                                                        TFunc::try_from_with_mapper(&a, map.bud())
-                                                    })
-                                                {
-                                                    func!(value, g, ThisArg::<Ident>::This)
-                                                }
+                                        .map(Box::as_ref)
+                                        && let Expr::Fn(f) = e
+                                            && let Ok(g) =
+                                                (map.to_cfg)(&f.function).and_then(|a| {
+                                                    TFunc::try_from_with_mapper(&a, map.bud())
+                                                })
+                                            {
+                                                func!(value, g, ThisArg::<Ident>::This)
                                             }
-                                            _ => {}
-                                        }
-                                    }
                                     if let Some((func, arrow)) =
                                         output.func_and_this(value.clone(), None, (), &Verbatim)
                                     {
@@ -310,13 +301,12 @@ impl Splatting {
                         _ => {}
                     }
                 }
-                if semantic.flags.contains(SemanticFlags::NO_MONKEYPATCHING) {
-                    if let Item::Call {
+                if semantic.flags.contains(SemanticFlags::NO_MONKEYPATCHING)
+                    && let Item::Call {
                         callee: TCallee::Member { func, member },
                         args,
                     } = &stmt.right
-                    {
-                        if let Some(Item::Lit {
+                        && let Some(Item::Lit {
                             lit: Lit::Str(method),
                         }) = input.def(LId::Id { id: member.clone() })
                         {
@@ -384,23 +374,16 @@ impl Splatting {
                             'a: loop {
                                 if !self.stack.contains(&value) {
                                     if let Some(e) = consts
-                                        .as_deref()
                                         .and_then(|a| a.map.get(&value))
-                                        .map(|a| Box::as_ref(a))
-                                    {
-                                        match e {
-                                            Expr::Fn(f) => {
-                                                if let Ok(g) =
-                                                    (map.to_cfg)(&f.function).and_then(|a| {
-                                                        TFunc::try_from_with_mapper(&a, map.bud())
-                                                    })
-                                                {
-                                                    func!(value, g, false)
-                                                }
+                                        .map(Box::as_ref)
+                                        && let Expr::Fn(f) = e
+                                            && let Ok(g) =
+                                                (map.to_cfg)(&f.function).and_then(|a| {
+                                                    TFunc::try_from_with_mapper(&a, map.bud())
+                                                })
+                                            {
+                                                func!(value, g, false)
                                             }
-                                            _ => {}
-                                        }
-                                    }
                                     if let Some(Item::Func { func, arrow }) =
                                         output.def(LId::Id { id: value.clone() }).cloned()
                                     {
@@ -416,8 +399,6 @@ impl Splatting {
                                 value = id;
                             }
                         }
-                    }
-                }
                 output.blocks[out_block].stmts.push(stmt);
             }
             output.blocks[out_block].post.orig_span = input.blocks[in_block].post.orig_span;
@@ -435,7 +416,7 @@ impl Splatting {
                             span: input.blocks[in_block]
                                 .post
                                 .orig_span
-                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                .unwrap_or_else(Span::dummy_with_cmt),
                         });
                         TTerm::Jmp(*b2)
                     }
@@ -456,7 +437,7 @@ impl Splatting {
                             span: input.blocks[in_block]
                                 .post
                                 .orig_span
-                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                .unwrap_or_else(Span::dummy_with_cmt),
                         });
                         TTerm::Jmp(*b2)
                     }
@@ -471,7 +452,7 @@ impl Splatting {
                             span: input.blocks[in_block]
                                 .post
                                 .orig_span
-                                .unwrap_or_else(|| Span::dummy_with_cmt()),
+                                .unwrap_or_else(Span::dummy_with_cmt),
                         });
                         TTerm::Jmp(k2)
                     }

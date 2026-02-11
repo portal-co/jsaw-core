@@ -154,11 +154,10 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                 _ => return None,
             };
             loop {
-                if let Some(i) = self.get_ident(func.clone(), ctx.clone()) {
-                    if i.0 == "globalThis" {
+                if let Some(i) = self.get_ident(func.clone(), ctx.clone())
+                    && i.0 == "globalThis" {
                         break;
                     }
-                }
                 let Item::Just { id } = self.get_item(func.clone(), ctx.clone())? else {
                     return None;
                 };
@@ -168,22 +167,18 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                 let id = match l.get_result(&self, member.clone(), ctx.clone()) {
                     Some(Lit::Str(s)) => {
                         if let Some(m) = s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
-                        {
-                            if let Some(m) = Native::of(m) {
+                            && let Some(m) = Native::of(m) {
                                 break m;
                             }
-                        }
                         return None;
                     }
                     _ => match self.get_item(member.clone(), ctx.clone())? {
                         Item::Lit { lit: Lit::Str(s) } => {
                             if let Some(m) =
                                 s.value.as_str().and_then(|s| s.strip_prefix("~Natives_"))
-                            {
-                                if let Some(m) = Native::of(m) {
+                                && let Some(m) = Native::of(m) {
                                     break m;
                                 }
-                            }
                             return None;
                         }
                         Item::Just { id } => id,
@@ -220,7 +215,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
             {
                 true
             }
-            Item::Lit { lit } => true,
+            Item::Lit { lit: _ } => true,
             Item::Un { arg, op }
                 if !matches!(op, UnaryOp::Delete)
                     && tcfg.get_item(arg.clone(), ctx.clone()).is_some() =>
@@ -239,16 +234,15 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
         if let Some(g) = self.get_item(i.clone(), ctx.clone()).and_then(|j| match j {
             Item::Just { id } => self.get_item(id.clone(), ctx.clone()),
             _ => None,
-        }) {
-            if self.inlinable(g, ctx.clone()) {
+        })
+            && self.inlinable(g, ctx.clone()) {
                 let g = g.clone();
                 if let Some(h) = self.get_mut_item(i, ctx.clone()) {
                     *h = g;
                     return true;
                 }
             }
-        }
-        return false;
+        false
     }
     fn force(
         &mut self,
@@ -266,24 +260,22 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
             match &target {
                 ForceTarget::Eq(target) => match target {
                     ForceEquality::Lit(target) => {
-                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone()) {
-                            if !lit.eq_ignore_span(&target) {
+                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone())
+                            && !lit.eq_ignore_span(target) {
                                 *trap = true;
                                 return;
                             }
-                        }
                     }
                     ForceEquality::Undef => {}
                 },
 
                 ForceTarget::Ne(target) => match target {
                     ForceEquality::Lit(target) => {
-                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone()) {
-                            if lit.eq_ignore_span(&target) {
+                        if let Some(lit) = l.get_result(&self, i.clone(), ctx.clone())
+                            && lit.eq_ignore_span(target) {
                                 *trap = true;
                                 return;
                             }
-                        }
                     }
                     ForceEquality::Undef => {
                         if let Some(Item::Undef) = self.get_item(i.clone(), ctx.clone()) {
@@ -319,8 +311,8 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                         right,
                         op: BinaryOp::EqEqEq,
                     },
-                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: true })))
-                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: false }))),
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: true })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: false }))),
                 )
                 | (
                     Item::Bin {
@@ -328,8 +320,8 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                         right,
                         op: BinaryOp::NotEqEq,
                     },
-                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: false })))
-                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: true }))),
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: false })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: true }))),
                 ) => {
                     if let Some(left) = l.get_result(&self, left.clone(), ctx.clone()) {
                         i = right;
@@ -360,8 +352,8 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                         right,
                         op: BinaryOp::EqEqEq,
                     },
-                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: false })))
-                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: true }))),
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: false })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: true }))),
                 )
                 | (
                     Item::Bin {
@@ -369,8 +361,8 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                         right,
                         op: BinaryOp::NotEqEq,
                     },
-                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span, value: true })))
-                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span, value: false }))),
+                    ForceTarget::Eq(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: true })))
+                    | ForceTarget::Ne(ForceEquality::Lit(Lit::Bool(Bool { span: _, value: false }))),
                 ) => {
                     if let Some(left) = l.get_result(&self, left.clone(), ctx.clone()) {
                         i = right;
@@ -395,7 +387,7 @@ pub trait ItemGetterExt<I, F, Ctx>: ItemGetter<I, F, Ctx> {
                 }
                 (
                     Item::Select {
-                        cond,
+                        cond: _,
                         then,
                         otherwise,
                     },

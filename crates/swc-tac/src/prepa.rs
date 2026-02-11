@@ -12,13 +12,12 @@
 //! [`Prepa`] - The main preparation visitor that transforms JavaScript AST
 
 use super::*;
-use portal_solutions_proxy_signs::PROXY_SIGNS;
 use std::{
     mem::replace,
     sync::{OnceLock, atomic::AtomicUsize},
 };
 use swc_ecma_ast::{
-    AssignExpr, BinExpr, CallExpr, CondExpr, Decl, ExprOrSpread, ExprStmt, IdentName, ModuleItem,
+    AssignExpr, BinExpr, CondExpr, Decl, ExprStmt, ModuleItem,
     PrivateName, SeqExpr, ThisExpr, VarDecl, VarDeclarator,
 };
 use swc_ecma_visit::{VisitMut, VisitMutWith};
@@ -73,11 +72,11 @@ fn eq(mut left: &Expr, mut right: &Expr) -> bool {
     loop {
         return match (left, right) {
             (Expr::Ident(i), Expr::Ident(j)) => i.to_id() == j.to_id(),
-            (Expr::Assign(a), b) => {
+            (Expr::Assign(a), _b) => {
                 left = &a.right;
                 continue;
             }
-            (b, Expr::Assign(a)) => {
+            (_b, Expr::Assign(a)) => {
                 right = &a.right;
                 continue;
             }
@@ -144,18 +143,16 @@ impl VisitMut for Prepa<'_> {
         for i in node.body.iter_mut() {
             match i {
                 ClassMember::ClassProp(c) => {
-                    if !c.is_static {
-                        if let Some(i) = c.value.take() {
+                    if !c.is_static
+                        && let Some(i) = c.value.take() {
                             m.insert(Prop::Key(c.key.clone()), i);
                         }
-                    }
                 }
                 ClassMember::PrivateProp(c) => {
-                    if !c.is_static {
-                        if let Some(i) = c.value.take() {
+                    if !c.is_static
+                        && let Some(i) = c.value.take() {
                             m.insert(Prop::Private(c.key.clone()), i);
                         }
-                    }
                 }
                 _ => {}
             }
@@ -191,11 +188,11 @@ impl VisitMut for Prepa<'_> {
                     props: HashMap<Prop, Box<Expr>>,
                 }
                 impl VisitMut for Traverse {
-                    fn visit_mut_class(&mut self, node: &mut Class) {}
+                    fn visit_mut_class(&mut self, _node: &mut Class) {}
                     fn visit_mut_expr(&mut self, node: &mut Expr) {
                         node.visit_mut_children_with(self);
-                        if let Expr::Call(c) = node {
-                            if let Callee::Super(s) = &c.callee {
+                        if let Expr::Call(c) = node
+                            && let Callee::Super(s) = &c.callee {
                                 let span = s.span;
                                 let x = take(&mut self.props).into_iter().map(|(a, b)| {
                                     Box::new(Expr::Assign(AssignExpr {
@@ -225,7 +222,6 @@ impl VisitMut for Prepa<'_> {
                                         .collect(),
                                 })
                             }
-                        }
                     }
                 }
                 i.visit_mut_children_with(&mut Traverse {
@@ -242,7 +238,7 @@ impl VisitMut for Prepa<'_> {
                 .exprs
                 .drain(..)
                 .flat_map(|a| match *a {
-                    Expr::Seq(SeqExpr { span, exprs }) => {
+                    Expr::Seq(SeqExpr { span: _, exprs }) => {
                         again = true;
                         exprs
                     }
@@ -257,18 +253,14 @@ impl VisitMut for Prepa<'_> {
                     .and_then(|a| a.as_assign())
                     .and_then(|a| a.left.as_ident())
                     && let Some(j) = e.as_ident()
-                {
-                    if i.to_id() == j.to_id() {
+                    && i.to_id() == j.to_id() {
                         again = true;
                         continue;
                     }
-                }
                 if i + 1 == l {
-                } else {
-                    if e.is_lit() || e.is_ident() {
-                        again = true;
-                        continue;
-                    }
+                } else if e.is_lit() || e.is_ident() {
+                    again = true;
+                    continue;
                 }
                 node.exprs.push(e);
             }

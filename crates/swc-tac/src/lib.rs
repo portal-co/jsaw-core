@@ -44,10 +44,9 @@ use bitflags::bitflags;
 use either::Either;
 use lam::LAM;
 use linearize::{StaticMap, static_map};
-use portal_jsc_common::semantic;
-use portal_jsc_common::{natives::Native, syntax::Asm};
+use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::brighten::Purity;
-use portal_jsc_swc_util::{ImportMapper, ResolveNatives, SemanticCfg, SemanticFlags, ses_method};
+use portal_jsc_swc_util::{ImportMapper, SemanticCfg, SemanticFlags};
 use portal_solutions_swibb::ConstCollector;
 use ssa_impls::dom::{dominates, domtree};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -56,12 +55,11 @@ use std::iter::{empty, once};
 use std::mem::take;
 use std::sync::Arc;
 use swc_atoms::{Atom, Wtf8Atom};
-use swc_cfg::{Block, Catch, Cfg, Func};
+use swc_cfg::{Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
-    AssignExpr, AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember,
-    ComputedPropName, CondExpr, Expr, Function, Lit, MemberExpr, MemberProp, MetaPropKind, Number,
+    AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
     Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
 };
 pub use swc_ll_common::ext::ItemGetterExt;
@@ -119,7 +117,7 @@ impl<I> LId<I> {
     }
 }
 impl<I, M> LId<I, M> {
-    pub fn as_ref<'a>(&'a self) -> LId<&'a I, &'a M>
+    pub fn as_ref(&self) -> LId<&I, &M>
 where
         // &'a M: IntoIterator<Item = &'a I>,
     {
@@ -133,7 +131,7 @@ where
             // LId::SplitOff { head, tail } => LId::SplitOff { head, tail },
         }
     }
-    pub fn as_mut<'a>(&'a mut self) -> LId<&'a mut I, &'a mut M>
+    pub fn as_mut(&mut self) -> LId<&mut I, &mut M>
 where
         // &'a mut M: IntoIterator<Item = &'a mut I>,
     {
@@ -154,7 +152,7 @@ where
         match self {
             LId::Id { id } => Either::Left(once(id)),
             LId::Member { obj, mem } => Either::Right(once(obj).chain(mem)),
-            LId::Private { id, obj } => Either::Left(once(obj)),
+            LId::Private { id: _, obj } => Either::Left(once(obj)),
             // LId::SplitOff { head, tail } => Either::Right(Either::Right([head, tail].into_iter())),
         }
     }
@@ -195,14 +193,14 @@ pub enum ImportMapperReq {
 pub fn imp(member_prop: MemberProp) -> Expr {
     match member_prop {
         swc_ecma_ast::MemberProp::Ident(ident_name) => {
-            let expr = Expr::Lit(Lit::Str(Str {
+            
+            Expr::Lit(Lit::Str(Str {
                 span: ident_name.span,
                 value: ident_name.sym.into(),
                 raw: None,
-            }));
-            expr
+            }))
         }
-        swc_ecma_ast::MemberProp::PrivateName(private_name) => {
+        swc_ecma_ast::MemberProp::PrivateName(_private_name) => {
             todo!()
         }
         swc_ecma_ast::MemberProp::Computed(computed_prop_name) => *computed_prop_name.expr,
@@ -313,22 +311,22 @@ pub struct Mapper<'a> {
     pub to_cfg: &'a (dyn Fn(&Function) -> anyhow::Result<Func> + 'a),
 }
 pub fn mapped<T>(mapper_fn: impl FnOnce(Mapper<'_>) -> T) -> T {
-    return mapper_fn(Mapper {
-        import_mapper: static_map! {_ => None},
+    mapper_fn(Mapper {
+        import_mapper: static_map! {},
         semantic: &SemanticCfg::default(),
         privates: &BTreeMap::new(),
         consts: None,
         vars: Arc::new(DefaultAtomResolver {}),
         to_cfg: &|func| func.clone().try_into(),
-    });
+    })
 }
 impl<'a> Mapper<'a> {
     pub fn bud(&self) -> Mapper<'_> {
         Mapper {
-            import_mapper: static_map! {a =>self.import_mapper[a].as_deref()},
+            import_mapper: static_map! {},
             semantic: self.semantic,
             privates: self.privates,
-            consts: self.consts.as_deref(),
+            consts: self.consts,
             vars: self.vars.clone(),
             to_cfg: self.to_cfg,
         }
@@ -350,7 +348,7 @@ impl TryFrom<Function> for TFunc {
     type Error = anyhow::Error;
     fn try_from(value: Function) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
-        return a.try_into();
+        a.try_into()
     }
 }
 impl Default for TFunc {
@@ -429,9 +427,9 @@ impl TCfg {
         for (block_id, block) in self.blocks.iter() {
             'stmt_loop: for stmt in &block.stmts {
                 if match &stmt.left {
-                    LId::Id { id } => !self.decls.contains(&id),
+                    LId::Id { id } => !self.decls.contains(id),
                     LId::Member { obj, mem } => {
-                        !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
+                        !self.decls.contains(obj) || !self.decls.contains(&mem[0])
                     }
                     _ => todo!(),
                 } {
@@ -443,8 +441,8 @@ impl TCfg {
                 if let LId::Id { id } = &stmt.left {
                     for (other_block_id, other_block) in self.blocks.iter() {
                         for other_stmt in other_block.stmts.iter() {
-                            if other_stmt.right.refs().any(|ref_id| *ref_id == *id) {
-                                if !dominates::<TFunc>(
+                            if other_stmt.right.refs().any(|ref_id| *ref_id == *id)
+                                && !dominates::<TFunc>(
                                     &domtree,
                                     Some(block_id),
                                     Some(other_block_id),
@@ -452,7 +450,6 @@ impl TCfg {
                                     *ssa_counts.entry(stmt.left.clone()).or_default() += 2usize;
                                     continue 'stmt_loop;
                                 }
-                            }
                         }
                     }
                     *ssa_counts.entry(stmt.left.clone()).or_default() += 1usize;
@@ -466,9 +463,9 @@ impl TCfg {
             .flat_map(|block_entry| &mut block_entry.1.stmts)
         {
             if match &stmt.left {
-                LId::Id { id } => !self.decls.contains(&id),
+                LId::Id { id } => !self.decls.contains(id),
                 LId::Member { obj, mem } => {
-                    !self.decls.contains(&obj) || !self.decls.contains(&mem[0])
+                    !self.decls.contains(obj) || !self.decls.contains(&mem[0])
                 }
                 _ => todo!(),
             } {
@@ -487,11 +484,8 @@ impl TCfg {
             for l in k.stmts.iter() {
                 match &l.right {
                     Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
-                        match &l.left {
-                            LId::Id { id } => {
-                                set.insert(id.clone());
-                            }
-                            _ => {}
+                        if let LId::Id { id } = &l.left {
+                            set.insert(id.clone());
                         }
                     }
                     _ => {}
@@ -509,12 +503,12 @@ impl TCfg {
                     set.remove(&r);
                 }
                 match &l.left {
-                    LId::Id { id } => {}
+                    LId::Id { id: _ } => {}
                     LId::Member { obj, mem } => {
                         set.remove(obj);
                         set.remove(&mem[0]);
                     }
-                    LId::Private { obj, id } => {
+                    LId::Private { obj, id: _ } => {
                         set.remove(obj);
                     }
                     _ => {}
@@ -523,14 +517,10 @@ impl TCfg {
         }
         for (_, k) in self.blocks.iter_mut() {
             for l in take(&mut k.stmts) {
-                match &l.left {
-                    LId::Id { id } => {
-                        if set.contains(id) {
-                            continue;
-                        }
+                if let LId::Id { id } = &l.left
+                    && set.contains(id) {
+                        continue;
                     }
-                    _ => {}
-                }
                 k.stmts.push(l);
             }
         }
@@ -567,17 +557,18 @@ impl TCfg {
         });
     }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
-        let all_refs = self.blocks.iter().flat_map(|block_entry| {
+        
+        self.blocks.iter().flat_map(|block_entry| {
             let term_refs: Box<dyn Iterator<Item = Ident> + '_> = match &block_entry.1.post.term {
                 TTerm::Return(return_ident) => Box::new(return_ident.iter().cloned()),
                 TTerm::Throw(throw_ident) => Box::new(Some(throw_ident.clone()).into_iter()),
-                TTerm::Jmp(id) => Box::new(std::iter::empty()),
+                TTerm::Jmp(_id) => Box::new(std::iter::empty()),
                 TTerm::CondJmp {
                     cond,
-                    if_true,
-                    if_false,
+                    if_true: _,
+                    if_false: _,
                 } => Box::new(once(cond.clone())),
-                TTerm::Switch { x, blocks, default } => Box::new(
+                TTerm::Switch { x, blocks, default: _ } => Box::new(
                     once(x.clone()).chain(blocks.iter().map(|case_entry| case_entry.0.clone())),
                 ),
                 TTerm::Default => Box::new(std::iter::empty()),
@@ -622,14 +613,13 @@ impl TCfg {
                     left_refs.chain(right_refs)
                 },
             ))
-        });
-        return all_refs;
+        })
     }
     pub fn simplify_justs(&mut self) {
         let mut redo = true;
         while take(&mut redo) {
             for ref_ in self.refs().collect::<BTreeSet<_>>() {
-                redo = redo | self.simplify_just(ref_, ());
+                redo |= self.simplify_just(ref_, ());
             }
         }
     }
@@ -665,16 +655,15 @@ impl TCfg {
             for k in self.blocks.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 if let TTerm::Jmp(a) = &self.blocks[k].post.term {
                     let a = *a;
-                    if a != k {
-                        if self.blocks[a].stmts.iter().all(|s| s.nothrow())
-                            || &self.blocks[k].post.catch == &self.blocks[a].post.catch
+                    if a != k
+                        && (self.blocks[a].stmts.iter().all(|s| s.nothrow())
+                            || self.blocks[k].post.catch == self.blocks[a].post.catch)
                         {
                             let s = self.blocks[a].stmts.clone();
                             self.blocks[k].stmts.extend(s);
                             self.blocks[k].post.term = self.blocks[a].post.term.clone();
                             continue 'a;
                         }
-                    }
                 }
             }
             return;
@@ -687,7 +676,7 @@ impl TCfg {
             decls.remove(&e);
             d.insert(e, 0usize);
         }
-        for (k, l) in self.blocks.iter_mut() {
+        for (_k, l) in self.blocks.iter_mut() {
             let mut pi = 0usize;
             for _ in l.stmts.splice(
                 0..0,
@@ -716,7 +705,7 @@ impl TCfg {
                                 Some(b) => (Atom::new(format!("_{}${b}", &a.0)), a.1),
                             })
                         },
-                        &mut |a, b| {
+                        &mut |_a, b| {
                             Ok::<_, Infallible>({
                                 let mut b = b.clone();
                                 b.cfg.stripe();
@@ -725,12 +714,11 @@ impl TCfg {
                         },
                     )
                     .unwrap();
-                if let LId::Id { id } = &mut s.left {
-                    if let Some(b) = d.get_mut(id) {
+                if let LId::Id { id } = &mut s.left
+                    && let Some(b) = d.get_mut(id) {
                         *b += 1;
                         id.0 = Atom::new(format!("_{}${b}", &id.0));
                     }
-                }
             }
             for (a, b) in d.iter() {
                 let t = Atom::new(format!("_{}${b}", &a.0));
@@ -843,7 +831,7 @@ impl TCfg {
                                         .contains(SemanticFlags::NO_MONKEYPATCHING)
                                         || !g.cfg.has_this() =>
                                 {
-                                    let PropKind::Prop { getter, setter } =
+                                    let PropKind::Prop { getter, setter: _ } =
                                         m.entry(k).or_insert_with(|| PropKind::Prop {
                                             getter: None,
                                             setter: None,
@@ -859,7 +847,7 @@ impl TCfg {
                                         .contains(SemanticFlags::NO_MONKEYPATCHING)
                                         || !s.cfg.has_this() =>
                                 {
-                                    let PropKind::Prop { getter, setter } =
+                                    let PropKind::Prop { getter: _, setter } =
                                         m.entry(k).or_insert_with(|| PropKind::Prop {
                                             getter: None,
                                             setter: None,
@@ -896,9 +884,7 @@ impl TCfg {
                     _ => None,
                 })
                 .collect::<BTreeMap<_, _>>();
-            a = a
-                .into_iter()
-                .filter(|(a, _)| {
+            a.retain(|a, _| {
                     !self.blocks.iter().any(|k| {
                         k.1.stmts.iter().any(|s| s.will_ruin(a))
                             || match &k.1.post.term {
@@ -907,13 +893,12 @@ impl TCfg {
                                 _ => false,
                             }
                     })
-                })
-                .collect();
+                });
             for ki in self.blocks.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 // let mut k = &mut;
                 's: for mut s in take(&mut self.blocks[ki].stmts) {
-                    if let LId::Id { id } = &s.left {
-                        if let Some(v) = a.get(id) {
+                    if let LId::Id { id } = &s.left
+                        && let Some(v) = a.get(id) {
                             for p in v.values() {
                                 match p {
                                     PropKind::Item(v, t) => {
@@ -924,17 +909,16 @@ impl TCfg {
                                             span: s.span,
                                         });
                                     }
-                                    PropKind::Prop { getter, setter } => {}
+                                    PropKind::Prop { getter: _, setter: _ } => {}
                                 }
                                 cont = true;
                             }
                             continue;
                         }
-                    }
                     'a: {
-                        if let LId::Member { obj, mem } = &s.left {
-                            if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit { lit }) = self.get_item(mem[0].clone(), ()) {
+                        if let LId::Member { obj, mem } = &s.left
+                            && let Some(v) = a.get(obj)
+                                && let Some(Item::Lit { lit }) = self.get_item(mem[0].clone(), ()) {
                                     let mut lit = lit.clone();
                                     lit.set_span(Span::dummy_with_cmt());
                                     if let Some(w) = v.get(&lit) {
@@ -942,7 +926,7 @@ impl TCfg {
                                             PropKind::Item(_, w) => {
                                                 s.left = LId::Id { id: w.clone() };
                                             }
-                                            PropKind::Prop { getter, setter } => {
+                                            PropKind::Prop { getter: _, setter } => {
                                                 let stub = self.regs.alloc(());
                                                 if let Some(setter) = setter {
                                                     let tmp = self.regs.alloc(());
@@ -958,7 +942,7 @@ impl TCfg {
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
                                                                         match a {
-                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (&*s.value.clone().to_atom_lossy()).clone(), span: s.span, ctx: Default::default() }),
+                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (*s.value.clone().to_atom_lossy()).clone(), span: s.span, ctx: Default::default() }),
                                                                             _ => todo!(),
                                                                         },
                                                                         &self.regs,
@@ -1022,7 +1006,7 @@ impl TCfg {
                                                         )
                                                                 .collect(),
                                                         },
-                                                        span: span,
+                                                        span,
                                                     }
                                                 } else {
                                                     s.left = LId::Id { id: stub };
@@ -1033,13 +1017,11 @@ impl TCfg {
                                         break 'a;
                                     }
                                 }
-                            }
-                        }
                     }
                     'b: {
-                        if let Item::Mem { obj, mem } = &s.right {
-                            if let Some(v) = a.get(obj) {
-                                if let Some(Item::Lit { lit }) = self.get_item(mem.clone(), ()) {
+                        if let Item::Mem { obj, mem } = &s.right
+                            && let Some(v) = a.get(obj)
+                                && let Some(Item::Lit { lit }) = self.get_item(mem.clone(), ()) {
                                     let mut lit = lit.clone();
                                     lit.set_span(Span::dummy_with_cmt());
                                     if let Some(w) = v.get(&lit) {
@@ -1047,7 +1029,7 @@ impl TCfg {
                                             PropKind::Item(_, w) => {
                                                 s.right = Item::Just { id: w.clone() };
                                             }
-                                            PropKind::Prop { getter, setter } => {
+                                            PropKind::Prop { getter, setter: _ } => {
                                                 if let Some(getter) = getter {
                                                     let tmp = self.regs.alloc(());
                                                     let tmp2 = self.regs.alloc(());
@@ -1061,13 +1043,13 @@ impl TCfg {
                                                                 .iter()
                                                                 .flat_map(|(a, b)| {
                                                                     b.clone().to_render(
-                                                                        (match a {
-                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (&*s.value
+                                                                        match a {
+                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (*s.value
                                                                                     .to_atom_lossy(
                                                                                     ))
                                                                                     .clone(), span: s.span, ctx: Default::default() }),
                                                                             _ => todo!(),
-                                                                        }),
+                                                                        },
                                                                         &self.regs,
                                                                     )
                                                                 })
@@ -1132,8 +1114,6 @@ impl TCfg {
                                         break 'b;
                                     }
                                 }
-                            }
-                        }
                     }
                     self.blocks[ki].stmts.push(s);
                 }
@@ -1209,14 +1189,14 @@ impl TStmt {
 impl<I, M> LId<I, M> {
     pub fn nothrow(&self) -> bool {
         match self {
-            LId::Id { id } => true,
+            LId::Id { id: _ } => true,
             _ => false,
         }
     }
 }
 impl TStmt {
     pub fn nothrow(&self) -> bool {
-        return self.left.nothrow() && self.right.nothrow();
+        self.left.nothrow() && self.right.nothrow()
     }
 }
 /// A basic block in the control flow graph.
@@ -1312,9 +1292,11 @@ pub mod impls;
     feature = "rkyv-impl",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[derive(Default)]
 pub enum TCatch<B = TBlockId, I = Ident> {
     // #[default]
     /// No exception handler - throw to caller
+    #[default]
     Throw,
     /// Jump to a catch block, binding exception to `pat`
     Jump {
@@ -1324,19 +1306,14 @@ pub enum TCatch<B = TBlockId, I = Ident> {
         k: B,
     },
 }
-impl<B, I> Default for TCatch<B, I> {
-    fn default() -> Self {
-        Self::Throw
-    }
-}
 impl<B, I> TCatch<B, I> {
-    pub fn as_ref<'a>(&'a self) -> TCatch<&'a B, &'a I> {
+    pub fn as_ref(&self) -> TCatch<&B, &I> {
         match self {
             Self::Throw => TCatch::Throw,
             Self::Jump { pat, k } => TCatch::Jump { pat, k },
         }
     }
-    pub fn as_mut<'a>(&'a mut self) -> TCatch<&'a mut B, &'a mut I> {
+    pub fn as_mut(&mut self) -> TCatch<&mut B, &mut I> {
         match self {
             Self::Throw => TCatch::Throw,
             Self::Jump { pat, k } => TCatch::Jump { pat, k },
@@ -1382,6 +1359,7 @@ impl<B, I> TCatch<B, I> {
     feature = "rkyv-impl",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[derive(Default)]
 pub enum TTerm<B = TBlockId, I = Ident> {
     /// Return from function, optionally with a value
     Return(Option<I>),
@@ -1416,6 +1394,7 @@ pub enum TTerm<B = TBlockId, I = Ident> {
     },
     // #[default]
     /// Placeholder or unreachable terminator
+    #[default]
     Default,
 }
 impl<I: Eq, M> LId<I, M> {
@@ -1427,14 +1406,12 @@ impl<I: Eq, M> LId<I, M> {
     }
 }
 impl<B, I: Eq> TTerm<B, I> {
-    pub fn taints_object(&self, a: &I) -> bool {
-        match self {
-            _ => false,
-        }
+    pub fn taints_object(&self, _a: &I) -> bool {
+        false
     }
 }
 impl<B, I> TTerm<B, I> {
-    pub fn as_ref<'a>(&'a self) -> TTerm<&'a B, &'a I>
+    pub fn as_ref(&self) -> TTerm<&B, &I>
 where
         // I: Eq + std::hash::Hash,
     {
@@ -1474,7 +1451,7 @@ where
             },
         }
     }
-    pub fn as_mut<'a>(&'a mut self) -> TTerm<&'a mut B, &'a mut I>
+    pub fn as_mut(&mut self) -> TTerm<&mut B, &mut I>
 where
         // I: Eq + std::hash::Hash,
     {
@@ -1577,11 +1554,6 @@ where
     //         TTerm::Default => TTerm::Default,
     //     }
     // }
-}
-impl<B, I> Default for TTerm<B, I> {
-    fn default() -> Self {
-        TTerm::Default
-    }
 }
 enum Frame<'a> {
     Assign(&'a AssignTarget, AssignOp),

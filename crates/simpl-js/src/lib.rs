@@ -24,9 +24,7 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::convert::Infallible;
-use std::env::Args;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -121,7 +119,7 @@ impl SimplPathId {
     pub fn span(self, span: Span) -> SimplPath {
         SimplPath {
             root: Ident {
-                span: span,
+                span,
                 ctxt: self.root.1,
                 sym: self.root.0,
                 optional: false,
@@ -208,7 +206,7 @@ pub enum SimplIfKind<D: Dialect> {
 impl<D: Dialect> SimplStmt<D> {
     pub fn apply_label(&mut self, label: &Ident) {
         match self {
-            SimplStmt::Expr(make_spanned) | SimplStmt::Return(make_spanned) => {}
+            SimplStmt::Expr(_make_spanned) | SimplStmt::Return(_make_spanned) => {}
             SimplStmt::Block(make_spanned) => {
                 for a in make_spanned.value.iter_mut() {
                     a.apply_label(label);
@@ -306,7 +304,7 @@ impl<D: Dialect<Tag = Infallible>> From<SimplExpr<D>> for Expr {
                         span: c.span,
                         ctxt: Default::default(),
                         callee: swc_ecma_ast::Callee::Expr(Box::new(pid)),
-                        args: if path.template_args.len() == 0 {
+                        args: if path.template_args.is_empty() {
                             None
                         } else {
                             Some(Expr::Object(ObjectLit {
@@ -361,7 +359,7 @@ impl<D: Dialect<Tag = Infallible>> From<SimplExpr<D>> for Expr {
                         type_args: None,
                     })
                 }
-                SimplCallExpr::Tag { tag, args } => match tag {},
+                SimplCallExpr::Tag { tag, args: _ } => match tag {},
             },
             SimplExpr::Select(s) => Expr::Call(CallExpr {
                 span: s.span,
@@ -476,7 +474,7 @@ impl<D: Dialect<Tag = Infallible>> From<SimplStmt<D>> for Stmt {
                         ctxt: Default::default(),
                         stmts: i.value.body.into_iter().map(|a| a.into()).collect(),
                     })),
-                    alt: if r#else.len() != 0 {
+                    alt: if !r#else.is_empty() {
                         Some(Box::new(Stmt::Block(BlockStmt {
                             span: i.span,
                             ctxt: Default::default(),
@@ -553,9 +551,7 @@ impl Display for Error {
 }
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            _ => None,
-        }
+        None
     }
 }
 pub trait ConvTagLookup<D: Dialect> {
@@ -608,7 +604,7 @@ impl Conv for Expr {
                             keys: vec![],
                         }
                         .into(),
-                        module: (&*a.to_atom_lossy()).clone(),
+                        module: (*a.to_atom_lossy()).clone(),
                         name: b,
                     },
                 }),
@@ -629,8 +625,8 @@ impl Conv for Expr {
                     }
                     ImportOr::Import {
                         value,
-                        module,
-                        name,
+                        module: _,
+                        name: _,
                     } => {
                         value.as_mut().keys.push(i.sym.clone());
                     }
@@ -660,36 +656,36 @@ impl Conv for Expr {
                                     }
                                     ImportOr::Import {
                                         value,
-                                        module,
-                                        name,
+                                        module: _,
+                                        name: _,
                                     } => {
                                         value.as_mut().keys.push(i.sym.clone());
                                     }
                                 };
                                 SimplExpr::Ident(D::new_import(path))
                             }
-                            swc_ecma_ast::SimpleAssignTarget::SuperProp(super_prop_expr) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::Paren(paren_expr) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::OptChain(opt_chain_expr) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::TsAs(ts_as_expr) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::TsSatisfies(ts_satisfies_expr) => {
+                            swc_ecma_ast::SimpleAssignTarget::SuperProp(_super_prop_expr) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::Paren(_paren_expr) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::OptChain(_opt_chain_expr) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::TsAs(_ts_as_expr) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::TsSatisfies(_ts_satisfies_expr) => {
                                 todo!()
                             }
-                            swc_ecma_ast::SimpleAssignTarget::TsNonNull(ts_non_null_expr) => {
+                            swc_ecma_ast::SimpleAssignTarget::TsNonNull(_ts_non_null_expr) => {
                                 todo!()
                             }
                             swc_ecma_ast::SimpleAssignTarget::TsTypeAssertion(
-                                ts_type_assertion,
+                                _ts_type_assertion,
                             ) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::TsInstantiation(ts_instantiation) => {
+                            swc_ecma_ast::SimpleAssignTarget::TsInstantiation(_ts_instantiation) => {
                                 todo!()
                             }
-                            swc_ecma_ast::SimpleAssignTarget::Invalid(invalid) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::Invalid(_invalid) => todo!(),
                         }
                     }
-                    swc_ecma_ast::AssignTarget::Pat(assign_target_pat) => todo!(),
+                    swc_ecma_ast::AssignTarget::Pat(_assign_target_pat) => todo!(),
                 };
-                let mut path = match e {
+                let path = match e {
                     SimplExpr::Ident(path) => path,
                     SimplExpr::Assign(a) => a.value.target,
                     _ => return Err(Error::Unsupported),
@@ -714,10 +710,10 @@ impl Conv for Expr {
             Expr::Call(c) => {
                 match &c.callee {
                     swc_ecma_ast::Callee::Super(_) => todo!(),
-                    swc_ecma_ast::Callee::Import(import) => todo!(),
+                    swc_ecma_ast::Callee::Import(_import) => todo!(),
                     swc_ecma_ast::Callee::Expr(expr) => {
                         match &**expr {
-                            Expr::Fn(f) if f.function.params.len() == 0 => {
+                            Expr::Fn(f) if f.function.params.is_empty() => {
                                 SimplExpr::Call(MakeSpanned {
                                     value: Box::new(SimplCallExpr::Block(Box::new(
                                         SimplStmt::Block(MakeSpanned {
@@ -734,7 +730,7 @@ impl Conv for Expr {
                                     span: f.span(),
                                 })
                             }
-                            Expr::Arrow(f) if f.params.len() == 0 => SimplExpr::Call(MakeSpanned {
+                            Expr::Arrow(f) if f.params.is_empty() => SimplExpr::Call(MakeSpanned {
                                 value: Box::new(SimplCallExpr::Block(Box::new(SimplStmt::Block(
                                     MakeSpanned {
                                         value: match &*f.body {
@@ -761,7 +757,7 @@ impl Conv for Expr {
                                 match imports.lookup_tag(e, &c.args) {
                                     Err(e) => {
                                         let a: SimplExpr<D> = e.conv(imports)?;
-                                        let mut path = match &a {
+                                        let path = match &a {
                                             SimplExpr::Ident(path) => path,
                                             SimplExpr::Assign(a) => &a.value.target,
                                             _ => return Err(Error::Unsupported),
@@ -873,7 +869,7 @@ impl Conv for Expr {
                                                                         );
                                                                     }
                                                                 },
-                                                                (&*k.value).clone(),
+                                                                (*k.value).clone(),
                                                             );
                                                         }
                                                     } else {
@@ -883,7 +879,7 @@ impl Conv for Expr {
                                                 SimplExpr::Call(MakeSpanned {
                                                     value: Box::new(SimplCallExpr::Path {
                                                         path: FuncId {
-                                                            path: path,
+                                                            path,
                                                             template_args: template,
                                                         },
                                                         args: args
@@ -913,7 +909,7 @@ impl Conv for Expr {
                                                             Some(a) => a.sym.clone(),
                                                             None => return Err(Error::Unsupported),
                                                         },
-                                                        (&*k.value).clone(),
+                                                        (*k.value).clone(),
                                                     );
                                                 }
                                             } else {
@@ -1017,7 +1013,7 @@ impl Conv for Stmt {
                             };
                             let a = a.conv(imports)?;
                             let (b, d) = match c.cons.last() {
-                                Some(Stmt::Break(BreakStmt { span, label: None })) => (
+                                Some(Stmt::Break(BreakStmt { span: _, label: None })) => (
                                     c.cons[..(c.cons.len() - 1)]
                                         .iter()
                                         .map(|a| a.conv(imports))

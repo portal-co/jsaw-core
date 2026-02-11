@@ -12,7 +12,7 @@
 //! - `cfg_traits::Target` for `STarget`
 //! - `ssa_traits::HasValues` and `ssa_traits::HasChainableValues` for SSA types
 
-use crate::{SBlock, SBlockId, SCatch, SFunc, SPostcedent, STarget, STerm, SValueId, SValueW};
+use crate::{SBlock, SCatch, SFunc, SPostcedent, STarget, STerm, SValueId, SValueW};
 use ssa_traits::{HasChainableValues, HasValues};
 use std::{
     convert::Infallible,
@@ -63,15 +63,15 @@ impl cfg_traits::Term<SFunc> for STerm {
         SFunc: 'a,
     {
         match self {
-            STerm::Throw(id) => Box::new(empty()),
-            STerm::Return(id) => Box::new(empty()),
+            STerm::Throw(_id) => Box::new(empty()),
+            STerm::Return(_id) => Box::new(empty()),
             STerm::Jmp(starget) => Box::new(once(starget)),
             STerm::CondJmp {
-                cond,
+                cond: _,
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            STerm::Switch { x, blocks, default } => {
+            STerm::Switch { x: _, blocks, default } => {
                 Box::new(blocks.iter().map(|a| &a.1).chain(once(default)))
             }
             STerm::Default | STerm::Tail { .. } => Box::new(empty()),
@@ -82,15 +82,15 @@ impl cfg_traits::Term<SFunc> for STerm {
         SFunc: 'a,
     {
         match self {
-            STerm::Throw(id) => Box::new(empty()),
-            STerm::Return(id) => Box::new(empty()),
+            STerm::Throw(_id) => Box::new(empty()),
+            STerm::Return(_id) => Box::new(empty()),
             STerm::Jmp(starget) => Box::new(once(starget)),
             STerm::CondJmp {
-                cond,
+                cond: _,
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            STerm::Switch { x, blocks, default } => {
+            STerm::Switch { x: _, blocks, default } => {
                 Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default)))
             }
             STerm::Default | STerm::Tail { .. } => Box::new(empty()),
@@ -171,13 +171,13 @@ impl ssa_traits::HasChainableValues<SFunc> for SValueW {
 impl HasValues<SFunc> for SValueW {
     fn values<'a>(
         &'a self,
-        f: &'a SFunc,
+        _f: &'a SFunc,
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut SFunc,
+        _g: &'a mut SFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
     where
         SFunc: 'a,
@@ -229,13 +229,13 @@ impl HasChainableValues<SFunc> for STarget {
 impl HasValues<SFunc> for STarget {
     fn values<'a>(
         &'a self,
-        f: &'a SFunc,
+        _f: &'a SFunc,
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut SFunc,
+        _g: &'a mut SFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
     where
         SFunc: 'a,
@@ -273,7 +273,7 @@ impl HasChainableValues<SFunc> for STerm {
                     .map(
                         |SpreadOr {
                              value: a,
-                             is_spread: b,
+                             is_spread: _b,
                          }| a,
                     )
                     .cloned()
@@ -320,7 +320,7 @@ impl HasChainableValues<SFunc> for STerm {
                     .map(
                         |SpreadOr {
                              value: a,
-                             is_spread: b,
+                             is_spread: _b,
                          }| a,
                     )
                     .chain({
@@ -378,13 +378,13 @@ impl HasChainableValues<SFunc> for SPostcedent {
 impl HasValues<SFunc> for STerm {
     fn values<'a>(
         &'a self,
-        f: &'a SFunc,
+        _f: &'a SFunc,
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut SFunc,
+        _g: &'a mut SFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
     where
         SFunc: 'a,
@@ -395,13 +395,13 @@ impl HasValues<SFunc> for STerm {
 impl HasValues<SFunc> for SCatch {
     fn values<'a>(
         &'a self,
-        f: &'a SFunc,
+        _f: &'a SFunc,
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut SFunc,
+        _g: &'a mut SFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
     where
         SFunc: 'a,
@@ -412,13 +412,13 @@ impl HasValues<SFunc> for SCatch {
 impl HasValues<SFunc> for SPostcedent {
     fn values<'a>(
         &'a self,
-        f: &'a SFunc,
+        _f: &'a SFunc,
     ) -> Box<dyn Iterator<Item = <SFunc as ssa_traits::Func>::Value> + 'a> {
         self.values_chain()
     }
     fn values_mut<'a>(
         &'a mut self,
-        g: &'a mut SFunc,
+        _g: &'a mut SFunc,
     ) -> Box<dyn Iterator<Item = &'a mut <SFunc as ssa_traits::Func>::Value> + 'a>
     where
         SFunc: 'a,
@@ -441,11 +441,11 @@ impl ssa_traits::TypedBlock<SFunc> for SBlock {
             <SFunc as ssa_traits::Func>::Value,
         ),
     > {
-        return self.params.iter().map(|(value_id, ty)| (*ty, *value_id));
+        self.params.iter().map(|(value_id, ty)| (*ty, *value_id))
     }
 }
 impl ssa_traits::TypedValue<SFunc> for SValueW {
     fn ty(&self, _func: &SFunc) -> <SFunc as ssa_traits::TypedFunc>::Ty {
-        ()
+        
     }
 }

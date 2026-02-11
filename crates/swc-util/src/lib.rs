@@ -16,7 +16,6 @@
 //! - [`ResolveNatives`]: Trait for resolving native/intrinsic functions
 //! - [`ImportMapper`]: Trait for custom import resolution
 
-use bitflags::bitflags;
 pub use portal_jsc_common as common;
 use portal_jsc_common::natives::Native;
 pub use portal_jsc_common::{semantic::SemanticFlags, semantic::SemanticTarget, syntax::ImportMap};
@@ -81,7 +80,7 @@ pub trait ResolveNatives {
 impl ResolveNatives for Expr {
     fn resolve_natives(
         &self,
-        cfg: &SemanticCfg,
+        _cfg: &SemanticCfg,
         import_map: &(dyn ImportMapper + '_),
     ) -> Option<Native<&Expr>> {
         fn prop<'a>(c: &'a CallExpr, p: &'a Expr) -> Option<Native<&'a Expr>> {
@@ -122,7 +121,7 @@ impl ResolveNatives for Expr {
                         if a == "@portal-solutions/jsaw-intrinsics-base" =>
                     {
                         //  let s = s.value.strip_prefix("~Natives_")?;
-                        let n = Native::of(&*name)?;
+                        let n = Native::of(&name)?;
                         let mut a = c.args.iter();
                         n.map(&mut |_| {
                             let Some(v) = a.next() else {
@@ -136,7 +135,7 @@ impl ResolveNatives for Expr {
                 },
                 Expr::Member(m) => member(c, m),
                 Expr::Bin(b) if matches!(b.op, BinaryOp::NullishCoalescing) => {
-                    expr(c, &*b.left, import_map)
+                    expr(c, &b.left, import_map)
                 }
                 Expr::OptChain(o) => match &*o.base {
                     swc_ecma_ast::OptChainBase::Member(m) => member(c, m),
@@ -172,10 +171,10 @@ impl VisitMut for InlineHintInliner<'_> {
     fn visit_mut_expr(&mut self, node: &mut Expr) {
         let mut not_done = true;
         while take(&mut not_done) {
-            if let Expr::Ident(i) = node {
-                if let Some(mut b) = self.consts.map.get(&i.to_id()).cloned() {
+            if let Expr::Ident(i) = node
+                && let Some(mut b) = self.consts.map.get(&i.to_id()).cloned() {
                     let mut t = InlineTracer {
-                        mapper: &*self.mapper,
+                        mapper: self.mapper,
                         inlinable: false,
                     };
                     b.visit_mut_with(&mut t);
@@ -184,7 +183,6 @@ impl VisitMut for InlineHintInliner<'_> {
                         *node = *b;
                     }
                 }
-            }
             node.visit_mut_children_with(self);
         }
     }
@@ -225,8 +223,8 @@ impl<T> AsRef<T> for ImportOr<T> {
             ImportOr::NotImport(value) => value,
             ImportOr::Import {
                 value,
-                module,
-                name,
+                module: _,
+                name: _,
             } => value,
         }
     }
@@ -237,8 +235,8 @@ impl<T> AsMut<T> for ImportOr<T> {
             ImportOr::NotImport(value) => value,
             ImportOr::Import {
                 value,
-                module,
-                name,
+                module: _,
+                name: _,
             } => value,
         }
     }
@@ -252,8 +250,8 @@ impl<T> Extract<T> for ImportOr<T> {
             ImportOr::NotImport(value) => value,
             ImportOr::Import {
                 value,
-                module,
-                name,
+                module: _,
+                name: _,
             } => value,
         }
     }
@@ -273,7 +271,7 @@ pub trait ImportMapper {
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct NoImportMapper {}
 impl ImportMapper for NoImportMapper {
-    fn import_of(&self, cx: &Id) -> Option<(Wtf8Atom, ImportMap<Atom>)> {
+    fn import_of(&self, _cx: &Id) -> Option<(Wtf8Atom, ImportMap<Atom>)> {
         None
     }
 }

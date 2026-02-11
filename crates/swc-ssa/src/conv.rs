@@ -24,7 +24,6 @@
 //! [`ToSSAConverter`] - The main converter maintaining state during transformation
 
 use crate::*;
-use ssa_impls::dom::dominates;
 
 /// Converter for transforming TAC to SSA representation.
 ///
@@ -49,7 +48,7 @@ pub struct ToSSAConverter {
     // pub domtree: BTreeMap<Option<swc_tac::TBlockId>, swc_tac::TBlockId>,
 }
 impl ToSSAConverter {
-    fn safe_to_carry(&self, target: swc_tac::TBlockId, src: swc_tac::TBlockId) -> bool {
+    fn safe_to_carry(&self, _target: swc_tac::TBlockId, _src: swc_tac::TBlockId) -> bool {
         // dominates::<TFunc>(&self.domtree, Some(src), Some(target))
         false
     }
@@ -96,14 +95,14 @@ impl ToSSAConverter {
         if let Some(k) = cache.get(&a) {
             return Ok(*k);
         }
-        if let Some(d) = i.def(LId::Id { id: a.clone() }) {
-            if inlinable(d, i) {
+        if let Some(d) = i.def(LId::Id { id: a.clone() })
+            && inlinable(d, i) {
                 let b = 'a: {
                     let b = match d {
                         Item::Undef => break 'a self.undef,
                         b => b.clone().map2::<_, _, anyhow::Error, ()>(
                             &mut (),
-                            &mut |_, a| self.load(&state, i, o, t, a.clone(), &cache),
+                            &mut |_, a| self.load(state, i, o, t, a.clone(), cache),
                             &mut |_, b| b.try_into(),
                         )?,
                     };
@@ -118,7 +117,6 @@ impl ToSSAConverter {
                 o.blocks[t].stmts.push(b);
                 return Ok(b);
             }
-        }
         let x = match state.get(&a).cloned() {
             Some(b) => b.0,
             None => {
@@ -160,7 +158,7 @@ impl ToSSAConverter {
             });
             self.map.insert(k, t);
             // let app: BTreeMap<_, _> = app.collect();
-            let ok = k;
+            let _ok = k;
             let shim: Option<(crate::SBlockId, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
                 swc_tac::TCatch::Jump { pat, k: b } => {
@@ -171,7 +169,7 @@ impl ToSSAConverter {
                     });
                     let b = *b;
                     // let d = self.domtree.get(&Some(*k)).cloned() == Some(Some(ok));
-                    let d = self.safe_to_carry(b, k);
+                    let _d = self.safe_to_carry(b, k);
                     let state2 = once(pat.clone())
                         .chain(
                             self.all
@@ -295,7 +293,7 @@ impl ToSSAConverter {
                     }
                 }
             }
-            let params = |this: &Self, k2: swc_tac::TBlockId| {
+            let params = |this: &Self, _k2: swc_tac::TBlockId| {
                 // let d = this.safe_to_carry(k2, k);
                 this.all
                     .iter()

@@ -12,7 +12,7 @@ impl<'a, I: Clone + Eq, F, Ctx: Clone> ItemResultGetter<I, F, Ctx, Lit> for Foll
         ctx: Ctx,
     ) -> Option<Lit> {
         g.get_item(i, ctx.clone())?
-            .const_in(&self.semantics, g, Span::dummy_with_cmt(), ctx)
+            .const_in(self.semantics, g, Span::dummy_with_cmt(), ctx)
     }
 }
 impl<I: Clone + Eq, F> Item<I, F> {
@@ -24,7 +24,7 @@ impl<I: Clone + Eq, F> Item<I, F> {
         ctx: Ctx,
     ) -> Option<Lit> {
         return match self {
-            Item::Just { id } => None,
+            Item::Just { id: _ } => None,
             Item::Bin {
                 left: l2,
                 right: r2,
@@ -137,7 +137,7 @@ impl<I: Clone + Eq, F> Item<I, F> {
                             //         _ => (left?, right?),
                             //     }
                             // }
-                            (_, _, Some(v), Some(v2)) => (left?, right?),
+                            (_, _, Some(_v), Some(_v2)) => (left?, right?),
                             _ => return None,
                         }
                     }
@@ -378,54 +378,44 @@ impl<I: Clone + Eq, F> Item<I, F> {
                 }
             }
             Item::Mem { obj, mem } => {
-                match k.get_item(obj.clone(), ctx.clone()) {
-                    Some(Item::Obj { members }) => match {
-                        let l = k
-                            .get_item(mem.clone(), ctx.clone())
-                            .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))?;
-                        let mut i = members.iter();
-                        loop {
-                            let Some(i) = i.next() else {
-                                break None;
-                            };
-                            let l2 = match &i.0 {
-                                PropKey::Lit(PropSym {
-                                    sym: l,
-                                    span: s2,
-                                    ctx: _,
-                                }) => Lit::Str(Str {
-                                    span,
-                                    value: l.clone().into(),
-                                    raw: None,
-                                }),
-                                PropKey::Computed(c) => {
-                                    match k
-                                        .get_item(c.clone(), ctx.clone())
-                                        .and_then(|w| w.const_in(semantics, k, span, ctx.clone()))
-                                    {
-                                        None => return None,
-                                        Some(l) => l,
-                                    }
-                                }
-                                _ => break None,
-                            };
-                            if l2 != l {
-                                continue;
-                            };
-                            let PropVal::Item(i) = &i.1 else {
-                                break None;
-                            };
-                            break Some(i.clone());
-                        }
-                    } {
-                        Some(v) => {
-                            return k
-                                .get_item(v, ctx.clone())
-                                .and_then(|w| w.const_in(semantics, k, span, ctx.clone()));
-                        }
-                        None => {}
-                    },
-                    _ => {}
+                if let Some(Item::Obj { members }) = k.get_item(obj.clone(), ctx.clone()) && let Some(v) = {
+                    let l = k
+                        .get_item(mem.clone(), ctx.clone())
+                        .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))?;
+                    let mut i = members.iter();
+                    loop {
+                        let Some(i) = i.next() else {
+                            break None;
+                        };
+                        let l2 = match &i.0 {
+                            PropKey::Lit(PropSym {
+                                sym: l,
+                                span: _s2,
+                                ctx: _,
+                            }) => Lit::Str(Str {
+                                span,
+                                value: l.clone().into(),
+                                raw: None,
+                            }),
+                            PropKey::Computed(c) => {
+                                k
+                                    .get_item(c.clone(), ctx.clone())
+                                    .and_then(|w| w.const_in(semantics, k, span, ctx.clone()))?
+                            }
+                            _ => break None,
+                        };
+                        if l2 != l {
+                            continue;
+                        };
+                        let PropVal::Item(i) = &i.1 else {
+                            break None;
+                        };
+                        break Some(i.clone());
+                    }
+                } {
+                    return k
+                        .get_item(v, ctx.clone())
+                        .and_then(|w| w.const_in(semantics, k, span, ctx.clone()));
                 }
                 match k
                     .get_item(mem.clone(), ctx.clone())
@@ -505,32 +495,30 @@ impl<I: Clone + Eq, F> Item<I, F> {
                             return None;
                         };
                         let func = k.get_item(func.clone(), ctx.clone())?;
-                        match func {
-                            _ => {
-                                let func = func.const_in(semantics, k, span, ctx.clone())?;
-                                let mut i;
-                                let ses = ses_method(
-                                    &func,
-                                    s.value.as_str()?,
-                                    &mut match args.iter() {
-                                        i2 => {
-                                            i = i2;
-                                            std::iter::from_fn(|| {
-                                                let SpreadOr {
-                                                    value: n,
-                                                    is_spread: s,
-                                                } = i.next()?;
-                                                let i = k
-                                                    .get_item(n.clone(), ctx.clone())?
-                                                    .const_in(semantics, k, span, ctx.clone())?;
-                                                Some(i)
-                                            })
-                                            .fuse()
-                                        }
-                                    },
-                                )?;
-                                Some(ses)
-                            }
+                        {
+                            let func = func.const_in(semantics, k, span, ctx.clone())?;
+                            let mut i;
+                            let ses = ses_method(
+                                &func,
+                                s.value.as_str()?,
+                                &mut match args.iter() {
+                                    i2 => {
+                                        i = i2;
+                                        std::iter::from_fn(|| {
+                                            let SpreadOr {
+                                                value: n,
+                                                is_spread: _s,
+                                            } = i.next()?;
+                                            let i = k
+                                                .get_item(n.clone(), ctx.clone())?
+                                                .const_in(semantics, k, span, ctx.clone())?;
+                                            Some(i)
+                                        })
+                                        .fuse()
+                                    }
+                                },
+                            )?;
+                            Some(ses)
                         }
                     }
                     _ => None,

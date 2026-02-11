@@ -18,7 +18,7 @@
 //! [`ToTACConverter`] - The main converter struct that maintains state during conversion
 
 use crate::*;
-use std::{cell::OnceCell, mem::replace};
+use std::mem::replace;
 use swc_ecma_ast::{
     ArrayPat, AssignPat, AssignTargetPat, BindingIdent, CallExpr, ObjectPat, ObjectPatProp,
 };
@@ -116,9 +116,9 @@ impl ToTACConverterCore<'_> {
         match s {
             Stmt::Expr(e) => {
                 (_, t) = self.expr(i, o, b, t, &e.expr)?;
-                return Ok(t);
+                Ok(t)
             }
-            Stmt::Empty(_) => return Ok(t),
+            Stmt::Empty(_) => Ok(t),
             Stmt::Decl(d) => match d {
                 swc_ecma_ast::Decl::Class(f) => {
                     let c;
@@ -132,7 +132,7 @@ impl ToTACConverterCore<'_> {
                         span: f.span(),
                     });
                     o.decls.insert(f.ident.clone().into());
-                    return Ok(t);
+                    Ok(t)
                 }
                 swc_ecma_ast::Decl::Fn(f) => {
                     o.blocks[t].stmts.push(TStmt {
@@ -147,7 +147,7 @@ impl ToTACConverterCore<'_> {
                         span: f.span(),
                     });
                     o.decls.insert(f.ident.clone().into());
-                    return Ok(t);
+                    Ok(t)
                 }
                 swc_ecma_ast::Decl::Var(var_decl) => {
                     for var_decl in var_decl.decls.iter() {
@@ -157,13 +157,13 @@ impl ToTACConverterCore<'_> {
                             t = self.bind(i, o, b, t, &var_decl.name, f, true)?;
                         }
                     }
-                    return Ok(t);
+                    Ok(t)
                 }
-                swc_ecma_ast::Decl::Using(using_decl) => todo!(),
-                swc_ecma_ast::Decl::TsInterface(ts_interface_decl) => todo!(),
-                swc_ecma_ast::Decl::TsTypeAlias(ts_type_alias_decl) => todo!(),
-                swc_ecma_ast::Decl::TsEnum(ts_enum_decl) => todo!(),
-                swc_ecma_ast::Decl::TsModule(ts_module_decl) => todo!(),
+                swc_ecma_ast::Decl::Using(_using_decl) => todo!(),
+                swc_ecma_ast::Decl::TsInterface(_ts_interface_decl) => todo!(),
+                swc_ecma_ast::Decl::TsTypeAlias(_ts_type_alias_decl) => todo!(),
+                swc_ecma_ast::Decl::TsEnum(_ts_enum_decl) => todo!(),
+                swc_ecma_ast::Decl::TsModule(_ts_module_decl) => todo!(),
             },
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
@@ -173,7 +173,7 @@ impl ToTACConverterCore<'_> {
         i: &Cfg,
         o: &mut TCfg,
         b: swc_cfg::BlockId,
-        mut t: TBlockId,
+        t: TBlockId,
         p: &Pat,
         f: Ident,
         decl: bool,
@@ -195,8 +195,8 @@ impl ToTACConverterCore<'_> {
         f: Ident,
         decl: bool,
     ) -> anyhow::Result<TBlockId> {
-        let g;
-        g = o.regs.alloc(());
+        
+        let g = o.regs.alloc(());
         o.decls.insert(g.clone());
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id { id: g.clone() },
@@ -231,7 +231,7 @@ impl ToTACConverterCore<'_> {
         });
         let h2;
         let ex;
-        (h2, ex) = self.expr(i, o, b, eb, &*assign_pat.right)?;
+        (h2, ex) = self.expr(i, o, b, eb, &assign_pat.right)?;
         o.blocks[ex].stmts.push(TStmt {
             left: LId::Id { id: g.clone() },
             flags: ValFlags::empty(),
@@ -250,19 +250,19 @@ impl ToTACConverterCore<'_> {
             if_true: eb,
             if_false: gb,
         };
-        return self.bind(i, o, b, t, &assign_pat.left, g, decl);
+        self.bind(i, o, b, t, &assign_pat.left, g, decl)
     }
     pub fn bind_array(
         &mut self,
         i: &Cfg,
         o: &mut TCfg,
         b: swc_cfg::BlockId,
-        mut t: TBlockId,
+        t: TBlockId,
         p: &ArrayPat,
         f: Ident,
         decl: bool,
     ) -> anyhow::Result<TBlockId> {
-        let mut ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
+        let ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
         self.bind_array_contents(i, o, b, t, ps, p, f, decl)
     }
     pub fn bind_array_contents(
@@ -421,7 +421,7 @@ impl ToTACConverterCore<'_> {
                         },
                         span: prop.span(),
                     });
-                    t = self.bind(i, o, b, t, &*key_value_pat_prop.value, g, decl)?;
+                    t = self.bind(i, o, b, t, &key_value_pat_prop.value, g, decl)?;
                 }
                 swc_ecma_ast::ObjectPatProp::Assign(assign_pat_prop) => {
                     let g;
@@ -484,7 +484,7 @@ impl ToTACConverterCore<'_> {
                             });
                             let h2;
                             let ex;
-                            (h2, ex) = self.expr(i, o, b, eb, &**e)?;
+                            (h2, ex) = self.expr(i, o, b, eb, e)?;
                             o.blocks[ex].stmts.push(TStmt {
                                 left: LId::Id { id: g.clone() },
                                 flags: ValFlags::empty(),
@@ -507,7 +507,7 @@ impl ToTACConverterCore<'_> {
                     }
                     t = self.bind_ident(i, o, b, t, &assign_pat_prop.key, g, decl)?;
                 }
-                swc_ecma_ast::ObjectPatProp::Rest(rest_pat) => {}
+                swc_ecma_ast::ObjectPatProp::Rest(_rest_pat) => {}
             }
         }
         for prop in p.props.iter() {
@@ -519,21 +519,21 @@ impl ToTACConverterCore<'_> {
                     flags: ValFlags::SSA_LIKE,
                     right: Item::StaticSubObject {
                         wrapped: f.clone(),
-                        keys: a.iter().cloned().map(|a| PropKey::Computed(a)).collect(),
+                        keys: a.iter().cloned().map(PropKey::Computed).collect(),
                     },
                     span: prop.span(),
                 });
-                t = self.bind(i, o, b, t, &*rest.arg, g, decl)?;
+                t = self.bind(i, o, b, t, &rest.arg, g, decl)?;
             }
         }
         Ok(t)
     }
     pub fn bind_ident(
         &mut self,
-        i: &Cfg,
+        _i: &Cfg,
         o: &mut TCfg,
-        b: swc_cfg::BlockId,
-        mut t: TBlockId,
+        _b: swc_cfg::BlockId,
+        t: TBlockId,
         i2: &BindingIdent,
         f: Ident,
         decl: bool,
@@ -552,7 +552,7 @@ impl ToTACConverterCore<'_> {
         if let Some(a) = i2.type_ann.as_ref().cloned() {
             o.type_annotations.insert(i2.id.clone().into(), *a.type_ann);
         }
-        return Ok(t);
+        Ok(t)
     }
     pub fn member_expr(
         &mut self,
@@ -682,7 +682,7 @@ impl ToTACConverterCore<'_> {
                 _ => {}
             }
         }
-        let mut mapper = self.mapper.clone();
+        let mapper = self.mapper.clone();
         let mut mapper = mapper.bud();
         mapper.privates = &privates;
         for m in s.body.iter() {
@@ -722,7 +722,7 @@ impl ToTACConverterCore<'_> {
                 }
                 ClassMember::Method(c) => {
                     let f =
-                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&*c.function)?, mapper.bud())?;
+                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&c.function)?, mapper.bud())?;
                     members.push(prop_name!(if c.is_static{MemberFlags::STATIC}else{MemberFlags::empty()}, match &c.kind{
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
                         swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
@@ -755,7 +755,7 @@ impl ToTACConverterCore<'_> {
                 }
                 ClassMember::PrivateMethod(p) => {
                     let f =
-                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&*p.function)?, mapper.bud())?;
+                        TFunc::try_from_with_mapper(&(mapper.to_cfg)(&p.function)?, mapper.bud())?;
                     let x = match &p.kind {
                         swc_ecma_ast::MethodKind::Method => PropVal::Method(f),
                         swc_ecma_ast::MethodKind::Getter => PropVal::Getter(f),
@@ -802,13 +802,13 @@ impl ToTACConverterCore<'_> {
         mut t: TBlockId,
         tgt: &AssignTarget,
         op: &AssignOp,
-        mut right: Ident,
+        right: Ident,
     ) -> anyhow::Result<(Ident, TBlockId)> {
         match tgt {
             swc_ecma_ast::AssignTarget::Simple(simple_assign_target) => match &simple_assign_target
             {
                 SimpleAssignTarget::Ident(i) => {
-                    let item = match op.clone().to_update() {
+                    let item = match (*op).to_update() {
                         None => Item::Just { id: right.clone() },
                         Some(a) => Item::Bin {
                             left: right.clone(),
@@ -873,7 +873,7 @@ impl ToTACConverterCore<'_> {
                             },
                         )?;
                     }
-                    let item = match op.clone().to_update() {
+                    let item = match (*op).to_update() {
                         None => Item::Just { id: right.clone() },
                         Some(a) => {
                             let id = o.regs.alloc(());
@@ -951,9 +951,9 @@ impl ToTACConverterCore<'_> {
     ) -> anyhow::Result<(Ident, TBlockId)> {
         match f {
             Frame::Assign(assign_target, assign_op) => {
-                self.assign(i, o, b, t, &assign_target, &assign_op, s)
+                self.assign(i, o, b, t, assign_target, &assign_op, s)
             }
-            Frame::Member(m) => self.member_prop(i, o, b, t, &m, s),
+            Frame::Member(m) => self.member_prop(i, o, b, t, m, s),
             Frame::Member2(a, b2) => {
                 let mem;
                 (mem, t) = self.convert_cond_prop(i, o, b, t, r, a, b2, Span::dummy_with_cmt())?;
@@ -992,7 +992,7 @@ impl ToTACConverterCore<'_> {
                     flags: ValFlags::SSA_LIKE,
                     right: Item::Call {
                         callee: TCallee::Val(s),
-                        args: args,
+                        args,
                     },
                     span: Span::dummy_with_cmt(),
                 });
@@ -1029,7 +1029,7 @@ impl ToTACConverterCore<'_> {
                             func: s,
                             member: mem,
                         },
-                        args: args,
+                        args,
                     },
                     span: Span::dummy_with_cmt(),
                 });
@@ -1067,7 +1067,7 @@ impl ToTACConverterCore<'_> {
                             func: s,
                             member: mem,
                         },
-                        args: args,
+                        args,
                     },
                     span: Span::dummy_with_cmt(),
                 });
@@ -1135,7 +1135,7 @@ impl ToTACConverterCore<'_> {
                 for f in frb.into_iter() {
                     (b2, t) = self.frame(i, o, b, t, f, b2, s.clone())?;
                 }
-                let mut tmp = o.regs.alloc(());
+                let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
                     flags: ValFlags::SSA_LIKE,
@@ -1147,7 +1147,7 @@ impl ToTACConverterCore<'_> {
                     span: Span::dummy_with_cmt(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
         }
     }
@@ -1186,7 +1186,7 @@ impl ToTACConverterCore<'_> {
         match s {
             Expr::Class(c) => {
                 let d;
-                (d, t) = self.class(i, o, b, t, &*c.class)?;
+                (d, t) = self.class(i, o, b, t, &c.class)?;
                 if let Some(n) = c.ident.as_ref() {
                     o.blocks[t].stmts.push(TStmt {
                         left: LId::Id { id: n.to_id() },
@@ -1216,10 +1216,9 @@ impl ToTACConverterCore<'_> {
             Expr::Ident(id) => match self
                 .mapper
                 .consts
-                .as_deref()
                 .and_then(|c| c.map.get(&id.to_id()))
             {
-                Some(e) if self.inlinable(e) => self.expr(i, o, b, t, &*e.clone()),
+                Some(e) if self.inlinable(e) => self.expr(i, o, b, t, &e.clone()),
                 _ => match &*id.sym {
                     "arguments" => {
                         let tmp = o.regs.alloc(());
@@ -1236,10 +1235,10 @@ impl ToTACConverterCore<'_> {
                 },
             },
             Expr::Assign(a) => {
-                let mut right;
+                let right;
                 (right, t) = self.expr(i, o, b, t, &a.right)?;
                 let (right, t) = self.assign(i, o, b, t, &a.left, &a.op, right)?;
-                return Ok((right, t));
+                Ok((right, t))
             }
             Expr::New(n) => {
                 let obj;
@@ -1262,7 +1261,7 @@ impl ToTACConverterCore<'_> {
                     span: n.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Call(call) => {
                 let (c, args, t2) = self.convert_call_expr(i, o, b, t, call)?;
@@ -1275,9 +1274,9 @@ impl ToTACConverterCore<'_> {
                     span: call.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
-            Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op.clone()) {
+            Expr::Bin(bin) => match (&*bin.left, &*bin.right, bin.op) {
                 (Expr::PrivateName(p), obj, BinaryOp::In) => {
                     let o2;
                     (o2, t) = self.expr(i, o, b, t, obj)?;
@@ -1299,7 +1298,7 @@ impl ToTACConverterCore<'_> {
                         span: bin.span(),
                     });
                     o.decls.insert(tmp.clone());
-                    return Ok((tmp, t));
+                    Ok((tmp, t))
                 }
                 (Expr::Lit(Lit::Str(s)), obj, BinaryOp::In)
                     if self
@@ -1324,7 +1323,7 @@ impl ToTACConverterCore<'_> {
                         span: bin.span(),
                     });
                     o.decls.insert(tmp.clone());
-                    return Ok((tmp, t));
+                    Ok((tmp, t))
                 }
                 (l, Expr::Lit(Lit::Num(Number { value: 0.0, .. })), BinaryOp::BitOr)
                 | (Expr::Lit(Lit::Num(Number { value: 0.0, .. })), l, BinaryOp::BitOr) => {
@@ -1342,7 +1341,7 @@ impl ToTACConverterCore<'_> {
                         span: bin.span(),
                     });
                     o.decls.insert(tmp.clone());
-                    return Ok((tmp, t));
+                    Ok((tmp, t))
                 }
                 (l, r, op) => {
                     let left;
@@ -1400,7 +1399,7 @@ impl ToTACConverterCore<'_> {
                         span: bin.span(),
                     });
                     o.decls.insert(tmp.clone());
-                    return Ok((tmp, t));
+                    Ok((tmp, t))
                 }
             },
             Expr::Unary(un) => {
@@ -1425,14 +1424,14 @@ impl ToTACConverterCore<'_> {
                     flags: ValFlags::SSA_LIKE,
                     right: Item::Un {
                         arg,
-                        op: un.op.clone(),
+                        op: un.op,
                     },
                     span: un.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
-            Expr::Member(m) => return self.member_expr(i, o, b, t, m),
+            Expr::Member(m) => self.member_expr(i, o, b, t, m),
             Expr::Lit(l) => {
                 let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
@@ -1442,7 +1441,7 @@ impl ToTACConverterCore<'_> {
                     span: l.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Fn(f) => {
                 let tmp = match &f.ident {
@@ -1462,7 +1461,7 @@ impl ToTACConverterCore<'_> {
                     span: f.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Arrow(a) => {
                 let mut c = swc_cfg::Func::default();
@@ -1478,7 +1477,7 @@ impl ToTACConverterCore<'_> {
                         pat: a,
                     })
                     .collect();
-                let mut k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
+                let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                 match a.body.as_ref() {
                     swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
                         k.transform_all(&mut c.cfg, &block_stmt.stmts.clone(), c.entry, None)?;
@@ -1502,7 +1501,7 @@ impl ToTACConverterCore<'_> {
                     span: a.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Array(arr) => {
                 let members = arr
@@ -1528,7 +1527,7 @@ impl ToTACConverterCore<'_> {
                     span: arr.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Object(obj) => {
                 let members = obj
@@ -1572,7 +1571,7 @@ impl ToTACConverterCore<'_> {
                             };
                         }
                         anyhow::Ok(match a {
-                            swc_ecma_ast::PropOrSpread::Spread(spread_element) => {
+                            swc_ecma_ast::PropOrSpread::Spread(_spread_element) => {
                                 anyhow::bail!("todo: {}:{}", file!(), line!())
                             }
                             swc_ecma_ast::PropOrSpread::Prop(prop) => match prop.as_ref() {
@@ -1590,14 +1589,14 @@ impl ToTACConverterCore<'_> {
                                     let v = PropVal::Item(v);
                                     prop_name!(v => &key_value_prop.key)
                                 }
-                                swc_ecma_ast::Prop::Assign(assign_prop) => {
+                                swc_ecma_ast::Prop::Assign(_assign_prop) => {
                                     anyhow::bail!("todo: {}:{}", file!(), line!())
                                 }
                                 swc_ecma_ast::Prop::Getter(getter_prop) => {
                                     let v = PropVal::Getter({
                                         let mut c = swc_cfg::Func::default();
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
-                                        let k = k.transform_all(
+                                        let _k = k.transform_all(
                                             &mut c.cfg,
                                             &getter_prop
                                                 .body
@@ -1621,7 +1620,7 @@ impl ToTACConverterCore<'_> {
                                             pat: *setter_prop.param.clone(),
                                         });
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
-                                        let k = k.transform_all(
+                                        let _k = k.transform_all(
                                             &mut c.cfg,
                                             &setter_prop
                                                 .body
@@ -1660,7 +1659,7 @@ impl ToTACConverterCore<'_> {
                     span: obj.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Await(x) => {
                 let (a, t) = self.expr(i, o, b, t, &x.arg)?;
@@ -1671,7 +1670,7 @@ impl ToTACConverterCore<'_> {
                     right: Item::Await { value: a.clone() },
                     span: x.span(),
                 });
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Yield(y) => {
                 let y2 = match &y.arg {
@@ -1693,7 +1692,7 @@ impl ToTACConverterCore<'_> {
                     span: y.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             Expr::Seq(s) => {
                 let mut r = None;
@@ -1702,7 +1701,7 @@ impl ToTACConverterCore<'_> {
                     (c, t) = self.expr(i, o, b, t, a)?;
                     r = Some(c)
                 }
-                return Ok((r.context("in getting the last one")?, t));
+                Ok((r.context("in getting the last one")?, t))
             }
             Expr::MetaProp(m) => {
                 let tmp = o.regs.alloc(());
@@ -1713,7 +1712,7 @@ impl ToTACConverterCore<'_> {
                     span: m.span(),
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
         }
@@ -1724,7 +1723,7 @@ impl ToTACConverterCore<'_> {
         i: &Cfg,
         o: &mut TCfg,
         b: swc_cfg::BlockId,
-        mut t: TBlockId,
+        t: TBlockId,
         test: Ident,
         cons: &MemberProp,
         alt: &MemberProp,
@@ -1752,7 +1751,7 @@ impl ToTACConverterCore<'_> {
                     });
                     val
                 });
-                let mut tmp = o.regs.alloc(());
+                let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
                     flags: ValFlags::SSA_LIKE,
@@ -1764,7 +1763,7 @@ impl ToTACConverterCore<'_> {
                     span,
                 });
                 o.decls.insert(tmp.clone());
-                return Ok((tmp, t));
+                Ok((tmp, t))
             }
             (MemberProp::Computed(cons), alt) => {
                 self.convert_cond_expr(i, o, b, t, test, &cons.expr, &imp(alt.clone()), span)
@@ -1788,13 +1787,10 @@ impl ToTACConverterCore<'_> {
         span: Span,
     ) -> anyhow::Result<(Ident, TBlockId)> {
         let v = test;
-        match o.def(LId::Id { id: v.clone() }) {
-            Some(Item::Lit { lit: Lit::Bool(b2) }) => {
-                let w;
-                (w, t) = self.expr(i, o, b, t, if b2.value { cons } else { alt })?;
-                return Ok((w, t));
-            }
-            _ => {}
+        if let Some(Item::Lit { lit: Lit::Bool(b2) }) = o.def(LId::Id { id: v.clone() }) {
+            let w;
+            (w, t) = self.expr(i, o, b, t, if b2.value { cons } else { alt })?;
+            return Ok((w, t));
         }
         fn try_get_frames<'a, 'b: 'a>(
             a: &'a Expr,
@@ -1904,11 +1900,11 @@ impl ToTACConverterCore<'_> {
                 }
             }
         }
-        if let Some((frames, c2, a2)) = try_get_frames(&cons, &alt) {
+        if let Some((frames, c2, a2)) = try_get_frames(cons, alt) {
             let cons;
             let alt;
-            (cons, t) = self.expr(i, o, b, t, &c2)?;
-            (alt, t) = self.expr(i, o, b, t, &a2)?;
+            (cons, t) = self.expr(i, o, b, t, c2)?;
+            (alt, t) = self.expr(i, o, b, t, a2)?;
             let mut tmp = o.regs.alloc(());
             o.blocks[t].stmts.push(TStmt {
                 left: LId::Id { id: tmp.clone() },
@@ -2001,12 +1997,12 @@ impl ToTACConverterCore<'_> {
                 o.decls.insert(tmp.clone());
                 Ok((tmp, t))
             }
-            MemberProp::PrivateName(private_name) => {
+            MemberProp::PrivateName(_private_name) => {
                 // TODO: handle private names if needed
                 anyhow::bail!("PrivateName not supported in member_prop_expr")
             }
             MemberProp::Computed(computed_prop_name) => {
-                self.expr(i, o, b, t, &*computed_prop_name.expr)
+                self.expr(i, o, b, t, &computed_prop_name.expr)
             }
         }
     }
@@ -2037,7 +2033,7 @@ impl ToTACConverter<'_> {
                 post: TPostecedent {
                     catch: TCatch::Throw,
                     term: Default::default(),
-                    orig_span: i.blocks[b].end.orig_span.clone(),
+                    orig_span: i.blocks[b].end.orig_span,
                 },
             });
             self.map.insert(b, t);
@@ -2143,7 +2139,7 @@ impl TFunc {
             let span = value.cfg.blocks[value.entry]
                 .end
                 .orig_span
-                .unwrap_or_else(|| Span::dummy_with_cmt());
+                .unwrap_or_else(Span::dummy_with_cmt);
             cfg.blocks[e2].stmts.push(TStmt {
                 left: LId::Id { id: i.clone() },
                 flags: ValFlags::SSA_LIKE,
@@ -2171,7 +2167,7 @@ impl TFunc {
                 .map(|x| {
                     Ok(match &x.pat {
                         Pat::Ident(i) => {
-                            ts_params.push(i.type_ann.as_ref().map(|a| (&*a.type_ann).clone()));
+                            ts_params.push(i.type_ann.as_ref().map(|a| (*a.type_ann).clone()));
                             i.id.clone().into()
                         }
                         p => {
