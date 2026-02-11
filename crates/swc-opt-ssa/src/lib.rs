@@ -179,11 +179,7 @@ impl OptValueW {
     }
 }
 impl<Ctx: Clone> SValGetter<OptValueId, OptBlockId, OptFunc, Ctx> for OptCfg {
-    fn val(
-        &self,
-        id: OptValueId,
-        ctx: Ctx,
-    ) -> Option<&SValue<OptValueId, OptBlockId, OptFunc>> {
+    fn val(&self, id: OptValueId, ctx: Ctx) -> Option<&SValue<OptValueId, OptBlockId, OptFunc>> {
         match &self.values[id].value {
             OptValue::Deopt { value: a, .. } => self.val(*a, ctx),
             OptValue::Assert { val, ty } => self.val(*val, ctx),

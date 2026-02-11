@@ -12,7 +12,7 @@
 //! - `cfg_traits::Target` for `STarget`
 //! - `ssa_traits::HasValues` and `ssa_traits::HasChainableValues` for SSA types
 
-use crate::{SBlock, SBlockId, SValueId, SCatch, SFunc, SPostcedent, STarget, STerm, SValueW};
+use crate::{SBlock, SBlockId, SCatch, SFunc, SPostcedent, STarget, STerm, SValueId, SValueW};
 use ssa_traits::{HasChainableValues, HasValues};
 use std::{
     convert::Infallible,

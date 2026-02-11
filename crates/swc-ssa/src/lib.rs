@@ -71,7 +71,6 @@ use cfg_traits::Term;
 use portal_jsc_common::syntax::Asm;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
-use swc_ecma_visit::Visit;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
@@ -81,9 +80,11 @@ use std::{
 };
 use swc_common::Span;
 use swc_ecma_ast::{Id as Ident, Lit, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp};
+use swc_ecma_visit::Visit;
 use swc_tac::{
     Item, TBlock, TCallee, TCfg, TFunc, TStmt, TTerm, ValFlags,
-    lam::{AtomResolver, DefaultAtomResolver}, mapped,
+    lam::{AtomResolver, DefaultAtomResolver},
+    mapped,
 };
 use swc_tac::{LId, inlinable};
 pub mod consts;
@@ -94,7 +95,10 @@ pub mod opt_stub;
 pub mod rew;
 pub mod simplify;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum EdgeKind {
     Forward,
     Backward,
@@ -208,7 +212,10 @@ impl SCfg {
 /// - `is_async`: Whether this is an async function
 /// - `ts_params`: Optional TypeScript type annotations for parameters
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SFunc {
     /// The SSA control flow graph
     pub cfg: SCfg,
@@ -257,7 +264,10 @@ impl TryFrom<TFunc> for SFunc {
 /// - `ts_retty`: Optional TypeScript return type annotation
 /// - `resolver`: Atom resolver for generating fresh variable names
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SCfg {
     /// Arena containing all basic blocks
     pub blocks: SBlockArena,
@@ -406,7 +416,10 @@ impl SCfg {
 /// - `stmts`: SSA value computations in this block
 /// - `postcedent`: Terminator specifying control flow and exception handling
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SBlock {
     /// Block parameters (each is an SSA value ID with metadata)
     pub params: Vec<(SValueId, ())>,
@@ -433,7 +446,10 @@ swc_ll_common::define_arena!(pub SBlockArena, pub SBlockId for SBlock);
 /// - `term`: Normal control flow terminator with target blocks
 /// - `catch`: Exception handler specification
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SPostcedent<I = SValueId, B = SBlockId> {
     /// Normal control flow terminator
     pub term: STerm<I, B>,
@@ -469,7 +485,10 @@ impl<I, B> Default for SPostcedent<I, B> {
 /// - `StoreId`: Store to a non-SSA variable by name
 /// - `EdgeBlocker`: A temporary barrier for managing SSA construction on edges
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 #[non_exhaustive]
 pub enum SValue<I = SValueId, B = SBlockId, F = SFunc> {
     /// A block parameter (bound when jumping to the block)
@@ -690,7 +709,10 @@ impl<I, B, F> SValue<I, B, F> {
 /// from the wrapper.
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SValueW {
     /// The wrapped SSA value
     pub value: SValue,
@@ -727,7 +749,10 @@ impl From<SValueW> for SValue {
 /// - `I`: SSA value identifier type (defaults to `SValueId`)
 /// - `B`: Block identifier type (defaults to `SBlockId`)
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 #[non_exhaustive]
 pub enum SCatch<I = SValueId, B = SBlockId> {
     /// No exception handler - propagate to caller
@@ -766,7 +791,10 @@ impl<I, B> Default for SCatch<I, B> {
 /// STarget { block: 5, args: vec![v1, v2] }
 /// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct STarget<I = SValueId, B = SBlockId> {
     /// The target block to jump to
     pub block: B,
@@ -863,16 +891,15 @@ impl SCfg {
     }
 }
 struct TestVisitor;
-impl Visit for TestVisitor{
+impl Visit for TestVisitor {
     fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
-        
         let tfunc = TFunc::try_from(node.clone()).unwrap();
-     
+
         SFunc::try_from(tfunc).unwrap();
     }
 }
 #[cfg(test)]
-mod tests{
+mod tests {
     use swc_ecma_visit::VisitWith;
 
     use crate::TestVisitor;
@@ -882,7 +909,7 @@ mod tests{
     return a + b 
     }
     "] => |sm,module|{
-     
+
         module.visit_with(&mut TestVisitor);
     });
 }

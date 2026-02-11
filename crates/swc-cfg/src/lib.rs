@@ -61,7 +61,10 @@ pub mod simplify;
 /// - `is_generator`: Whether this is a generator function
 /// - `is_async`: Whether this is an async function
 #[derive(Clone)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Func {
     /// The control flow graph
     pub cfg: Cfg,
@@ -143,7 +146,10 @@ impl Into<Function> for Func {
 /// - `generics`: Optional generic type parameters (for TypeScript)
 /// - `ts_retty`: Optional return type annotation (for TypeScript)
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Cfg {
     /// Arena containing all basic blocks
     pub blocks: BlockArena,
@@ -564,7 +570,10 @@ impl cfg_traits::Target<Func> for BlockId {
 /// - `stmts`: Sequential statements in this block (as SWC AST `Stmt` nodes)
 /// - `end`: The block's terminator and exception handler
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Block {
     /// Statements executed sequentially in this block
     pub stmts: Vec<Stmt>,
@@ -586,7 +595,10 @@ swc_ll_common::define_arena!(pub BlockArena, pub BlockId for Block);
 /// - `term`: Normal control flow terminator
 /// - `orig_span`: Original source location
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct End {
     /// Exception handler
     pub catch: Catch,
@@ -600,7 +612,10 @@ pub struct End {
 /// Specifies what happens when an exception is thrown during block execution.
 /// Similar to TAC's `TCatch` but uses SWC AST types.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Catch {
     /// No exception handler - propagate to caller
     #[default]
@@ -620,7 +635,10 @@ pub enum Catch {
 /// control flow goes next. This is similar to TAC's `TTerm` but uses SWC AST
 /// expression nodes for values.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "rkyv-impl", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Term {
     /// Return from function, optionally with a value
     Return(Option<Expr>),

@@ -19,7 +19,7 @@
 //! SSA value IDs are converted to unique TAC variable names using a prefix
 //! and syntax context to avoid name collisions.
 
-use crate::{SBlock, SBlockId, SValueId, SFunc, STarget, STerm, SValue, SValueW};
+use crate::{SBlock, SBlockId, SFunc, STarget, STerm, SValue, SValueId, SValueW};
 use std::{collections::BTreeMap, convert::Infallible, sync::OnceLock};
 use swc_atoms::Atom;
 use swc_common::{Mark, Span, SyntaxContext};
@@ -289,12 +289,7 @@ pub fn mangle_param(
         ctxt,
     )
 }
-pub fn mangle_value(
-    prefix: Atom,
-    ctxt: SyntaxContext,
-    func: &SFunc,
-    value_id: SValueId,
-) -> Ident {
+pub fn mangle_value(prefix: Atom, ctxt: SyntaxContext, func: &SFunc, value_id: SValueId) -> Ident {
     match &func.cfg.values[value_id].value {
         SValue::Param { block, idx, ty } => {
             return mangle_param(prefix, ctxt, *block, *idx);

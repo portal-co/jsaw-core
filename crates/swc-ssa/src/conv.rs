@@ -149,7 +149,6 @@ impl ToSSAConverter {
         k: swc_tac::TBlockId,
         // app: &mut (dyn Iterator<Item = (Ident, SValueId)> + '_),
     ) -> anyhow::Result<crate::SBlockId> {
- 
         loop {
             if let Some(a) = self.map.get(&k) {
                 return Ok(*a);
@@ -431,7 +430,6 @@ impl ToSSAConverter {
 impl<'a> TryFrom<&'a TFunc> for SFunc {
     type Error = anyhow::Error;
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
-  
         // let domtree = ssa_impls::dom::domtree(value)
         //     .into_iter()
         //     // .map(|(a, b)| (a, Some(b)))
@@ -452,7 +450,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             ts_retty: None,
             resolver: value.cfg.regs.resolver.clone(),
         };
-       
+
         let entry2 = cfg.blocks.alloc(Default::default());
         let params = value
             .params
@@ -474,7 +472,7 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             undef,
             // domtree,
         };
-              
+
         let entry = trans.trans(&value.cfg, &mut cfg, value.entry)?;
         // , &mut empty())?;
         let target = STarget {

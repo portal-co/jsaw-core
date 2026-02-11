@@ -2013,11 +2013,21 @@ impl ToTACConverterCore<'_> {
     // Private helper for tail call conversion
 }
 impl ToTACConverter<'_> {
-    pub fn trans(&mut self, i: &Cfg, o: &mut TCfg, b: swc_cfg::BlockId) -> anyhow::Result<TBlockId> {
+    pub fn trans(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: swc_cfg::BlockId,
+    ) -> anyhow::Result<TBlockId> {
         self.convert_block(i, o, b)
     }
     // Private helper for block/term conversion
-    fn convert_block(&mut self, i: &Cfg, o: &mut TCfg, b: swc_cfg::BlockId) -> anyhow::Result<TBlockId> {
+    fn convert_block(
+        &mut self,
+        i: &Cfg,
+        o: &mut TCfg,
+        b: swc_cfg::BlockId,
+    ) -> anyhow::Result<TBlockId> {
         loop {
             if let Some(a) = self.map.get(&b) {
                 return Ok(*a);

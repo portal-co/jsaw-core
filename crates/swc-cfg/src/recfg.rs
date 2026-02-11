@@ -3,8 +3,8 @@
 //! This module provides functionality to restructure and rebuild control flow graphs,
 //! typically used for transformations that need to create a new CFG from an existing one.
 
-use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 use crate::BlockId;
+use crate::{Block, Catch, Cfg, Term, to_cfg::ToCfgConversionCtx};
 use std::collections::{BTreeMap, HashMap};
 
 /// CFG restructuring state.

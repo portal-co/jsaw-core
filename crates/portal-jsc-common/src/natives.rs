@@ -108,65 +108,32 @@ impl Primordial {
 #[non_exhaustive]
 pub enum Native<E> {
     /// Assert that a value is a string (runtime or compile-time)
-    AssertString {
-        value: E,
-        comptime: bool,
-    },
+    AssertString { value: E, comptime: bool },
     /// Assert that a value is a number (runtime or compile-time)
-    AssertNumber {
-        value: E,
-        comptime: bool,
-    },
+    AssertNumber { value: E, comptime: bool },
     /// Assert that a value is a static function (runtime or compile-time)
-    AssertStaticFn {
-        value: E,
-        comptime: bool,
-    },
+    AssertStaticFn { value: E, comptime: bool },
     /// Fast addition operation (assumes numeric operands)
-    FastAdd {
-        lhs: E,
-        rhs: E,
-    },
+    FastAdd { lhs: E, rhs: E },
     /// Fast logical AND operation
-    FastAnd {
-        lhs: E,
-        rhs: E,
-    },
+    FastAnd { lhs: E, rhs: E },
     /// Fast logical OR operation
-    FastOr {
-        lhs: E,
-        rhs: E,
-    },
+    FastOr { lhs: E, rhs: E },
     /// Fast equality comparison
-    FastEq {
-        lhs: E,
-        rhs: E,
-    },
+    FastEq { lhs: E, rhs: E },
     /// Fast subtraction operation (assumes numeric operands)
-    FastSub {
-        lhs: E,
-        rhs: E,
-    },
+    FastSub { lhs: E, rhs: E },
     /// Fast multiplication operation
     /// When `imul` is true, uses 32-bit integer multiplication semantics
-    FastMul {
-        lhs: E,
-        rhs: E,
-        imul: bool,
-    },
+    FastMul { lhs: E, rhs: E, imul: bool },
     /// Fast left shift operation (assumes integer operands)
-    FastShl {
-        lhs: E,
-        rhs: E,
-    },
+    FastShl { lhs: E, rhs: E },
     /// Marker for functions that should be inlined
     ///
     /// `n` controls inlining depth:
     /// - If `n` is specified and non-zero: inline the function and replace references to `n` with `n - 1`
     /// - If `n` is specified and zero, or not specified: remove the marker while inlining
-    InlineMe {
-        n: Option<E>,
-    },
+    InlineMe { n: Option<E> },
     /// Never executed; compilers can optimize this out
     Trim,
 }

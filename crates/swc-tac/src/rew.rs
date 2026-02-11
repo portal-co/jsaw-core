@@ -463,7 +463,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     })
                     .collect::<Result<_, E>>()?,
             }),
-            Item::Class(TClass{
+            Item::Class(TClass {
                 superclass,
                 members,
                 constructor,

@@ -7,7 +7,7 @@
 //! - Prepares for type-based optimizations
 //! - Handles deoptimization paths
 
-use crate::{OptBlock, OptBlockId, OptValueId, OptCfg, OptFunc, OptType, OptValue, OptValueW};
+use crate::{OptBlock, OptBlockId, OptCfg, OptFunc, OptType, OptValue, OptValueId, OptValueW};
 use anyhow::Context;
 use portal_jsc_swc_util::SemanticCfg;
 use std::{
@@ -151,15 +151,14 @@ impl Convert {
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
                             match (cnstl, cnstr) {
                                 (Some(_), Some(_)) => {
-                                    let v: SValue<OptValueId, OptBlockId, OptFunc> =
-                                        SValue::Item {
-                                            item: Item::Bin {
-                                                left,
-                                                right,
-                                                op: op.clone(),
-                                            },
-                                            span: span.clone(),
-                                        };
+                                    let v: SValue<OptValueId, OptBlockId, OptFunc> = SValue::Item {
+                                        item: Item::Bin {
+                                            left,
+                                            right,
+                                            op: op.clone(),
+                                        },
+                                        span: span.clone(),
+                                    };
                                     let Some(a) = v.const_in(semantic, out, false, ()) else {
                                         todo!()
                                     };
@@ -323,14 +322,13 @@ impl Convert {
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
                             match cnst {
                                 Some(k) => {
-                                    let v: SValue<OptValueId, OptBlockId, OptFunc> =
-                                        SValue::Item {
-                                            item: Item::Un {
-                                                arg: arg,
-                                                op: op.clone(),
-                                            },
-                                            span: span.clone(),
-                                        };
+                                    let v: SValue<OptValueId, OptBlockId, OptFunc> = SValue::Item {
+                                        item: Item::Un {
+                                            arg: arg,
+                                            op: op.clone(),
+                                        },
+                                        span: span.clone(),
+                                    };
                                     let Some(a) = v.const_in(semantic, out, false, ()) else {
                                         todo!()
                                     };
