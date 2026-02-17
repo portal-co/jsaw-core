@@ -1480,7 +1480,7 @@ impl ToTACConverterCore<'_> {
                 let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                 match a.body.as_ref() {
                     swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                        k.transform_all(&mut c.cfg, &block_stmt.stmts.clone(), c.entry, None)?;
+                        k.transform_all(&mut c.cfg, &mut (), &block_stmt.stmts.clone(), c.entry, None)?;
                     }
                     swc_ecma_ast::BlockStmtOrExpr::Expr(expr) => {
                         c.cfg.blocks[c.entry].end = swc_cfg::End {
@@ -1597,7 +1597,7 @@ impl ToTACConverterCore<'_> {
                                         let mut c = swc_cfg::Func::default();
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let _k = k.transform_all(
-                                            &mut c.cfg,
+                                            &mut c.cfg,&mut (),
                                             &getter_prop
                                                 .body
                                                 .as_ref()
@@ -1621,7 +1621,7 @@ impl ToTACConverterCore<'_> {
                                         });
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let _k = k.transform_all(
-                                            &mut c.cfg,
+                                            &mut c.cfg,&mut (),
                                             &setter_prop
                                                 .body
                                                 .as_ref()

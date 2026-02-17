@@ -96,7 +96,7 @@ impl TryFrom<Function> for Func {
         let mut cfg = Cfg::default();
         let entry = cfg.blocks.alloc(Default::default());
         let exit = to_cfg::ToCfgConversionCtx::default().transform_all(
-            &mut cfg,
+            &mut cfg, &mut (),
             &value.body.map(|a| a.stmts).unwrap_or_default(),
             entry,
             None,

@@ -46,6 +46,7 @@ impl Recfg {
             };
             let new_block_id = ctx.transform_all(
                 output_cfg,
+                &mut (),
                 &input_cfg.blocks[block_id].stmts.clone(),
                 new_block_id,
                 None,
