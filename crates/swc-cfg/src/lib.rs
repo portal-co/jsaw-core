@@ -613,7 +613,7 @@ pub struct End {
     feature = "rkyv-impl",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub enum Catch {
+pub enum Catch<T = BlockId> {
     /// No exception handler - propagate to caller
     #[default]
     Throw,
@@ -622,7 +622,7 @@ pub enum Catch {
         /// Pattern to bind the exception value to
         pat: Pat,
         /// The catch handler block
-        k: BlockId,
+        k: T,
     },
 }
 
