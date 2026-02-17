@@ -42,9 +42,9 @@ use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     ArrayLit, AssignExpr, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr, CatchClause,
-    ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
-    IdentName, IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
-    SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl,
+    ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident, IdentName, IfStmt,
+    LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase, SwitchStmt,
+    ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl,
 };
 pub mod recfg;
 pub mod simplify;
@@ -96,7 +96,8 @@ impl TryFrom<Function> for Func {
         let mut cfg = Cfg::default();
         let entry = cfg.blocks.alloc(Default::default());
         let exit = to_cfg::ToCfgConversionCtx::default().transform_all(
-            &mut cfg, &mut (),
+            &mut cfg,
+            &mut (),
             &value.body.map(|a| a.stmts).unwrap_or_default(),
             entry,
             None,
@@ -233,40 +234,34 @@ impl Cfg {
                         })),
                     })]
                     .into_iter()
-                    .chain(
-                        match simple_block.branches.get(&target_block) {
-                            None => vec![],
-                            Some(branch_mode) => match branch_mode {
-                                relooper::BranchMode::LoopBreak(loop_id)
-                                | relooper::BranchMode::LoopBreakIntoMulti(loop_id) => {
-                                    vec![Stmt::Break(BreakStmt {
+                    .chain(match simple_block.branches.get(&target_block) {
+                        None => vec![],
+                        Some(branch_mode) => match branch_mode {
+                            relooper::BranchMode::LoopBreak(loop_id)
+                            | relooper::BranchMode::LoopBreakIntoMulti(loop_id) => {
+                                vec![Stmt::Break(BreakStmt {
+                                    span,
+                                    label: Some(Ident::new(
+                                        Atom::new(format!("${loop_id}")),
                                         span,
-                                        label: Some(Ident::new(
-                                            Atom::new(format!("${loop_id}")),
-                                            span,
-                                            ctxt,
-                                        )),
-                                    })]
-                                }
-                                relooper::BranchMode::LoopContinue(l)
-                                | relooper::BranchMode::LoopContinueIntoMulti(l) => {
-                                    vec![Stmt::Continue(ContinueStmt {
-                                        span,
-                                        label: Some(Ident::new(
-                                            Atom::new(format!("${l}")),
-                                            span,
-                                            ctxt,
-                                        )),
-                                    })]
-                                }
-                                relooper::BranchMode::MergedBranch => vec![],
-                                relooper::BranchMode::MergedBranchIntoMulti => vec![],
-                                relooper::BranchMode::SetLabelAndBreak => {
-                                    vec![Stmt::Break(BreakStmt { span, label: None })]
-                                }
-                            },
+                                        ctxt,
+                                    )),
+                                })]
+                            }
+                            relooper::BranchMode::LoopContinue(l)
+                            | relooper::BranchMode::LoopContinueIntoMulti(l) => {
+                                vec![Stmt::Continue(ContinueStmt {
+                                    span,
+                                    label: Some(Ident::new(Atom::new(format!("${l}")), span, ctxt)),
+                                })]
+                            }
+                            relooper::BranchMode::MergedBranch => vec![],
+                            relooper::BranchMode::MergedBranchIntoMulti => vec![],
+                            relooper::BranchMode::SetLabelAndBreak => {
+                                vec![Stmt::Break(BreakStmt { span, label: None })]
+                            }
                         },
-                    )
+                    })
                     .collect::<Vec<_>>()
                 };
                 let l = simple_block.label;
@@ -487,22 +482,22 @@ impl cfg_traits::Term<Func> for End {
                 Catch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
-            .chain(
-                match &self.term {
-                    Term::Return(_expr) => vec![],
-                    Term::Throw(_expr) => vec![],
-                    Term::Jmp(id) => vec![id],
-                    Term::CondJmp {
-                        cond: _,
-                        if_true,
-                        if_false,
-                    } => vec![if_true, if_false],
-                    Term::Switch { x: _, blocks, default } => {
-                        blocks.values().chain(once(default)).collect()
-                    }
-                    Term::Default => vec![],
-                },
-            ),
+            .chain(match &self.term {
+                Term::Return(_expr) => vec![],
+                Term::Throw(_expr) => vec![],
+                Term::Jmp(id) => vec![id],
+                Term::CondJmp {
+                    cond: _,
+                    if_true,
+                    if_false,
+                } => vec![if_true, if_false],
+                Term::Switch {
+                    x: _,
+                    blocks,
+                    default,
+                } => blocks.values().chain(once(default)).collect(),
+                Term::Default => vec![],
+            }),
         )
     }
     fn targets_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Self::Target> + 'a>
@@ -515,22 +510,22 @@ impl cfg_traits::Term<Func> for End {
                 Catch::Jump { pat: _, k } => Some(k),
             }
             .into_iter()
-            .chain(
-                match &mut self.term {
-                    Term::Return(_expr) => vec![],
-                    Term::Throw(_expr) => vec![],
-                    Term::Jmp(id) => vec![id],
-                    Term::CondJmp {
-                        cond: _,
-                        if_true,
-                        if_false,
-                    } => vec![if_true, if_false],
-                    Term::Switch { x: _, blocks, default } => {
-                        blocks.values_mut().chain(once(default)).collect()
-                    }
-                    Term::Default => vec![],
-                },
-            ),
+            .chain(match &mut self.term {
+                Term::Return(_expr) => vec![],
+                Term::Throw(_expr) => vec![],
+                Term::Jmp(id) => vec![id],
+                Term::CondJmp {
+                    cond: _,
+                    if_true,
+                    if_false,
+                } => vec![if_true, if_false],
+                Term::Switch {
+                    x: _,
+                    blocks,
+                    default,
+                } => blocks.values_mut().chain(once(default)).collect(),
+                Term::Default => vec![],
+            }),
         )
     }
 }

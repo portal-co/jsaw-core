@@ -24,6 +24,7 @@ use swc_atoms::Atom;
 use swc_cfg::Cfg;
 use swc_cfg::{Func, Term};
 use swc_common::{Span, Spanned, SyntaxContext};
+use swc_ecma_ast::ExprStmt;
 use swc_ecma_ast::{
     ArrayLit, ArrayPat, CondExpr, KeyValuePatProp, MetaPropExpr, NewExpr, ObjectPat, ObjectPatProp,
     Param, PrivateMethod, PrivateName, RestPat, UnaryOp,
@@ -34,14 +35,13 @@ use swc_ecma_ast::{AssignOp, ExprOrSpread};
 use swc_ecma_ast::{AssignTarget, Function};
 use swc_ecma_ast::{BinExpr, BindingIdent, TsTypeAnn};
 use swc_ecma_ast::{BinaryOp, CallExpr, Lit, Number};
-use swc_ecma_ast::{FnExpr, GetterProp};
 use swc_ecma_ast::{Callee, MemberExpr};
 use swc_ecma_ast::{Class, ClassExpr, Pat};
 use swc_ecma_ast::{ClassMember, ClassMethod, ClassProp, Prop};
 use swc_ecma_ast::{ComputedPropName, ThisExpr};
 use swc_ecma_ast::{Constructor, ParamOrTsParamProp, PropOrSpread};
 use swc_ecma_ast::{Expr, SimpleAssignTarget};
-use swc_ecma_ast::ExprStmt;
+use swc_ecma_ast::{FnExpr, GetterProp};
 use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
 use swc_ecma_ast::{MethodProp, ObjectLit};
@@ -234,7 +234,8 @@ impl<I, F> Render<I, F> for Item<I, F> {
                             }
                         },
                     }))
-                }; match res {
+                };
+                match res {
                     seq => Expr::Cond(CondExpr {
                         span,
                         test: seq,
@@ -358,10 +359,7 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                     }),
                                 }))
                             }
-                            TCallee::Val(r#fn) => {
-                                
-                                sr(cx, r#fn)?
-                            }
+                            TCallee::Val(r#fn) => sr(cx, r#fn)?,
                             TCallee::Import => {
                                 break 'a Callee::Import(swc_ecma_ast::Import {
                                     span,
@@ -1136,15 +1134,14 @@ impl Rew<'_> {
                             .and_then(|a| (self.options.conf)(a))
                     },
                 )?;
-                if !mark
-                    && let AssignTarget::Simple(SimpleAssignTarget::Ident(i)) = &left {
-                        if state.contains_key(&i.to_id()) {
-                        } else {
-                            state.insert(i.to_id(), right);
-                            ids.push(i.to_id());
-                            continue;
-                        }
+                if !mark && let AssignTarget::Simple(SimpleAssignTarget::Ident(i)) = &left {
+                    if state.contains_key(&i.to_id()) {
+                    } else {
+                        state.insert(i.to_id(), right);
+                        ids.push(i.to_id());
+                        continue;
                     }
+                }
                 flush!();
                 cfg.blocks[new_block_id].stmts.push(Stmt::Expr(ExprStmt {
                     span,

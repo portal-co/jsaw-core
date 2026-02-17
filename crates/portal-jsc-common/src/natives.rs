@@ -4,7 +4,6 @@
 //! the JavaScript runtime. These are used during compilation to recognize and
 //! optimize calls to well-known functions like `Math.imul` or `Reflect.get`.
 
-
 /// Primordial (built-in) JavaScript objects and functions.
 ///
 /// These represent global objects and their methods that are part of the JavaScript
@@ -249,7 +248,11 @@ impl<E> Native<E> {
             Native::FastOr { lhs: _, rhs: _ } => "fast_or",
             Native::FastEq { lhs: _, rhs: _ } => "fast_eq",
             Native::FastSub { lhs: _, rhs: _ } => "fast_sub",
-            Native::FastMul { lhs: _, rhs: _, imul } => {
+            Native::FastMul {
+                lhs: _,
+                rhs: _,
+                imul,
+            } => {
                 if *imul {
                     "fast_imul"
                 } else {

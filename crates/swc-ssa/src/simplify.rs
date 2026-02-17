@@ -21,8 +21,8 @@
 
 use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
-pub use swc_tac::{Item, ItemGetter};
 use swc_tac::ItemGetterExt;
+pub use swc_tac::{Item, ItemGetter};
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -36,13 +36,13 @@ impl SCfg {
                     item: Item::Lit { lit: Lit::Bool(b) },
                     span: _,
                 } = &self.values[*cond].value
-                {
-                    kd.postcedent.term = STerm::Jmp(if b.value {
-                        if_true.clone()
-                    } else {
-                        if_false.clone()
-                    })
-                }
+            {
+                kd.postcedent.term = STerm::Jmp(if b.value {
+                    if_true.clone()
+                } else {
+                    if_false.clone()
+                })
+            }
         }
     }
     pub fn simplify_loads(&mut self) {
@@ -53,14 +53,15 @@ impl SCfg {
                 if let SValueW {
                     value: SValue::LoadId(i),
                 } = x
-                    && let Some(g) = m.get(&*i) {
-                        *x = SValueW {
-                            value: SValue::Item {
-                                item: Item::Just { id: *g },
-                                span: None,
-                            },
-                        }
+                    && let Some(g) = m.get(&*i)
+                {
+                    *x = SValueW {
+                        value: SValue::Item {
+                            item: Item::Just { id: *g },
+                            span: None,
+                        },
                     }
+                }
                 if let SValueW {
                     value: SValue::StoreId { target, val },
                 } = x
@@ -75,13 +76,13 @@ impl SCfg {
         while take(&mut redo) {
             for ref_ in self.values.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 redo |= ItemGetterExt::<crate::SValueId, SFunc, SSACtx<'_, ()>>::simplify_just(
-                        &mut *self,
-                        ref_,
-                        SSACtx {
-                            wrapped: &(),
-                            pierce: true,
-                        },
-                    );
+                    &mut *self,
+                    ref_,
+                    SSACtx {
+                        wrapped: &(),
+                        pierce: true,
+                    },
+                );
             }
         }
     }
@@ -96,7 +97,12 @@ pub trait SValGetter<I: Copy + Eq, B, F = SFunc, Ctx = ()>:
 {
     fn val(&self, id: I, ctx: Ctx) -> Option<&SValue<I, B, F>>;
     fn val_mut(&mut self, id: I, ctx: Ctx) -> Option<&mut SValue<I, B, F>>;
-    fn inputs<'a>(&'a self, _block: &B, _param: usize, _ctx: Ctx) -> Box<dyn Iterator<Item = I> + 'a>
+    fn inputs<'a>(
+        &'a self,
+        _block: &B,
+        _param: usize,
+        _ctx: Ctx,
+    ) -> Box<dyn Iterator<Item = I> + 'a>
     where
         I: 'a,
         B: 'a,
@@ -131,10 +137,11 @@ pub fn _get_item<'a, I: Copy + Eq, B, F, Ctx: Clone>(
         match a.val(i, ctx.wrapped.clone())? {
             SValue::Param { block, idx, ty: _ } => {
                 if ctx.pierce
-                    && let Some(j) = a.input(block, *idx, ctx.wrapped.clone()) {
-                        i = j;
-                        continue;
-                    }
+                    && let Some(j) = a.input(block, *idx, ctx.wrapped.clone())
+                {
+                    i = j;
+                    continue;
+                }
                 return None;
             }
             SValue::Item { item, span: _ } => return Some(item),
@@ -162,10 +169,11 @@ pub fn _get_ident<'a, I: Copy + Eq, B, F, Ctx: Clone>(
         match a.val(i, ctx.wrapped.clone())? {
             SValue::Param { block, idx, ty: _ } => {
                 if ctx.pierce
-                    && let Some(j) = a.input(block, *idx, ctx.wrapped.clone()) {
-                        i = j;
-                        continue;
-                    };
+                    && let Some(j) = a.input(block, *idx, ctx.wrapped.clone())
+                {
+                    i = j;
+                    continue;
+                };
                 return bak;
             }
             SValue::Item { item, span: _ } => match item {
@@ -200,10 +208,11 @@ pub fn _get_item_mut<'a, 'b: 'a, I: Copy + Eq, B, F, Ctx: Clone>(
         match unsafe { &mut *a }.val_mut(i, ctx.wrapped.clone())? {
             SValue::Param { block, idx, ty: _ } => {
                 if ctx.pierce
-                    && let Some(j) = unsafe { &mut *a }.input(block, *idx, ctx.wrapped.clone()) {
-                        i = j;
-                        continue;
-                    };
+                    && let Some(j) = unsafe { &mut *a }.input(block, *idx, ctx.wrapped.clone())
+                {
+                    i = j;
+                    continue;
+                };
                 return None;
             }
             SValue::Item { item, span: _ } => return Some(item),

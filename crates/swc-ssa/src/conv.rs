@@ -96,27 +96,28 @@ impl ToSSAConverter {
             return Ok(*k);
         }
         if let Some(d) = i.def(LId::Id { id: a.clone() })
-            && inlinable(d, i) {
-                let b = 'a: {
-                    let b = match d {
-                        Item::Undef => break 'a self.undef,
-                        b => b.clone().map2::<_, _, anyhow::Error, ()>(
-                            &mut (),
-                            &mut |_, a| self.load(state, i, o, t, a.clone(), cache),
-                            &mut |_, b| b.try_into(),
-                        )?,
-                    };
-                    o.values.alloc(
-                        SValue::Item {
-                            item: b,
-                            span: None,
-                        }
-                        .into(),
-                    )
+            && inlinable(d, i)
+        {
+            let b = 'a: {
+                let b = match d {
+                    Item::Undef => break 'a self.undef,
+                    b => b.clone().map2::<_, _, anyhow::Error, ()>(
+                        &mut (),
+                        &mut |_, a| self.load(state, i, o, t, a.clone(), cache),
+                        &mut |_, b| b.try_into(),
+                    )?,
                 };
-                o.blocks[t].stmts.push(b);
-                return Ok(b);
-            }
+                o.values.alloc(
+                    SValue::Item {
+                        item: b,
+                        span: None,
+                    }
+                    .into(),
+                )
+            };
+            o.blocks[t].stmts.push(b);
+            return Ok(b);
+        }
         let x = match state.get(&a).cloned() {
             Some(b) => b.0,
             None => {

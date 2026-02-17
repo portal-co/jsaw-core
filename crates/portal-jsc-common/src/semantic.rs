@@ -4,7 +4,6 @@
 //! code is compiled and optimized. Different flags enable or disable various
 //! optimizations based on assumptions about the runtime environment.
 
-
 bitflags::bitflags! {
     /// Semantic flags that control compilation behavior and optimizations.
     ///

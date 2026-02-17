@@ -19,9 +19,7 @@ pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyh
         all: BTreeMap::new(),
     }
     .init(&input_func.cfg, &mut new_cfg, input_func.entry, semantic)?;
-    new_cfg
-        .decls
-        .extend(input_func.cfg.decls.clone());
+    new_cfg.decls.extend(input_func.cfg.decls.clone());
     new_cfg.generics = input_func.cfg.generics.clone();
     new_cfg.ts_retty = input_func.cfg.ts_retty.clone();
     Ok(SFunc {
@@ -109,7 +107,11 @@ impl ConstantInstantiator {
                 .collect::<BTreeMap<_, _>>();
             for s in inp.blocks[k].stmts.iter().cloned() {
                 let v = match inp.values[s].value.clone() {
-                    SValue::Param { block: _, idx: _, ty: _ } => todo!(),
+                    SValue::Param {
+                        block: _,
+                        idx: _,
+                        ty: _,
+                    } => todo!(),
                     SValue::Item { item, span } => match item {
                         Item::Just { id } => {
                             params.insert(

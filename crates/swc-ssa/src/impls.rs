@@ -71,9 +71,11 @@ impl cfg_traits::Term<SFunc> for STerm {
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            STerm::Switch { x: _, blocks, default } => {
-                Box::new(blocks.iter().map(|a| &a.1).chain(once(default)))
-            }
+            STerm::Switch {
+                x: _,
+                blocks,
+                default,
+            } => Box::new(blocks.iter().map(|a| &a.1).chain(once(default))),
             STerm::Default | STerm::Tail { .. } => Box::new(empty()),
         }
     }
@@ -90,9 +92,11 @@ impl cfg_traits::Term<SFunc> for STerm {
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            STerm::Switch { x: _, blocks, default } => {
-                Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default)))
-            }
+            STerm::Switch {
+                x: _,
+                blocks,
+                default,
+            } => Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default))),
             STerm::Default | STerm::Tail { .. } => Box::new(empty()),
         }
     }
@@ -445,7 +449,5 @@ impl ssa_traits::TypedBlock<SFunc> for SBlock {
     }
 }
 impl ssa_traits::TypedValue<SFunc> for SValueW {
-    fn ty(&self, _func: &SFunc) -> <SFunc as ssa_traits::TypedFunc>::Ty {
-        
-    }
+    fn ty(&self, _func: &SFunc) -> <SFunc as ssa_traits::TypedFunc>::Ty {}
 }

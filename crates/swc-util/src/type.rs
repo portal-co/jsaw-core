@@ -61,8 +61,8 @@ impl OptType {
                 }
             }
             OptType::Array { elem_ty } => elem_ty.as_ref().as_ref().map(|a| OptType::Array {
-                    elem_ty: Box::new(a.parent(flags)),
-                }),
+                elem_ty: Box::new(a.parent(flags)),
+            }),
             OptType::Object {
                 nest,
                 extended: extensible,

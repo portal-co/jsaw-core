@@ -664,7 +664,9 @@ impl Conv for Expr {
                                 };
                                 SimplExpr::Ident(D::new_import(path))
                             }
-                            swc_ecma_ast::SimpleAssignTarget::SuperProp(_super_prop_expr) => todo!(),
+                            swc_ecma_ast::SimpleAssignTarget::SuperProp(_super_prop_expr) => {
+                                todo!()
+                            }
                             swc_ecma_ast::SimpleAssignTarget::Paren(_paren_expr) => todo!(),
                             swc_ecma_ast::SimpleAssignTarget::OptChain(_opt_chain_expr) => todo!(),
                             swc_ecma_ast::SimpleAssignTarget::TsAs(_ts_as_expr) => todo!(),
@@ -677,7 +679,9 @@ impl Conv for Expr {
                             swc_ecma_ast::SimpleAssignTarget::TsTypeAssertion(
                                 _ts_type_assertion,
                             ) => todo!(),
-                            swc_ecma_ast::SimpleAssignTarget::TsInstantiation(_ts_instantiation) => {
+                            swc_ecma_ast::SimpleAssignTarget::TsInstantiation(
+                                _ts_instantiation,
+                            ) => {
                                 todo!()
                             }
                             swc_ecma_ast::SimpleAssignTarget::Invalid(_invalid) => todo!(),
@@ -1013,7 +1017,10 @@ impl Conv for Stmt {
                             };
                             let a = a.conv(imports)?;
                             let (b, d) = match c.cons.last() {
-                                Some(Stmt::Break(BreakStmt { span: _, label: None })) => (
+                                Some(Stmt::Break(BreakStmt {
+                                    span: _,
+                                    label: None,
+                                })) => (
                                     c.cons[..(c.cons.len() - 1)]
                                         .iter()
                                         .map(|a| a.conv(imports))

@@ -59,8 +59,9 @@ use swc_cfg::{Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
-    AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember, Expr, Function, Lit, MemberExpr, MemberProp, Number,
-    Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn, TsTypeParamDecl, UnaryOp,
+    AssignOp, AssignTarget, BinaryOp, Bool, Callee, Class, ClassMember, Expr, Function, Lit,
+    MemberExpr, MemberProp, Number, Param, Pat, SimpleAssignTarget, Stmt, Str, TsType, TsTypeAnn,
+    TsTypeParamDecl, UnaryOp,
 };
 pub use swc_ll_common::ext::ItemGetterExt;
 // use crate::consts::{ItemGetter, ItemGetterExt};
@@ -192,14 +193,11 @@ pub enum ImportMapperReq {
 }
 pub fn imp(member_prop: MemberProp) -> Expr {
     match member_prop {
-        swc_ecma_ast::MemberProp::Ident(ident_name) => {
-            
-            Expr::Lit(Lit::Str(Str {
-                span: ident_name.span,
-                value: ident_name.sym.into(),
-                raw: None,
-            }))
-        }
+        swc_ecma_ast::MemberProp::Ident(ident_name) => Expr::Lit(Lit::Str(Str {
+            span: ident_name.span,
+            value: ident_name.sym.into(),
+            raw: None,
+        })),
         swc_ecma_ast::MemberProp::PrivateName(_private_name) => {
             todo!()
         }
@@ -446,10 +444,11 @@ impl TCfg {
                                     &domtree,
                                     Some(block_id),
                                     Some(other_block_id),
-                                ) {
-                                    *ssa_counts.entry(stmt.left.clone()).or_default() += 2usize;
-                                    continue 'stmt_loop;
-                                }
+                                )
+                            {
+                                *ssa_counts.entry(stmt.left.clone()).or_default() += 2usize;
+                                continue 'stmt_loop;
+                            }
                         }
                     }
                     *ssa_counts.entry(stmt.left.clone()).or_default() += 1usize;
@@ -518,9 +517,10 @@ impl TCfg {
         for (_, k) in self.blocks.iter_mut() {
             for l in take(&mut k.stmts) {
                 if let LId::Id { id } = &l.left
-                    && set.contains(id) {
-                        continue;
-                    }
+                    && set.contains(id)
+                {
+                    continue;
+                }
                 k.stmts.push(l);
             }
         }
@@ -557,7 +557,6 @@ impl TCfg {
         });
     }
     pub fn refs<'a>(&'a self) -> impl Iterator<Item = Ident> + 'a {
-        
         self.blocks.iter().flat_map(|block_entry| {
             let term_refs: Box<dyn Iterator<Item = Ident> + '_> = match &block_entry.1.post.term {
                 TTerm::Return(return_ident) => Box::new(return_ident.iter().cloned()),
@@ -568,7 +567,11 @@ impl TCfg {
                     if_true: _,
                     if_false: _,
                 } => Box::new(once(cond.clone())),
-                TTerm::Switch { x, blocks, default: _ } => Box::new(
+                TTerm::Switch {
+                    x,
+                    blocks,
+                    default: _,
+                } => Box::new(
                     once(x.clone()).chain(blocks.iter().map(|case_entry| case_entry.0.clone())),
                 ),
                 TTerm::Default => Box::new(std::iter::empty()),
@@ -658,12 +661,12 @@ impl TCfg {
                     if a != k
                         && (self.blocks[a].stmts.iter().all(|s| s.nothrow())
                             || self.blocks[k].post.catch == self.blocks[a].post.catch)
-                        {
-                            let s = self.blocks[a].stmts.clone();
-                            self.blocks[k].stmts.extend(s);
-                            self.blocks[k].post.term = self.blocks[a].post.term.clone();
-                            continue 'a;
-                        }
+                    {
+                        let s = self.blocks[a].stmts.clone();
+                        self.blocks[k].stmts.extend(s);
+                        self.blocks[k].post.term = self.blocks[a].post.term.clone();
+                        continue 'a;
+                    }
                 }
             }
             return;
@@ -715,10 +718,11 @@ impl TCfg {
                     )
                     .unwrap();
                 if let LId::Id { id } = &mut s.left
-                    && let Some(b) = d.get_mut(id) {
-                        *b += 1;
-                        id.0 = Atom::new(format!("_{}${b}", &id.0));
-                    }
+                    && let Some(b) = d.get_mut(id)
+                {
+                    *b += 1;
+                    id.0 = Atom::new(format!("_{}${b}", &id.0));
+                }
             }
             for (a, b) in d.iter() {
                 let t = Atom::new(format!("_{}${b}", &a.0));
@@ -885,215 +889,133 @@ impl TCfg {
                 })
                 .collect::<BTreeMap<_, _>>();
             a.retain(|a, _| {
-                    !self.blocks.iter().any(|k| {
-                        k.1.stmts.iter().any(|s| s.will_ruin(a))
-                            || match &k.1.post.term {
-                                TTerm::Return(Some(b)) => b == a,
-                                TTerm::Throw(b) => b == a,
-                                _ => false,
-                            }
-                    })
-                });
+                !self.blocks.iter().any(|k| {
+                    k.1.stmts.iter().any(|s| s.will_ruin(a))
+                        || match &k.1.post.term {
+                            TTerm::Return(Some(b)) => b == a,
+                            TTerm::Throw(b) => b == a,
+                            _ => false,
+                        }
+                })
+            });
             for ki in self.blocks.iter().map(|a| a.0).collect::<BTreeSet<_>>() {
                 // let mut k = &mut;
                 's: for mut s in take(&mut self.blocks[ki].stmts) {
                     if let LId::Id { id } = &s.left
-                        && let Some(v) = a.get(id) {
-                            for p in v.values() {
-                                match p {
-                                    PropKind::Item(v, t) => {
-                                        self.blocks[ki].stmts.push(TStmt {
-                                            left: LId::Id { id: t.clone() },
-                                            flags: Default::default(),
-                                            right: Item::Just { id: v.clone() },
-                                            span: s.span,
-                                        });
-                                    }
-                                    PropKind::Prop { getter: _, setter: _ } => {}
+                        && let Some(v) = a.get(id)
+                    {
+                        for p in v.values() {
+                            match p {
+                                PropKind::Item(v, t) => {
+                                    self.blocks[ki].stmts.push(TStmt {
+                                        left: LId::Id { id: t.clone() },
+                                        flags: Default::default(),
+                                        right: Item::Just { id: v.clone() },
+                                        span: s.span,
+                                    });
                                 }
-                                cont = true;
+                                PropKind::Prop {
+                                    getter: _,
+                                    setter: _,
+                                } => {}
                             }
-                            continue;
+                            cont = true;
                         }
+                        continue;
+                    }
                     'a: {
                         if let LId::Member { obj, mem } = &s.left
                             && let Some(v) = a.get(obj)
-                                && let Some(Item::Lit { lit }) = self.get_item(mem[0].clone(), ()) {
-                                    let mut lit = lit.clone();
-                                    lit.set_span(Span::dummy_with_cmt());
-                                    if let Some(w) = v.get(&lit) {
-                                        match w {
-                                            PropKind::Item(_, w) => {
-                                                s.left = LId::Id { id: w.clone() };
-                                            }
-                                            PropKind::Prop { getter: _, setter } => {
-                                                let stub = self.regs.alloc(());
-                                                if let Some(setter) = setter {
-                                                    let tmp = self.regs.alloc(());
-                                                    let tmp2 = self.regs.alloc(());
-                                                    let tmp3 = self.regs.alloc(());
-
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp2.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Obj {
-                                                            members: v
-                                                                .iter()
-                                                                .flat_map(|(a, b)| {
-                                                                    b.clone().to_render(
-                                                                        match a {
-                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (*s.value.clone().to_atom_lossy()).clone(), span: s.span, ctx: Default::default() }),
-                                                                            _ => todo!(),
-                                                                        },
-                                                                        &self.regs,
-                                                                    )
-                                                                })
-                                                                .collect(),
-                                                        },
-                                                        span: s.span,
-                                                    });
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Func {
-                                                            func: setter.clone(),
-                                                            arrow: false,
-                                                        },
-                                                        span: s.span,
-                                                    });
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp3.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Lit {
-                                                            lit: Lit::Str(Str {
-                                                                span: s.span,
-                                                                value: Wtf8Atom::new("call"),
-                                                                raw: None,
-                                                            }),
-                                                        },
-                                                        span: s.span,
-                                                    });
-                                                    s.left = LId::Id { id: stub.clone() };
-                                                    let span = s.span;
-                                                    self.blocks[ki].stmts.push(s);
-                                                    s = TStmt {
-                                                        left: LId::Id { id: stub.clone() },
-                                                        flags: ValFlags::default(),
-                                                        right: Item::Call {
-                                                            callee: if semantic.flags.contains(
-                                                                SemanticFlags::NO_MONKEYPATCHING,
-                                                            ) {
-                                                                TCallee::Member {
-                                                                    func: tmp,
-                                                                    member: tmp3,
-                                                                }
-                                                            } else {
-                                                                TCallee::Val(tmp)
-                                                            },
-                                                            args: [tmp2, stub]
-                                                                .into_iter()
-                                                                .map(|a| SpreadOr {
-                                                                    value: a,
-                                                                    is_spread: false,
-                                                                }) .skip(
-                                                            if semantic.flags.contains(
-                                                                SemanticFlags::NO_MONKEYPATCHING,
-                                                            ) {
-                                                                0
-                                                            } else {
-                                                                1
-                                                            },
-                                                        )
-                                                                .collect(),
-                                                        },
-                                                        span,
-                                                    }
-                                                } else {
-                                                    s.left = LId::Id { id: stub };
-                                                }
-                                            }
-                                        };
-                                        cont = true;
-                                        break 'a;
+                            && let Some(Item::Lit { lit }) = self.get_item(mem[0].clone(), ())
+                        {
+                            let mut lit = lit.clone();
+                            lit.set_span(Span::dummy_with_cmt());
+                            if let Some(w) = v.get(&lit) {
+                                match w {
+                                    PropKind::Item(_, w) => {
+                                        s.left = LId::Id { id: w.clone() };
                                     }
-                                }
-                    }
-                    'b: {
-                        if let Item::Mem { obj, mem } = &s.right
-                            && let Some(v) = a.get(obj)
-                                && let Some(Item::Lit { lit }) = self.get_item(mem.clone(), ()) {
-                                    let mut lit = lit.clone();
-                                    lit.set_span(Span::dummy_with_cmt());
-                                    if let Some(w) = v.get(&lit) {
-                                        match w {
-                                            PropKind::Item(_, w) => {
-                                                s.right = Item::Just { id: w.clone() };
-                                            }
-                                            PropKind::Prop { getter, setter: _ } => {
-                                                if let Some(getter) = getter {
-                                                    let tmp = self.regs.alloc(());
-                                                    let tmp2 = self.regs.alloc(());
-                                                    let tmp3 = self.regs.alloc(());
+                                    PropKind::Prop { getter: _, setter } => {
+                                        let stub = self.regs.alloc(());
+                                        if let Some(setter) = setter {
+                                            let tmp = self.regs.alloc(());
+                                            let tmp2 = self.regs.alloc(());
+                                            let tmp3 = self.regs.alloc(());
 
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp2.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Obj {
-                                                            members: v
-                                                                .iter()
-                                                                .flat_map(|(a, b)| {
-                                                                    b.clone().to_render(
-                                                                        match a {
-                                                                            Lit::Str(s) => PropKey::Lit(PropSym { sym: (*s.value
-                                                                                    .to_atom_lossy(
-                                                                                    ))
-                                                                                    .clone(), span: s.span, ctx: Default::default() }),
-                                                                            _ => todo!(),
-                                                                        },
-                                                                        &self.regs,
-                                                                    )
-                                                                })
-                                                                .collect(),
-                                                        },
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp2.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Obj {
+                                                    members: v
+                                                        .iter()
+                                                        .flat_map(|(a, b)| {
+                                                            b.clone().to_render(
+                                                                match a {
+                                                                    Lit::Str(s) => {
+                                                                        PropKey::Lit(PropSym {
+                                                                            sym: (*s
+                                                                                .value
+                                                                                .clone()
+                                                                                .to_atom_lossy())
+                                                                            .clone(),
+                                                                            span: s.span,
+                                                                            ctx: Default::default(),
+                                                                        })
+                                                                    }
+                                                                    _ => todo!(),
+                                                                },
+                                                                &self.regs,
+                                                            )
+                                                        })
+                                                        .collect(),
+                                                },
+                                                span: s.span,
+                                            });
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Func {
+                                                    func: setter.clone(),
+                                                    arrow: false,
+                                                },
+                                                span: s.span,
+                                            });
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp3.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Lit {
+                                                    lit: Lit::Str(Str {
                                                         span: s.span,
-                                                    });
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Func {
-                                                            func: getter.clone(),
-                                                            arrow: false,
-                                                        },
-                                                        span: s.span,
-                                                    });
-                                                    self.blocks[ki].stmts.push(TStmt {
-                                                        left: LId::Id { id: tmp3.clone() },
-                                                        flags: ValFlags::SSA_LIKE,
-                                                        right: Item::Lit {
-                                                            lit: Lit::Str(Str {
-                                                                span: s.span,
-                                                                value: Wtf8Atom::new("call"),
-                                                                raw: None,
-                                                            }),
-                                                        },
-                                                        span: s.span,
-                                                    });
-                                                    s.right = Item::Call {
-                                                        callee: if semantic.flags.contains(
-                                                            SemanticFlags::NO_MONKEYPATCHING,
-                                                        ) {
-                                                            TCallee::Member {
-                                                                func: tmp,
-                                                                member: tmp3,
-                                                            }
-                                                        } else {
-                                                            TCallee::Val(tmp)
-                                                        },
-                                                        args: [SpreadOr {
-                                                            is_spread: false,
-                                                            value: tmp2,
-                                                        }]
+                                                        value: Wtf8Atom::new("call"),
+                                                        raw: None,
+                                                    }),
+                                                },
+                                                span: s.span,
+                                            });
+                                            s.left = LId::Id { id: stub.clone() };
+                                            let span = s.span;
+                                            self.blocks[ki].stmts.push(s);
+                                            s = TStmt {
+                                                left: LId::Id { id: stub.clone() },
+                                                flags: ValFlags::default(),
+                                                right: Item::Call {
+                                                    callee: if semantic
+                                                        .flags
+                                                        .contains(SemanticFlags::NO_MONKEYPATCHING)
+                                                    {
+                                                        TCallee::Member {
+                                                            func: tmp,
+                                                            member: tmp3,
+                                                        }
+                                                    } else {
+                                                        TCallee::Val(tmp)
+                                                    },
+                                                    args: [tmp2, stub]
                                                         .into_iter()
+                                                        .map(|a| SpreadOr {
+                                                            value: a,
+                                                            is_spread: false,
+                                                        })
                                                         .skip(
                                                             if semantic.flags.contains(
                                                                 SemanticFlags::NO_MONKEYPATCHING,
@@ -1104,16 +1026,124 @@ impl TCfg {
                                                             },
                                                         )
                                                         .collect(),
+                                                },
+                                                span,
+                                            }
+                                        } else {
+                                            s.left = LId::Id { id: stub };
+                                        }
+                                    }
+                                };
+                                cont = true;
+                                break 'a;
+                            }
+                        }
+                    }
+                    'b: {
+                        if let Item::Mem { obj, mem } = &s.right
+                            && let Some(v) = a.get(obj)
+                            && let Some(Item::Lit { lit }) = self.get_item(mem.clone(), ())
+                        {
+                            let mut lit = lit.clone();
+                            lit.set_span(Span::dummy_with_cmt());
+                            if let Some(w) = v.get(&lit) {
+                                match w {
+                                    PropKind::Item(_, w) => {
+                                        s.right = Item::Just { id: w.clone() };
+                                    }
+                                    PropKind::Prop { getter, setter: _ } => {
+                                        if let Some(getter) = getter {
+                                            let tmp = self.regs.alloc(());
+                                            let tmp2 = self.regs.alloc(());
+                                            let tmp3 = self.regs.alloc(());
+
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp2.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Obj {
+                                                    members: v
+                                                        .iter()
+                                                        .flat_map(|(a, b)| {
+                                                            b.clone().to_render(
+                                                                match a {
+                                                                    Lit::Str(s) => {
+                                                                        PropKey::Lit(PropSym {
+                                                                            sym: (*s
+                                                                                .value
+                                                                                .to_atom_lossy())
+                                                                            .clone(),
+                                                                            span: s.span,
+                                                                            ctx: Default::default(),
+                                                                        })
+                                                                    }
+                                                                    _ => todo!(),
+                                                                },
+                                                                &self.regs,
+                                                            )
+                                                        })
+                                                        .collect(),
+                                                },
+                                                span: s.span,
+                                            });
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Func {
+                                                    func: getter.clone(),
+                                                    arrow: false,
+                                                },
+                                                span: s.span,
+                                            });
+                                            self.blocks[ki].stmts.push(TStmt {
+                                                left: LId::Id { id: tmp3.clone() },
+                                                flags: ValFlags::SSA_LIKE,
+                                                right: Item::Lit {
+                                                    lit: Lit::Str(Str {
+                                                        span: s.span,
+                                                        value: Wtf8Atom::new("call"),
+                                                        raw: None,
+                                                    }),
+                                                },
+                                                span: s.span,
+                                            });
+                                            s.right = Item::Call {
+                                                callee: if semantic
+                                                    .flags
+                                                    .contains(SemanticFlags::NO_MONKEYPATCHING)
+                                                {
+                                                    TCallee::Member {
+                                                        func: tmp,
+                                                        member: tmp3,
                                                     }
                                                 } else {
-                                                    s.right = Item::Undef;
-                                                }
+                                                    TCallee::Val(tmp)
+                                                },
+                                                args: [SpreadOr {
+                                                    is_spread: false,
+                                                    value: tmp2,
+                                                }]
+                                                .into_iter()
+                                                .skip(
+                                                    if semantic
+                                                        .flags
+                                                        .contains(SemanticFlags::NO_MONKEYPATCHING)
+                                                    {
+                                                        0
+                                                    } else {
+                                                        1
+                                                    },
+                                                )
+                                                .collect(),
                                             }
-                                        };
-                                        cont = true;
-                                        break 'b;
+                                        } else {
+                                            s.right = Item::Undef;
+                                        }
                                     }
-                                }
+                                };
+                                cont = true;
+                                break 'b;
+                            }
+                        }
                     }
                     self.blocks[ki].stmts.push(s);
                 }

@@ -378,41 +378,41 @@ impl<I: Clone + Eq, F> Item<I, F> {
                 }
             }
             Item::Mem { obj, mem } => {
-                if let Some(Item::Obj { members }) = k.get_item(obj.clone(), ctx.clone()) && let Some(v) = {
-                    let l = k
-                        .get_item(mem.clone(), ctx.clone())
-                        .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))?;
-                    let mut i = members.iter();
-                    loop {
-                        let Some(i) = i.next() else {
-                            break None;
-                        };
-                        let l2 = match &i.0 {
-                            PropKey::Lit(PropSym {
-                                sym: l,
-                                span: _s2,
-                                ctx: _,
-                            }) => Lit::Str(Str {
-                                span,
-                                value: l.clone().into(),
-                                raw: None,
-                            }),
-                            PropKey::Computed(c) => {
-                                k
+                if let Some(Item::Obj { members }) = k.get_item(obj.clone(), ctx.clone())
+                    && let Some(v) = {
+                        let l = k
+                            .get_item(mem.clone(), ctx.clone())
+                            .and_then(|m| m.const_in(semantics, k, span, ctx.clone()))?;
+                        let mut i = members.iter();
+                        loop {
+                            let Some(i) = i.next() else {
+                                break None;
+                            };
+                            let l2 = match &i.0 {
+                                PropKey::Lit(PropSym {
+                                    sym: l,
+                                    span: _s2,
+                                    ctx: _,
+                                }) => Lit::Str(Str {
+                                    span,
+                                    value: l.clone().into(),
+                                    raw: None,
+                                }),
+                                PropKey::Computed(c) => k
                                     .get_item(c.clone(), ctx.clone())
-                                    .and_then(|w| w.const_in(semantics, k, span, ctx.clone()))?
-                            }
-                            _ => break None,
-                        };
-                        if l2 != l {
-                            continue;
-                        };
-                        let PropVal::Item(i) = &i.1 else {
-                            break None;
-                        };
-                        break Some(i.clone());
+                                    .and_then(|w| w.const_in(semantics, k, span, ctx.clone()))?,
+                                _ => break None,
+                            };
+                            if l2 != l {
+                                continue;
+                            };
+                            let PropVal::Item(i) = &i.1 else {
+                                break None;
+                            };
+                            break Some(i.clone());
+                        }
                     }
-                } {
+                {
                     return k
                         .get_item(v, ctx.clone())
                         .and_then(|w| w.const_in(semantics, k, span, ctx.clone()));
@@ -498,26 +498,27 @@ impl<I: Clone + Eq, F> Item<I, F> {
                         {
                             let func = func.const_in(semantics, k, span, ctx.clone())?;
                             let mut i;
-                            let ses = ses_method(
-                                &func,
-                                s.value.as_str()?,
-                                &mut match args.iter() {
-                                    i2 => {
-                                        i = i2;
-                                        std::iter::from_fn(|| {
-                                            let SpreadOr {
-                                                value: n,
-                                                is_spread: _s,
-                                            } = i.next()?;
-                                            let i = k
-                                                .get_item(n.clone(), ctx.clone())?
-                                                .const_in(semantics, k, span, ctx.clone())?;
-                                            Some(i)
-                                        })
-                                        .fuse()
-                                    }
-                                },
-                            )?;
+                            let ses =
+                                ses_method(
+                                    &func,
+                                    s.value.as_str()?,
+                                    &mut match args.iter() {
+                                        i2 => {
+                                            i = i2;
+                                            std::iter::from_fn(|| {
+                                                let SpreadOr {
+                                                    value: n,
+                                                    is_spread: _s,
+                                                } = i.next()?;
+                                                let i = k
+                                                    .get_item(n.clone(), ctx.clone())?
+                                                    .const_in(semantics, k, span, ctx.clone())?;
+                                                Some(i)
+                                            })
+                                            .fuse()
+                                        }
+                                    },
+                                )?;
                             Some(ses)
                         }
                     }

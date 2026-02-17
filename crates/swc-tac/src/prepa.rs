@@ -17,8 +17,8 @@ use std::{
     sync::{OnceLock, atomic::AtomicUsize},
 };
 use swc_ecma_ast::{
-    AssignExpr, BinExpr, CondExpr, Decl, ExprStmt, ModuleItem,
-    PrivateName, SeqExpr, ThisExpr, VarDecl, VarDeclarator,
+    AssignExpr, BinExpr, CondExpr, Decl, ExprStmt, ModuleItem, PrivateName, SeqExpr, ThisExpr,
+    VarDecl, VarDeclarator,
 };
 use swc_ecma_visit::{VisitMut, VisitMutWith};
 
@@ -144,15 +144,17 @@ impl VisitMut for Prepa<'_> {
             match i {
                 ClassMember::ClassProp(c) => {
                     if !c.is_static
-                        && let Some(i) = c.value.take() {
-                            m.insert(Prop::Key(c.key.clone()), i);
-                        }
+                        && let Some(i) = c.value.take()
+                    {
+                        m.insert(Prop::Key(c.key.clone()), i);
+                    }
                 }
                 ClassMember::PrivateProp(c) => {
                     if !c.is_static
-                        && let Some(i) = c.value.take() {
-                            m.insert(Prop::Private(c.key.clone()), i);
-                        }
+                        && let Some(i) = c.value.take()
+                    {
+                        m.insert(Prop::Private(c.key.clone()), i);
+                    }
                 }
                 _ => {}
             }
@@ -192,36 +194,31 @@ impl VisitMut for Prepa<'_> {
                     fn visit_mut_expr(&mut self, node: &mut Expr) {
                         node.visit_mut_children_with(self);
                         if let Expr::Call(c) = node
-                            && let Callee::Super(s) = &c.callee {
-                                let span = s.span;
-                                let x = take(&mut self.props).into_iter().map(|(a, b)| {
-                                    Box::new(Expr::Assign(AssignExpr {
-                                        span,
-                                        op: swc_ecma_ast::AssignOp::Assign,
-                                        right: b,
-                                        left: swc_ecma_ast::AssignTarget::Simple(
-                                            SimpleAssignTarget::Member(MemberExpr {
-                                                span,
-                                                obj: Box::new(Expr::This(ThisExpr { span })),
-                                                prop: match a {
-                                                    Prop::Key(prop_name) => prop_name.into(),
-                                                    Prop::Private(private_name) => {
-                                                        private_name.into()
-                                                    }
-                                                },
-                                            }),
-                                        ),
-                                    }))
-                                });
-                                *node = Expr::Seq(SeqExpr {
+                            && let Callee::Super(s) = &c.callee
+                        {
+                            let span = s.span;
+                            let x = take(&mut self.props).into_iter().map(|(a, b)| {
+                                Box::new(Expr::Assign(AssignExpr {
                                     span,
-                                    exprs: [take(node)]
-                                        .into_iter()
-                                        .map(Box::new)
-                                        .chain(x)
-                                        .collect(),
-                                })
-                            }
+                                    op: swc_ecma_ast::AssignOp::Assign,
+                                    right: b,
+                                    left: swc_ecma_ast::AssignTarget::Simple(
+                                        SimpleAssignTarget::Member(MemberExpr {
+                                            span,
+                                            obj: Box::new(Expr::This(ThisExpr { span })),
+                                            prop: match a {
+                                                Prop::Key(prop_name) => prop_name.into(),
+                                                Prop::Private(private_name) => private_name.into(),
+                                            },
+                                        }),
+                                    ),
+                                }))
+                            });
+                            *node = Expr::Seq(SeqExpr {
+                                span,
+                                exprs: [take(node)].into_iter().map(Box::new).chain(x).collect(),
+                            })
+                        }
                     }
                 }
                 i.visit_mut_children_with(&mut Traverse {
@@ -253,10 +250,11 @@ impl VisitMut for Prepa<'_> {
                     .and_then(|a| a.as_assign())
                     .and_then(|a| a.left.as_ident())
                     && let Some(j) = e.as_ident()
-                    && i.to_id() == j.to_id() {
-                        again = true;
-                        continue;
-                    }
+                    && i.to_id() == j.to_id()
+                {
+                    again = true;
+                    continue;
+                }
                 if i + 1 == l {
                 } else if e.is_lit() || e.is_ident() {
                     again = true;

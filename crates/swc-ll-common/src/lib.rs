@@ -176,10 +176,10 @@ use portal_jsc_swc_util::{SemanticCfg, SemanticFlags, ses_method};
 use swc_atoms::Atom;
 // use swc_cfg::{Block, Catch, Cfg, Func};
 use swc_common::{EqIgnoreSpan, Span, Spanned, SyntaxContext};
+use swc_ecma_ast::Id as Ident;
 use swc_ecma_ast::{
     BinaryOp, Bool, Callee, Expr, Function, Lit, MemberProp, MetaPropKind, Number, Str, UnaryOp,
 };
-use swc_ecma_ast::Id as Ident;
 
 use crate::ext::ItemGetterExt;
 pub mod fetch;
@@ -1093,7 +1093,9 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op: _ } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op: _ } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => Box::new(once(obj)),
+            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => {
+                Box::new(once(obj))
+            }
             swc_tac::Item::Func { func: _, arrow: _ } => Box::new(empty()),
             swc_tac::Item::Lit { lit: _ } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(
@@ -1192,7 +1194,9 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Bin { left, right, op: _ } => Box::new([left, right].into_iter()),
             swc_tac::Item::Un { arg, op: _ } => Box::new(once(arg)),
             swc_tac::Item::Mem { obj, mem } => Box::new([obj, mem].into_iter()),
-            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => Box::new(once(obj)),
+            Item::PrivateMem { obj, mem: _ } | Item::HasPrivateMem { obj, mem: _ } => {
+                Box::new(once(obj))
+            }
             swc_tac::Item::Func { func: _, arrow: _ } => Box::new(empty()),
             swc_tac::Item::Lit { lit: _ } => Box::new(empty()),
             swc_tac::Item::Call { callee, args } => Box::new(

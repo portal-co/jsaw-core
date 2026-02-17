@@ -195,7 +195,6 @@ impl ToTACConverterCore<'_> {
         f: Ident,
         decl: bool,
     ) -> anyhow::Result<TBlockId> {
-        
         let g = o.regs.alloc(());
         o.decls.insert(g.clone());
         o.blocks[t].stmts.push(TStmt {
@@ -1213,11 +1212,7 @@ impl ToTACConverterCore<'_> {
                 o.decls.insert(tmp.clone());
                 Ok((tmp, t))
             }
-            Expr::Ident(id) => match self
-                .mapper
-                .consts
-                .and_then(|c| c.map.get(&id.to_id()))
-            {
+            Expr::Ident(id) => match self.mapper.consts.and_then(|c| c.map.get(&id.to_id())) {
                 Some(e) if self.inlinable(e) => self.expr(i, o, b, t, &e.clone()),
                 _ => match &*id.sym {
                     "arguments" => {
@@ -1422,10 +1417,7 @@ impl ToTACConverterCore<'_> {
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
                     flags: ValFlags::SSA_LIKE,
-                    right: Item::Un {
-                        arg,
-                        op: un.op,
-                    },
+                    right: Item::Un { arg, op: un.op },
                     span: un.span(),
                 });
                 o.decls.insert(tmp.clone());
@@ -1480,7 +1472,13 @@ impl ToTACConverterCore<'_> {
                 let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                 match a.body.as_ref() {
                     swc_ecma_ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                        k.transform_all(&mut c.cfg, &mut (), &block_stmt.stmts.clone(), c.entry, None)?;
+                        k.transform_all(
+                            &mut c.cfg,
+                            &mut (),
+                            &block_stmt.stmts.clone(),
+                            c.entry,
+                            None,
+                        )?;
                     }
                     swc_ecma_ast::BlockStmtOrExpr::Expr(expr) => {
                         c.cfg.blocks[c.entry].end = swc_cfg::End {
@@ -1597,7 +1595,8 @@ impl ToTACConverterCore<'_> {
                                         let mut c = swc_cfg::Func::default();
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let _k = k.transform_all(
-                                            &mut c.cfg,&mut (),
+                                            &mut c.cfg,
+                                            &mut (),
                                             &getter_prop
                                                 .body
                                                 .as_ref()
@@ -1621,7 +1620,8 @@ impl ToTACConverterCore<'_> {
                                         });
                                         let k = swc_cfg::to_cfg::ToCfgConversionCtx::default();
                                         let _k = k.transform_all(
-                                            &mut c.cfg,&mut (),
+                                            &mut c.cfg,
+                                            &mut (),
                                             &setter_prop
                                                 .body
                                                 .as_ref()

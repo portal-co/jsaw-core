@@ -123,7 +123,11 @@ impl Convert {
             out.blocks[k].postcedent.catch = catch;
             for i in inp.blocks[i].stmts.iter().cloned() {
                 let (j, tag) = match &inp.values[i].value {
-                    SValue::Param { block: _, idx: _, ty: _ } => todo!(),
+                    SValue::Param {
+                        block: _,
+                        idx: _,
+                        ty: _,
+                    } => todo!(),
                     SValue::Item { item, span } => match item {
                         swc_tac::Item::Just { id } => {
                             let (a, b) = state.get(id).cloned().context("in getting the value")?;
@@ -313,10 +317,7 @@ impl Convert {
                             match cnst {
                                 Some(_k) => {
                                     let v: SValue<OptValueId, OptBlockId, OptFunc> = SValue::Item {
-                                        item: Item::Un {
-                                            arg,
-                                            op: *op,
-                                        },
+                                        item: Item::Un { arg, op: *op },
                                         span: *span,
                                     };
                                     let Some(a) = v.const_in(semantic, out, false, ()) else {
@@ -357,10 +358,7 @@ impl Convert {
                                         UnaryOp::Minus,
                                     ) => {
                                         let result = SValue::Item {
-                                            item: Item::Un {
-                                                arg,
-                                                op: *op,
-                                            },
+                                            item: Item::Un { arg, op: *op },
                                             span: *span,
                                         };
                                         (
@@ -374,10 +372,7 @@ impl Convert {
                                     (tag, op) => {
                                         let arg = deopt(out, k, arg, tag)?;
                                         let result = SValue::Item {
-                                            item: Item::Un {
-                                                arg,
-                                                op: *op,
-                                            },
+                                            item: Item::Un { arg, op: *op },
                                             span: *span,
                                         };
                                         match op {

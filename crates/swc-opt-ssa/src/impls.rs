@@ -59,9 +59,11 @@ impl cfg_traits::Term<OptFunc> for OptTerm {
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            OptTerm::Switch { x: _, blocks, default } => {
-                Box::new(blocks.iter().map(|a| &a.1).chain(once(default)))
-            }
+            OptTerm::Switch {
+                x: _,
+                blocks,
+                default,
+            } => Box::new(blocks.iter().map(|a| &a.1).chain(once(default))),
             OptTerm::Default => Box::new(empty()),
             _ => todo!(),
         }
@@ -79,9 +81,11 @@ impl cfg_traits::Term<OptFunc> for OptTerm {
                 if_true,
                 if_false,
             } => Box::new([if_true, if_false].into_iter()),
-            OptTerm::Switch { x: _, blocks, default } => {
-                Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default)))
-            }
+            OptTerm::Switch {
+                x: _,
+                blocks,
+                default,
+            } => Box::new(blocks.iter_mut().map(|a| &mut a.1).chain(once(default))),
             OptTerm::Default => Box::new(empty()),
             _ => todo!(),
         }

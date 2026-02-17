@@ -172,17 +172,18 @@ impl VisitMut for InlineHintInliner<'_> {
         let mut not_done = true;
         while take(&mut not_done) {
             if let Expr::Ident(i) = node
-                && let Some(mut b) = self.consts.map.get(&i.to_id()).cloned() {
-                    let mut t = InlineTracer {
-                        mapper: self.mapper,
-                        inlinable: false,
-                    };
-                    b.visit_mut_with(&mut t);
-                    if t.inlinable {
-                        not_done = true;
-                        *node = *b;
-                    }
+                && let Some(mut b) = self.consts.map.get(&i.to_id()).cloned()
+            {
+                let mut t = InlineTracer {
+                    mapper: self.mapper,
+                    inlinable: false,
+                };
+                b.visit_mut_with(&mut t);
+                if t.inlinable {
+                    not_done = true;
+                    *node = *b;
                 }
+            }
             node.visit_mut_children_with(self);
         }
     }

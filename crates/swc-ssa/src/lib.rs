@@ -169,12 +169,14 @@ impl SCfg {
     pub fn strip_useless(&mut self) {
         let mut set = BTreeSet::new();
         for (val, SValueW { value }) in self.values.iter_mut() {
-            if let SValue::Item { item, span: _ } = value { match item {
-                Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
-                    set.insert(val);
+            if let SValue::Item { item, span: _ } = value {
+                match item {
+                    Item::Func { func: _, arrow: _ } | Item::Undef | Item::Lit { lit: _ } => {
+                        set.insert(val);
+                    }
+                    _ => {}
                 }
-                _ => {}
-            } }
+            }
         }
         for (_, b) in self.values.iter_mut() {
             for r in b.value.vals_mut() {
@@ -362,8 +364,7 @@ impl SCfg {
         });
     }
     pub fn refs(&self) -> BTreeSet<Ident> {
-        self
-            .values
+        self.values
             .iter()
             .flat_map(|(_value_id, value_wrapper)| match &value_wrapper.value {
                 SValue::LoadId(target) | SValue::StoreId { target, val: _ } => {
@@ -377,8 +378,7 @@ impl SCfg {
             .collect()
     }
     pub fn externals(&self) -> BTreeSet<Ident> {
-        self
-            .refs()
+        self.refs()
             .into_iter()
             .filter(|ident| !self.decls.contains(ident))
             .collect()
@@ -529,7 +529,11 @@ pub enum SValue<I = SValueId, B = SBlockId, F = SFunc> {
 impl<I, B, F> SValue<I, B, F> {
     pub fn nothrow(&self) -> bool {
         match self {
-            SValue::Param { block: _, idx: _, ty: _ } => true,
+            SValue::Param {
+                block: _,
+                idx: _,
+                ty: _,
+            } => true,
             SValue::Item { item, span: _ } => item.nothrow(),
             SValue::Assign { target, val: _ } => target.nothrow(),
             SValue::LoadId(_) => true,
@@ -548,7 +552,11 @@ impl<I, B, F> SValue<I, B, F> {
 impl<I: Copy, B, F> SValue<I, B, F> {
     pub fn vals<'a>(&'a self) -> Box<dyn Iterator<Item = I> + 'a> {
         match self {
-            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Param {
+                block: _,
+                idx: _,
+                ty: _,
+            } => Box::new(empty()),
             SValue::Item { item, span: _ } => Box::new(item.refs().copied()),
             SValue::Assign { target, val } => {
                 let v = once(*val);
@@ -662,7 +670,11 @@ impl<I, B, F> SValue<I, B, F> {
     }
     pub fn vals_ref<'a>(&'a self) -> Box<dyn Iterator<Item = &'a I> + 'a> {
         match self {
-            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Param {
+                block: _,
+                idx: _,
+                ty: _,
+            } => Box::new(empty()),
             SValue::Item { item, span: _ } => Box::new(item.refs()),
             SValue::Assign { target, val } => {
                 let v = once(val);
@@ -680,7 +692,11 @@ impl<I, B, F> SValue<I, B, F> {
     }
     pub fn vals_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut I> + 'a> {
         match self {
-            SValue::Param { block: _, idx: _, ty: _ } => Box::new(empty()),
+            SValue::Param {
+                block: _,
+                idx: _,
+                ty: _,
+            } => Box::new(empty()),
             SValue::Item { item, span: _ } => item.refs_mut(),
             SValue::Assign { target, val } => {
                 let v = once(val);

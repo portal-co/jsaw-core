@@ -46,10 +46,8 @@ impl SFunc {
             .map(|v| mangle_value(prefix.clone(), ctxt, value, v.0))
             .collect();
         for (value_id, ts_type) in value.cfg.ts.clone().into_iter() {
-            cfg.type_annotations.insert(
-                mangle_value(prefix.clone(), ctxt, value, value_id),
-                ts_type,
-            );
+            cfg.type_annotations
+                .insert(mangle_value(prefix.clone(), ctxt, value, value_id), ts_type);
         }
         cfg.ts_retty = value.cfg.ts_retty.clone();
         cfg.generics = value.cfg.generics.clone();
@@ -126,7 +124,11 @@ impl Rew {
                     cfg.blocks[new_block_id].post.catch = catch_clause;
                     for statement in func.cfg.blocks[*block_id].stmts.iter() {
                         match &func.cfg.values[*statement].value {
-                            SValue::Param { block: _, idx: _, ty: _ } => todo!(),
+                            SValue::Param {
+                                block: _,
+                                idx: _,
+                                ty: _,
+                            } => todo!(),
                             SValue::Item { item, span } => match item {
                                 Item::Just { id: _ } => {}
                                 item => {
@@ -155,8 +157,7 @@ impl Rew {
                                         },
                                         flags: ValFlags::SSA_LIKE,
                                         right: item_id,
-                                        span: (*span)
-                                            .unwrap_or_else(Span::dummy_with_cmt),
+                                        span: (*span).unwrap_or_else(Span::dummy_with_cmt),
                                     });
                                     cfg.decls.insert(mangle_value(
                                         self.prefix.clone(),
@@ -288,16 +289,12 @@ pub fn mangle_param(
 }
 pub fn mangle_value(prefix: Atom, ctxt: SyntaxContext, func: &SFunc, value_id: SValueId) -> Ident {
     match &func.cfg.values[value_id].value {
-        SValue::Param { block, idx, ty: _ } => {
-            mangle_param(prefix, ctxt, *block, *idx)
-        }
+        SValue::Param { block, idx, ty: _ } => mangle_param(prefix, ctxt, *block, *idx),
         SValue::Item {
             item: Item::Just { id },
             span: _,
         } => mangle_value(prefix, ctxt, func, *id),
         SValue::EdgeBlocker { value, span: _ } => mangle_value(prefix, ctxt, func, *value),
-        _ => {
-            (Atom::new(format!("{prefix}$v{}", value_id.index())), ctxt)
-        }
+        _ => (Atom::new(format!("{prefix}$v{}", value_id.index())), ctxt),
     }
 }

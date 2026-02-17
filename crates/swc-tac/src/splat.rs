@@ -224,13 +224,15 @@ impl Splatting {
                     })
                     .unwrap();
                 if let Some(thid) = self.this_val.as_ref()
-                    && let Item::This = &mut stmt.right {
-                        stmt.right = Item::Just { id: thid.clone() }
-                    }
+                    && let Item::This = &mut stmt.right
+                {
+                    stmt.right = Item::Just { id: thid.clone() }
+                }
                 if let Some((_, _, a)) = self.ret.as_ref()
-                    && let Item::Arguments = &mut stmt.right {
-                        stmt.right = Item::Just { id: a.clone() }
-                    }
+                    && let Item::Arguments = &mut stmt.right
+                {
+                    stmt.right = Item::Just { id: a.clone() }
+                }
                 if let Item::Call { callee, args } = &stmt.right {
                     macro_rules! func {
                         ($value:expr, $func:expr, $arrow:expr) => {
@@ -258,17 +260,15 @@ impl Splatting {
                             let mut value = value.clone();
                             'a: loop {
                                 if !self.stack.contains(&value) {
-                                    if let Some(e) = consts
-                                        .and_then(|a| a.map.get(&value))
-                                        .map(Box::as_ref)
+                                    if let Some(e) =
+                                        consts.and_then(|a| a.map.get(&value)).map(Box::as_ref)
                                         && let Expr::Fn(f) = e
-                                            && let Ok(g) =
-                                                (map.to_cfg)(&f.function).and_then(|a| {
-                                                    TFunc::try_from_with_mapper(&a, map.bud())
-                                                })
-                                            {
-                                                func!(value, g, ThisArg::<Ident>::This)
-                                            }
+                                        && let Ok(g) = (map.to_cfg)(&f.function).and_then(|a| {
+                                            TFunc::try_from_with_mapper(&a, map.bud())
+                                        })
+                                    {
+                                        func!(value, g, ThisArg::<Ident>::This)
+                                    }
                                     if let Some((func, arrow)) =
                                         output.func_and_this(value.clone(), None, (), &Verbatim)
                                     {
@@ -306,99 +306,93 @@ impl Splatting {
                         callee: TCallee::Member { func, member },
                         args,
                     } = &stmt.right
-                        && let Some(Item::Lit {
-                            lit: Lit::Str(method),
-                        }) = input.def(LId::Id { id: member.clone() })
-                        {
-                            macro_rules! func {
-                                ($value:expr, $func:expr, $arrow:expr) => {
-                                    match $func {
-                                        func => match $arrow {
-                                            arrow => {
-                                                match method.value.as_str().unwrap_or("nope") {
-                                                    "call" => {
-                                                        if let SpreadOr {
-                                                            is_spread: false,
-                                                            value: this_arg,
-                                                        } = &args[0]
-                                                        {
-                                                            out_block = self.sub(
-                                                                out_block,
-                                                                output,
-                                                                $value,
-                                                                ThisArg::Val(this_arg.clone()),
-                                                                &stmt,
-                                                                &func,
-                                                                &args[1..],
-                                                                map.bud(),
-                                                            );
-                                                            continue 'b;
-                                                        }
-                                                    }
-                                                    "apply" => {
-                                                        if let SpreadOr {
-                                                            is_spread: false,
-                                                            value: this_arg,
-                                                        } = &args[0]
-                                                        {
-                                                            if let SpreadOr {
-                                                                is_spread: false,
-                                                                value: args,
-                                                            } = &args[1]
-                                                            {
-                                                                out_block = self.sub(
-                                                                    out_block,
-                                                                    output,
-                                                                    $value,
-                                                                    ThisArg::Val(this_arg.clone()),
-                                                                    &stmt,
-                                                                    &func,
-                                                                    &[SpreadOr {
-                                                                        is_spread: true,
-                                                                        value: args.clone(),
-                                                                    }],
-                                                                    map.bud(),
-                                                                );
-                                                                continue 'b;
-                                                            }
-                                                        }
-                                                    }
-                                                    _ => {}
+                    && let Some(Item::Lit {
+                        lit: Lit::Str(method),
+                    }) = input.def(LId::Id { id: member.clone() })
+                {
+                    macro_rules! func {
+                        ($value:expr, $func:expr, $arrow:expr) => {
+                            match $func {
+                                func => match $arrow {
+                                    arrow => match method.value.as_str().unwrap_or("nope") {
+                                        "call" => {
+                                            if let SpreadOr {
+                                                is_spread: false,
+                                                value: this_arg,
+                                            } = &args[0]
+                                            {
+                                                out_block = self.sub(
+                                                    out_block,
+                                                    output,
+                                                    $value,
+                                                    ThisArg::Val(this_arg.clone()),
+                                                    &stmt,
+                                                    &func,
+                                                    &args[1..],
+                                                    map.bud(),
+                                                );
+                                                continue 'b;
+                                            }
+                                        }
+                                        "apply" => {
+                                            if let SpreadOr {
+                                                is_spread: false,
+                                                value: this_arg,
+                                            } = &args[0]
+                                            {
+                                                if let SpreadOr {
+                                                    is_spread: false,
+                                                    value: args,
+                                                } = &args[1]
+                                                {
+                                                    out_block = self.sub(
+                                                        out_block,
+                                                        output,
+                                                        $value,
+                                                        ThisArg::Val(this_arg.clone()),
+                                                        &stmt,
+                                                        &func,
+                                                        &[SpreadOr {
+                                                            is_spread: true,
+                                                            value: args.clone(),
+                                                        }],
+                                                        map.bud(),
+                                                    );
+                                                    continue 'b;
                                                 }
                                             }
-                                        },
-                                    }
-                                };
+                                        }
+                                        _ => {}
+                                    },
+                                },
                             }
-                            let mut value = func.clone();
-                            'a: loop {
-                                if !self.stack.contains(&value) {
-                                    if let Some(e) = consts
-                                        .and_then(|a| a.map.get(&value))
-                                        .map(Box::as_ref)
-                                        && let Expr::Fn(f) = e
-                                            && let Ok(g) =
-                                                (map.to_cfg)(&f.function).and_then(|a| {
-                                                    TFunc::try_from_with_mapper(&a, map.bud())
-                                                })
-                                            {
-                                                func!(value, g, false)
-                                            }
-                                    if let Some(Item::Func { func, arrow }) =
-                                        output.def(LId::Id { id: value.clone() }).cloned()
-                                    {
-                                        func!(value, func, arrow);
-                                        // }
-                                    }
-                                }
-                                let Some(Item::Just { id }) =
-                                    output.def(LId::Id { id: value.clone() }).cloned()
-                                else {
-                                    break;
-                                };
-                                value = id;
+                        };
+                    }
+                    let mut value = func.clone();
+                    'a: loop {
+                        if !self.stack.contains(&value) {
+                            if let Some(e) = consts.and_then(|a| a.map.get(&value)).map(Box::as_ref)
+                                && let Expr::Fn(f) = e
+                                && let Ok(g) = (map.to_cfg)(&f.function)
+                                    .and_then(|a| TFunc::try_from_with_mapper(&a, map.bud()))
+                            {
+                                func!(value, g, false)
+                            }
+                            if let Some(Item::Func { func, arrow }) =
+                                output.def(LId::Id { id: value.clone() }).cloned()
+                            {
+                                func!(value, func, arrow);
+                                // }
                             }
                         }
+                        let Some(Item::Just { id }) =
+                            output.def(LId::Id { id: value.clone() }).cloned()
+                        else {
+                            break;
+                        };
+                        value = id;
+                    }
+                }
                 output.blocks[out_block].stmts.push(stmt);
             }
             output.blocks[out_block].post.orig_span = input.blocks[in_block].post.orig_span;
