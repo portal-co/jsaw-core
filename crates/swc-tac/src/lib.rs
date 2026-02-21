@@ -342,11 +342,16 @@ impl TryFrom<Func> for TFunc {
         TryFrom::try_from(&value)
     }
 }
+impl<'a> TryFrom<&'a Function> for TFunc {
+    type Error = anyhow::Error;
+    fn try_from(value: &'a Function) -> Result<Self, Self::Error> {
+        mapped(|m| TFunc::try_from_direct_with_mapper(value, m))
+    }
+}
 impl TryFrom<Function> for TFunc {
     type Error = anyhow::Error;
     fn try_from(value: Function) -> Result<Self, Self::Error> {
-        let a: Func = value.try_into()?;
-        a.try_into()
+        TryFrom::try_from(&value)
     }
 }
 impl Default for TFunc {

@@ -9,33 +9,32 @@
 use cfg_traits::Target;
 
 use crate::*;
-pub trait ToCfgCfg {
+pub trait ToCfgCfg<Sidecar> {
     type Block: Ord + Copy;
-    type SidecarContext;
     fn stmt(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         stmt: &Stmt,
         block: Self::Block,
     ) -> Self::Block;
-    fn new_block(&mut self, sidecar: &mut Self::SidecarContext) -> Self::Block;
+    fn new_block(&mut self, sidecar: &mut Sidecar) -> Self::Block;
     fn trap_catch(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         block: Self::Block,
         pat: &Pat,
         catch_block: Self::Block,
     );
     fn jump(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         current: Self::Block,
         target: Self::Block,
         span: Option<Span>,
     );
     fn cond_jmp(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         current: Self::Block,
         cond: &Expr,
         if_true: Self::Block,
@@ -44,21 +43,21 @@ pub trait ToCfgCfg {
     );
     fn throw(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         current: Self::Block,
         arg: &Expr,
         span: Option<Span>,
     );
     fn return_(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         current: Self::Block,
         arg: Option<&Expr>,
         span: Option<Span>,
     );
     fn switch(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut Sidecar,
         current: Self::Block,
         discriminant: &Expr,
         blocks: Vec<(&Expr, Self::Block)>,
@@ -66,19 +65,19 @@ pub trait ToCfgCfg {
         span: Option<Span>,
     );
 }
-impl ToCfgCfg for Cfg {
+impl<T> ToCfgCfg<T> for Cfg {
     type Block = BlockId;
-    type SidecarContext = ();
+
     fn stmt(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         stmt: &Stmt,
         block: Self::Block,
     ) -> Self::Block {
         self.blocks[block].stmts.push(stmt.clone());
         block
     }
-    fn new_block(&mut self, sidecar: &mut Self::SidecarContext) -> Self::Block {
+    fn new_block(&mut self, sidecar: &mut T) -> Self::Block {
         self.blocks.alloc(Block {
             stmts: vec![],
             end: End {
@@ -90,7 +89,7 @@ impl ToCfgCfg for Cfg {
     }
     fn jump(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         current: Self::Block,
         target: Self::Block,
         span: Option<Span>,
@@ -100,7 +99,7 @@ impl ToCfgCfg for Cfg {
     }
     fn cond_jmp(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         current: Self::Block,
         cond: &Expr,
         if_true: Self::Block,
@@ -116,7 +115,7 @@ impl ToCfgCfg for Cfg {
     }
     fn throw(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         current: Self::Block,
         arg: &Expr,
         span: Option<Span>,
@@ -126,7 +125,7 @@ impl ToCfgCfg for Cfg {
     }
     fn return_(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         current: Self::Block,
         arg: Option<&Expr>,
         span: Option<Span>,
@@ -136,7 +135,7 @@ impl ToCfgCfg for Cfg {
     }
     fn trap_catch(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         block: Self::Block,
         pat: &Pat,
         catch_block: Self::Block,
@@ -148,7 +147,7 @@ impl ToCfgCfg for Cfg {
     }
     fn switch(
         &mut self,
-        sidecar: &mut Self::SidecarContext,
+        sidecar: &mut T,
         current: Self::Block,
         discriminant: &Expr,
         blocks: Vec<(&Expr, Self::Block)>,
@@ -172,12 +171,12 @@ pub struct Loop<T = BlockId> {
     pub r#continue: T,
 }
 
-pub struct ToCfgConversionCtx<TargetCfg: ToCfgCfg = Cfg> {
+pub struct ToCfgConversionCtx<Sidecar = (), TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     pub catch: Catch<TargetCfg::Block>,
     pub cur_loop: Option<Loop<TargetCfg::Block>>,
     pub labelled: HashMap<Ident, Loop<TargetCfg::Block>>,
 }
-impl<TargetCfg: ToCfgCfg> Default for ToCfgConversionCtx<TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> Default for ToCfgConversionCtx<Sidecar, TargetCfg> {
     fn default() -> Self {
         Self {
             catch: Catch::Throw,
@@ -186,7 +185,7 @@ impl<TargetCfg: ToCfgCfg> Default for ToCfgConversionCtx<TargetCfg> {
         }
     }
 }
-impl<TargetCfg: ToCfgCfg> Clone for ToCfgConversionCtx<TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> Clone for ToCfgConversionCtx<Sidecar, TargetCfg> {
     fn clone(&self) -> Self {
         Self {
             catch: self.catch.clone(),
@@ -195,23 +194,23 @@ impl<TargetCfg: ToCfgCfg> Clone for ToCfgConversionCtx<TargetCfg> {
         }
     }
 }
-pub trait ToCfg<TargetCfg: ToCfgCfg = Cfg> {
+pub trait ToCfg<Sidecar = (), TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
     ) -> anyhow::Result<TargetCfg::Block>;
 }
-impl<T: ToCfg<TargetCfg> + ?Sized, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for &'_ T {
+impl<T: ToCfg<Sidecar, TargetCfg> + ?Sized, Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for &'_ T {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -219,12 +218,12 @@ impl<T: ToCfg<TargetCfg> + ?Sized, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for &'_
         (**self).transform(ctx, cfg, sidecar, current, label)
     }
 }
-impl<T: ToCfg<TargetCfg>, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for Vec<T> {
+impl<T: ToCfg<Sidecar, TargetCfg>, Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Vec<T> {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -232,12 +231,12 @@ impl<T: ToCfg<TargetCfg>, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for Vec<T> {
         ctx.transform_all(cfg, sidecar, self, current, label)
     }
 }
-impl<T: ToCfg<TargetCfg>, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for [T] {
+impl<T: ToCfg<Sidecar, TargetCfg>, Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for [T] {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -245,28 +244,28 @@ impl<T: ToCfg<TargetCfg>, TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for [T] {
         ctx.transform_all(cfg, sidecar, self, current, label)
     }
 }
-struct If<'a, TargetCfg: ToCfgCfg = Cfg> {
+struct If<'a,Sidecar, TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     span: Span,
     test: &'a Expr,
-    cons: &'a (dyn ToCfg<TargetCfg> + 'a),
-    alt: Option<&'a (dyn ToCfg<TargetCfg> + 'a)>,
+    cons: &'a (dyn ToCfg<Sidecar, TargetCfg> + 'a),
+    alt: Option<&'a (dyn ToCfg<Sidecar, TargetCfg> + 'a)>,
 }
-struct DoWhile<'a, TargetCfg: ToCfgCfg = Cfg> {
+struct DoWhile<'a,Sidecar, TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     span: Span,
     test: &'a Expr,
-    body: &'a (dyn ToCfg<TargetCfg> + 'a),
+    body: &'a (dyn ToCfg<Sidecar, TargetCfg> + 'a),
 }
-struct While<'a, TargetCfg: ToCfgCfg = Cfg> {
+struct While<'a,Sidecar, TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     span: Span,
     test: &'a Expr,
-    body: &'a (dyn ToCfg<TargetCfg> + 'a),
+    body: &'a (dyn ToCfg<Sidecar, TargetCfg> + 'a),
 }
-impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for DoWhile<'_, TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for DoWhile<'_, Sidecar, TargetCfg> {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -296,12 +295,12 @@ impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for DoWhile<'_, TargetCfg> {
         Ok(next)
     }
 }
-impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for If<'_, TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for If<'_, Sidecar, TargetCfg> {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -335,12 +334,12 @@ impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for If<'_, TargetCfg> {
         Ok(next)
     }
 }
-impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for While<'_, TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for While<'_, Sidecar, TargetCfg> {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         current: TargetCfg::Block,
         label: Option<Ident>,
@@ -373,12 +372,12 @@ impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for While<'_, TargetCfg> {
         )
     }
 }
-impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for Stmt {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
     fn transform(
         &self,
-        ctx: &ToCfgConversionCtx<TargetCfg>,
+        ctx: &ToCfgConversionCtx<Sidecar, TargetCfg>,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
+        sidecar: &mut Sidecar,
         // statement: Stmt,
         mut current: TargetCfg::Block,
         label: Option<Ident>,
@@ -627,12 +626,12 @@ impl<TargetCfg: ToCfgCfg> ToCfg<TargetCfg> for Stmt {
         Ok(current)
     }
 }
-impl<TargetCfg: ToCfgCfg> ToCfgConversionCtx<TargetCfg> {
+impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfgConversionCtx<Sidecar, TargetCfg> {
     pub fn transform_all(
         &self,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
-        statements: &[impl ToCfg<TargetCfg>],
+        sidecar: &mut Sidecar,
+        statements: &[impl ToCfg<Sidecar, TargetCfg>],
         mut current: TargetCfg::Block,
         label: Option<Ident>,
     ) -> anyhow::Result<TargetCfg::Block> {
@@ -644,8 +643,8 @@ impl<TargetCfg: ToCfgCfg> ToCfgConversionCtx<TargetCfg> {
     pub fn transform(
         &self,
         cfg: &mut TargetCfg,
-        sidecar: &mut TargetCfg::SidecarContext,
-        statement: &(dyn ToCfg<TargetCfg> + '_),
+        sidecar: &mut Sidecar,
+        statement: &(dyn ToCfg<Sidecar, TargetCfg> + '_),
         current: TargetCfg::Block,
         label: Option<Ident>,
     ) -> anyhow::Result<TargetCfg::Block> {
