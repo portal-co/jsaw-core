@@ -145,7 +145,7 @@ impl TFunc {
             value.body.as_ref().map(|a| &*a.stmts).unwrap_or(&[]),
             entry,
             None,
-        );
+        )?;
         cfg.ts_retty = value.return_type.clone().map(|a| *a);
         cfg.generics = value.type_params.clone().map(|a| *a);
         let mut ts_params = vec![];
