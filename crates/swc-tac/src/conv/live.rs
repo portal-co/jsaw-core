@@ -146,8 +146,8 @@ impl TFunc {
             entry,
             None,
         );
-        // cfg.ts_retty = value.cfg.ts_retty.clone();
-        // cfg.generics = value.cfg.generics.clone();
+        cfg.ts_retty = value.return_type.clone().map(|a| *a);
+        cfg.generics = value.type_params.clone().map(|a| *a);
         let mut ts_params = vec![];
         let mut params = if value.params.iter().any(|a| a.pat.is_rest()) {
             // ts_params.extend(value.params.iter().map(|_| None));
