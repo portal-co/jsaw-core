@@ -6,32 +6,35 @@
 //! - Control flow structures (loops, conditionals, try-catch)
 //! - Labels and break/continue statements
 
+use std::convert::Infallible;
+
 use cfg_traits::Target;
 
 use crate::*;
 pub trait ToCfgCfg<Sidecar> {
     type Block: Ord + Copy;
+    type Error: Into<anyhow::Error>;
     fn stmt(
         &mut self,
         sidecar: &mut Sidecar,
         stmt: &Stmt,
         block: Self::Block,
-    ) -> Self::Block;
-    fn new_block(&mut self, sidecar: &mut Sidecar) -> Self::Block;
+    ) -> Result<Self::Block, Self::Error>;
+    fn new_block(&mut self, sidecar: &mut Sidecar) -> Result<Self::Block, Self::Error>;
     fn trap_catch(
         &mut self,
         sidecar: &mut Sidecar,
         block: Self::Block,
         pat: &Pat,
         catch_block: Self::Block,
-    );
+    ) -> Result<(), Self::Error>;
     fn jump(
         &mut self,
         sidecar: &mut Sidecar,
         current: Self::Block,
         target: Self::Block,
         span: Option<Span>,
-    );
+    ) -> Result<(), Self::Error>;
     fn cond_jmp(
         &mut self,
         sidecar: &mut Sidecar,
@@ -40,21 +43,21 @@ pub trait ToCfgCfg<Sidecar> {
         if_true: Self::Block,
         if_false: Self::Block,
         span: Option<Span>,
-    );
+    ) -> Result<(), Self::Error>;
     fn throw(
         &mut self,
         sidecar: &mut Sidecar,
         current: Self::Block,
         arg: &Expr,
         span: Option<Span>,
-    );
+    ) -> Result<(), Self::Error>;
     fn return_(
         &mut self,
         sidecar: &mut Sidecar,
         current: Self::Block,
         arg: Option<&Expr>,
         span: Option<Span>,
-    );
+    ) -> Result<(), Self::Error>;
     fn switch(
         &mut self,
         sidecar: &mut Sidecar,
@@ -63,29 +66,30 @@ pub trait ToCfgCfg<Sidecar> {
         blocks: Vec<(&Expr, Self::Block)>,
         default: Self::Block,
         span: Option<Span>,
-    );
+    ) -> Result<(), Self::Error>;
 }
 impl<T> ToCfgCfg<T> for Cfg {
     type Block = BlockId;
+    type Error = Infallible;
 
     fn stmt(
         &mut self,
         sidecar: &mut T,
         stmt: &Stmt,
         block: Self::Block,
-    ) -> Self::Block {
+    ) -> Result<Self::Block, Self::Error> {
         self.blocks[block].stmts.push(stmt.clone());
-        block
+        Ok(block)
     }
-    fn new_block(&mut self, sidecar: &mut T) -> Self::Block {
-        self.blocks.alloc(Block {
+    fn new_block(&mut self, sidecar: &mut T) -> Result<Self::Block, Self::Error> {
+        Ok( self.blocks.alloc(Block {
             stmts: vec![],
             end: End {
                 catch: Catch::Throw,
                 term: Term::Default,
                 orig_span: None,
             },
-        })
+        }))
     }
     fn jump(
         &mut self,
@@ -93,9 +97,10 @@ impl<T> ToCfgCfg<T> for Cfg {
         current: Self::Block,
         target: Self::Block,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::Jmp(target);
+        Ok(())
     }
     fn cond_jmp(
         &mut self,
@@ -105,13 +110,14 @@ impl<T> ToCfgCfg<T> for Cfg {
         if_true: Self::Block,
         if_false: Self::Block,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::CondJmp {
             cond: cond.clone(),
             if_true,
             if_false,
         };
+        Ok(())
     }
     fn throw(
         &mut self,
@@ -119,9 +125,10 @@ impl<T> ToCfgCfg<T> for Cfg {
         current: Self::Block,
         arg: &Expr,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::Throw(arg.clone());
+        Ok(())
     }
     fn return_(
         &mut self,
@@ -129,9 +136,10 @@ impl<T> ToCfgCfg<T> for Cfg {
         current: Self::Block,
         arg: Option<&Expr>,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::Return(arg.cloned());
+        Ok(())
     }
     fn trap_catch(
         &mut self,
@@ -139,11 +147,12 @@ impl<T> ToCfgCfg<T> for Cfg {
         block: Self::Block,
         pat: &Pat,
         catch_block: Self::Block,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[block].end.catch = Catch::Jump {
             pat: pat.clone(),
             k: catch_block,
         };
+        Ok(())
     }
     fn switch(
         &mut self,
@@ -153,13 +162,14 @@ impl<T> ToCfgCfg<T> for Cfg {
         blocks: Vec<(&Expr, Self::Block)>,
         default: Self::Block,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::Switch {
             x: discriminant.clone(),
             blocks: blocks.into_iter().map(|(e, b)| (e.clone(), b)).collect(),
             default,
         };
+        Ok(())
     }
 }
 /// Loop context information.
@@ -271,9 +281,9 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for DoWhil
         label: Option<Ident>,
     ) -> anyhow::Result<TargetCfg::Block> {
         let do_while_stmt = self;
-        let next = cfg.new_block(sidecar);
-        let cont = cfg.new_block(sidecar);
-        cfg.jump(sidecar, current, cont, Some(do_while_stmt.span));
+        let next = cfg.new_block(sidecar).map_err(|e|e.into())?;
+        let cont = cfg.new_block(sidecar).map_err(|e|e.into())?;
+        cfg.jump(sidecar, current, cont, Some(do_while_stmt.span)).map_err(|e|e.into())?;
         let mut new = ctx.clone();
         new.cur_loop = Some(Loop {
             r#break: next,
@@ -291,7 +301,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for DoWhil
             cont,
             next,
             Some(do_while_stmt.span),
-        );
+        ).map_err(|e|e.into())?;
         Ok(next)
     }
 }
@@ -307,8 +317,8 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for If<'_,
     ) -> anyhow::Result<TargetCfg::Block> {
         let if_stmt = self;
         let span = if_stmt.span;
-        let next = cfg.new_block(sidecar);
-        let then = cfg.new_block(sidecar);
+        let next = cfg.new_block(sidecar).map_err(|e|e.into())?;
+        let then = cfg.new_block(sidecar).map_err(|e|e.into())?;
         let then_end = ctx.transform(
             cfg,
             sidecar,
@@ -319,17 +329,17 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for If<'_,
                 Some(_) => None,
             },
         )?;
-        cfg.jump(sidecar, then_end, next, None);
+        cfg.jump(sidecar, then_end, next, None).map_err(|e|e.into())?;
         let els = match if_stmt.alt.as_ref() {
             None => then,
             Some(else_stmt) => {
-                let els = cfg.new_block(sidecar);
+                let els = cfg.new_block(sidecar).map_err(|e|e.into())?;
                 let els_end = ctx.transform(cfg, sidecar, &**else_stmt, current, None)?;
-                cfg.jump(sidecar, els_end, next, None);
+                cfg.jump(sidecar, els_end, next, None).map_err(|e|e.into())?;
                 els
             }
         };
-        cfg.cond_jmp(sidecar, current, &if_stmt.test, then, els, Some(span));
+        cfg.cond_jmp(sidecar, current, &if_stmt.test, then, els, Some(span)).map_err(|e|e.into())?;
 
         Ok(next)
     }
@@ -385,7 +395,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
         let statement = self;
         if let Stmt::Throw(throw_stmt) = statement {
             cfg.throw(sidecar, current, &throw_stmt.arg, Some(throw_stmt.span()));
-            return Ok(cfg.new_block(sidecar));
+            return Ok(cfg.new_block(sidecar).map_err(|e|e.into())?);
         }
         if let Stmt::Return(return_stmt) = statement {
             cfg.return_(
@@ -394,15 +404,15 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 return_stmt.arg.as_deref(),
                 Some(return_stmt.span()),
             );
-            return Ok(cfg.new_block(sidecar));
+            return Ok(cfg.new_block(sidecar).map_err(|e|e.into())?);
         }
         if let Stmt::Try(try_stmt) = statement {
             let span = try_stmt.span();
-            let next = cfg.new_block(sidecar);
+            let next = cfg.new_block(sidecar).map_err(|e|e.into())?;
             let catch = match &try_stmt.handler {
                 None => None,
                 Some(catch_clause) => Some({
-                    let catch_block_id = cfg.new_block(sidecar);
+                    let catch_block_id = cfg.new_block(sidecar).map_err(|e|e.into())?;
                     let catch_end_id = ctx.transform_all(
                         cfg,
                         sidecar,
@@ -410,7 +420,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                         catch_block_id,
                         None,
                     )?;
-                    cfg.jump(sidecar, catch_end_id, next, None);
+                    cfg.jump(sidecar, catch_end_id, next, None).map_err(|e|e.into())?;
                     (
                         catch_clause
                             .param
@@ -465,7 +475,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
         }
         if let Stmt::Switch(switch_stmt) = statement {
             let span = switch_stmt.span();
-            let next = cfg.new_block(sidecar);
+            let next = cfg.new_block(sidecar).map_err(|e|e.into())?;
             let mut target = ctx.clone();
             if target.cur_loop.is_none() {
                 target.cur_loop = Some(Loop {
@@ -474,7 +484,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 })
             };
             target.cur_loop.as_mut().unwrap().r#break = next;
-            let mut cur = cfg.new_block(sidecar);
+            let mut cur = cfg.new_block(sidecar).map_err(|e|e.into())?;
             let mut default = next;
             let mut blocks = HashMap::new();
             for case in switch_stmt.cases.iter() {
@@ -489,7 +499,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                     }
                 }
             }
-            cfg.jump(sidecar, current, cur, Some(span));
+            cfg.jump(sidecar, current, cur, Some(span)).map_err(|e|e.into())?;
             cfg.switch(
                 sidecar,
                 current,
@@ -497,7 +507,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 blocks.into_iter().collect(),
                 default,
                 Some(span),
-            );
+            ).map_err(|e|e.into())?;
 
             return Ok(next);
         }
@@ -512,8 +522,8 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 .context("in getting the current loop")?
                 .r#break,
                 Some(break_stmt.span()),
-            );
-            return Ok(cfg.new_block(sidecar));
+            ).map_err(|e|e.into())?;
+            return Ok(cfg.new_block(sidecar).map_err(|e|e.into())?);
         }
         if let Stmt::Continue(continue_stmt) = statement {
             cfg.jump(
@@ -526,13 +536,13 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 .context("in getting the current loop")?
                 .r#continue,
                 Some(continue_stmt.span()),
-            );
-            return Ok(cfg.new_block(sidecar));
+            ).map_err(|e|e.into())?;
+            return Ok(cfg.new_block(sidecar).map_err(|e|e.into())?);
         }
         if let Stmt::Labeled(labeled_stmt) = statement {
-            let next = cfg.new_block(sidecar);
-            let cont = cfg.new_block(sidecar);
-            cfg.jump(sidecar, current, cont, Some(labeled_stmt.span));
+            let next = cfg.new_block(sidecar).map_err(|e|e.into())?;
+            let cont = cfg.new_block(sidecar).map_err(|e|e.into())?;
+            cfg.jump(sidecar, current, cont, Some(labeled_stmt.span)).map_err(|e|e.into())?;
             let mut new = ctx.clone();
             new.labelled.insert(
                 labeled_stmt.label.clone(),
@@ -591,7 +601,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                         }),
                     },
                     current,
-                );
+                ).map_err(|e|e.into())?;
             }
             let true_ = Box::new(Expr::Lit(Lit::Bool(Bool {
                 span: for_stmt.span,
@@ -622,7 +632,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 label,
             );
         }
-        current = cfg.stmt(sidecar, statement, current);
+        current = cfg.stmt(sidecar, statement, current).map_err(|e|e.into())?;
         Ok(current)
     }
 }

@@ -6,18 +6,19 @@ pub struct LiveConverter<'a> {
 }
 impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
     type Block = TBlockId;
+    type Error = anyhow::Error;
 
     fn stmt(
         &mut self,
         sidecar: &mut LiveConverter<'a>,
         stmt: &Stmt,
         block: Self::Block,
-    ) -> Self::Block {
-        sidecar.core.stmt(self, block, stmt).unwrap()
+    ) -> Result<Self::Block, Self::Error> {
+        sidecar.core.stmt(self, block, stmt)
     }
 
-    fn new_block(&mut self, sidecar: &mut LiveConverter<'a>) -> Self::Block {
-        self.blocks.alloc(Default::default())
+    fn new_block(&mut self, sidecar: &mut LiveConverter<'a>) -> Result<Self::Block, Self::Error> {
+        Ok(self.blocks.alloc(Default::default()))
     }
 
     fn trap_catch(
@@ -26,7 +27,7 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         block: Self::Block,
         pat: &Pat,
         catch_block: Self::Block,
-    ) {
+    ) -> Result<(), Self::Error> {
         match pat {
             Pat::Ident(pat) => {
                 self.blocks[block].post.catch = TCatch::Jump {
@@ -36,6 +37,7 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
             }
             _ => todo!(),
         }
+        Ok(())
     }
 
     fn jump(
@@ -44,9 +46,10 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         current: Self::Block,
         target: Self::Block,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         self.blocks[current].post.term = TTerm::Jmp(target);
         self.blocks[current].post.orig_span = span;
+        Ok(())
     }
 
     fn cond_jmp(
@@ -57,14 +60,15 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         if_true: Self::Block,
         if_false: Self::Block,
         span: Option<Span>,
-    ) {
-        let (cond, current) = sidecar.core.expr(self, current, cond).unwrap();
+    ) -> Result<(), Self::Error> {
+        let (cond, current) = sidecar.core.expr(self, current, cond)?;
         self.blocks[current].post.term = TTerm::CondJmp {
             cond,
             if_true,
             if_false,
         };
         self.blocks[current].post.orig_span = span;
+        Ok(())
     }
 
     fn throw(
@@ -73,10 +77,11 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         current: Self::Block,
         arg: &Expr,
         span: Option<Span>,
-    ) {
-        let (arg, current) = sidecar.core.expr(self, current, arg).unwrap();
+    ) -> Result<(), Self::Error> {
+        let (arg, current) = sidecar.core.expr(self, current, arg)?;
         self.blocks[current].post.term = TTerm::Throw(arg);
         self.blocks[current].post.orig_span = span;
+        Ok(())
     }
 
     fn return_(
@@ -85,16 +90,17 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         current: Self::Block,
         arg: Option<&Expr>,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         let (arg, current) = match arg {
             Some(expr) => {
-                let (arg, current) = sidecar.core.expr(self, current, expr).unwrap();
+                let (arg, current) = sidecar.core.expr(self, current, expr)?;
                 (Some(arg), current)
             }
             None => (None, current),
         };
         self.blocks[current].post.term = TTerm::Return(arg);
         self.blocks[current].post.orig_span = span;
+        Ok(())
     }
 
     fn switch(
@@ -105,12 +111,12 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
         blocks: Vec<(&Expr, Self::Block)>,
         default: Self::Block,
         span: Option<Span>,
-    ) {
+    ) -> Result<(), Self::Error> {
         let (discriminant, mut current) = sidecar.core.expr(self, current, discriminant).unwrap();
         let mut blocks_map = Vec::new();
         for (expr, block) in blocks {
             let id;
-            (id, current) = sidecar.core.expr(self, current, expr).unwrap();
+            (id, current) = sidecar.core.expr(self, current, expr)?;
             blocks_map.push((id, block));
         }
         self.blocks[current].post.term = TTerm::Switch {
@@ -119,6 +125,7 @@ impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
             default,
         };
         self.blocks[current].post.orig_span = span;
+        Ok(())
     }
 }
 impl TFunc {
