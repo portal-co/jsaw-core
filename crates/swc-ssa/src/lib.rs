@@ -920,4 +920,50 @@ mod tests {
 
         module.visit_with(&mut TestVisitor);
     });
+
+    /// Regression test: function parameters must be represented by their SSA block-param
+    /// values, not by raw `SValue::LoadId` nodes.
+    ///
+    /// Before the fix, `ToSSAConverter::load()` would fall through to emitting
+    /// `SValue::LoadId(ident)` for any name absent from `state`.  Parameters are
+    /// intentionally absent from `state` (they live in `decls`'s complement), so
+    /// every parameter reference silently became a by-name load instead of the
+    /// `SValue::Param` that was already allocated in the entry block.
+    portal_solutions_swibb::simple_module_test!(test_params_no_load_id ["
+    export function foo(a, b){
+    return a + b 
+    }
+    "] => |_sm, module| {
+        use swc_ecma_visit::Visit;
+        use crate::{SFunc, SValue};
+        use swc_tac::TFunc;
+
+        struct ParamLoadIdChecker;
+        impl Visit for ParamLoadIdChecker {
+            fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
+                let tfunc = TFunc::try_from(node.clone()).unwrap();
+                // Capture the parameter names before consuming tfunc.
+                let param_names: std::collections::BTreeSet<_> =
+                    tfunc.params.iter().cloned().collect();
+
+                let sfunc = SFunc::try_from(tfunc).unwrap();
+
+                // No value in the SSA CFG should be a LoadId whose name matches
+                // one of the function's parameters.  Such a node means the
+                // parameter was looked up by name instead of via its block param.
+                for (_id, val) in sfunc.cfg.values.iter() {
+                    if let SValue::LoadId(ident) = &val.value {
+                        assert!(
+                            !param_names.contains(ident),
+                            "parameter `{:?}` was emitted as SValue::LoadId instead of \
+                             being resolved to its SSA block-param value",
+                            ident
+                        );
+                    }
+                }
+            }
+        }
+
+        module.visit_with(&mut ParamLoadIdChecker);
+    });
 }
