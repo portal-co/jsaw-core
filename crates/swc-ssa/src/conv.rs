@@ -469,6 +469,42 @@ impl ToSSAConverter {
 }
 impl<'a> TryFrom<&'a TFunc> for SFunc {
     type Error = anyhow::Error;
+    /// Convert a TAC ([`TFunc`]) function into SSA form ([`SFunc`]).
+    ///
+    /// # Shim block
+    ///
+    /// The resulting [`SFunc`] always has **at least two blocks**:
+    ///
+    /// ```text
+    /// entry2  (shim / SFunc::entry)
+    ///   block-params : one per JS function parameter, in declaration order
+    ///   stmts        : [undef]   — a single undefined-value sentinel
+    ///   term         : Jmp { block: entry, args: decls.map(|d| params[d] or undef) }
+    ///
+    /// entry  (real body)
+    ///   block-params : one per declared variable (decls), in BTreeSet order
+    ///   stmts        : translated from TFunc body
+    ///   term         : translated from TFunc body
+    /// ```
+    ///
+    /// The jump from `entry2` to `entry` passes every element of `decls`
+    /// (the set of variables declared inside the function) as an argument,
+    /// resolving each one to the corresponding function-parameter value if it
+    /// is a parameter, or to `undef` otherwise.
+    ///
+    /// **Consequence for downstream IRs**: any pass that starts at `SFunc::entry`
+    /// (the shim) and follows the `Jmp` to the body will encounter a body block
+    /// whose explicit Jmp-arg count may be *less than* its param count.  Free
+    /// variables (params of the shim that the body reads directly) are captured
+    /// as free-variable references — they are in the shim's `vals` environment
+    /// but are not threaded through as explicit jump args.
+    ///
+    /// The Fast IR → CPS IR converter (`ContinuationConverter::conv` in
+    /// `dreamcompiler-cps/src/to_cps/fast.rs`) accounts for this by detecting
+    /// such free variables via `uses_val` and recording them in `val_args` on
+    /// the child `FullContinuation`, then appending matching `Primitive(())`
+    /// placeholders to `fast_args2` so the `cont.args.0` drain never
+    /// underflows.
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         // let domtree = ssa_impls::dom::domtree(value)
         //     .into_iter()
