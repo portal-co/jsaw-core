@@ -24,6 +24,7 @@
 //! [`ToSSAConverter`] - The main converter maintaining state during transformation
 
 use crate::*;
+use log;
 
 /// Converter for transforming TAC to SSA representation.
 ///
@@ -35,6 +36,10 @@ use crate::*;
 /// - `map`: Mapping from TAC blocks to SSA blocks
 /// - `all`: Set of all variables in scope
 /// - `undef`: A special "undefined" value used for uninitialized variables
+/// - `params`: Mapping from function parameter identifiers to their SSA block
+///   param values in the function entry block. This is needed so that uses of
+///   parameter names inside the body resolve to the correct `SValue::Param`
+///   rather than falling through to `SValue::LoadId`.
 /// - `domtree`: Dominance tree for the CFG
 #[non_exhaustive]
 pub struct ToSSAConverter {
@@ -44,6 +49,13 @@ pub struct ToSSAConverter {
     pub all: BTreeSet<Ident>,
     /// Special undefined value for uninitialized variables
     pub undef: SValueId,
+    /// Function parameter name → entry-block SSA param value.
+    ///
+    /// Parameters are not in `all` / `decls` (they are classified as externs
+    /// by the TAC layer), so without this map a reference to a parameter name
+    /// would not be found in `state` and `load()` would emit a `LoadId` —
+    /// a raw by-name load — instead of the proper block-param `SValueId`.
+    pub params: BTreeMap<Ident, SValueId>,
     // /// Dominance tree for control flow analysis
     // pub domtree: BTreeMap<Option<swc_tac::TBlockId>, swc_tac::TBlockId>,
 }
@@ -93,11 +105,13 @@ impl ToSSAConverter {
         cache: &BTreeMap<Ident, SValueId>,
     ) -> anyhow::Result<SValueId> {
         if let Some(k) = cache.get(&a) {
+            log::trace!("load: cache hit for {:?} → {:?}", a, k);
             return Ok(*k);
         }
         if let Some(d) = i.def(LId::Id { id: a.clone() })
             && inlinable(d, i)
         {
+            log::trace!("load: inlining definition of {:?}", a);
             let b = 'a: {
                 let b = match d {
                     Item::Undef => break 'a self.undef,
@@ -121,6 +135,23 @@ impl ToSSAConverter {
         let x = match state.get(&a).cloned() {
             Some(b) => b.0,
             None => {
+                // Bug fix: function parameters are not in `state` (they are not
+                // part of `decls`), but they DO have an SSA value allocated in
+                // the entry block.  Check `self.params` before falling through
+                // to a raw `LoadId`, which would represent the variable by name
+                // instead of by its proper block-param SSA value.
+                if let Some(&param_val) = self.params.get(&a) {
+                    log::trace!(
+                        "load: resolved param {:?} → SSA value {:?} (via params map)",
+                        a,
+                        param_val
+                    );
+                    return Ok(param_val);
+                }
+                log::trace!(
+                    "load: {:?} not in state or params; emitting LoadId",
+                    a
+                );
                 let v = o.values.alloc(SValue::LoadId(a).into());
                 o.blocks[t].stmts.push(v);
                 return Ok(v);
@@ -129,6 +160,7 @@ impl ToSSAConverter {
         if let Some(ty) = i.type_annotations.get(&a).cloned() {
             o.ts.insert(x, ty);
         };
+        log::trace!("load: resolved {:?} → SSA value {:?} (from state)", a, x);
         Ok(x)
     }
     pub fn trans(
@@ -150,8 +182,10 @@ impl ToSSAConverter {
     ) -> anyhow::Result<crate::SBlockId> {
         loop {
             if let Some(a) = self.map.get(&k) {
+                log::trace!("convert_block: TAC block {:?} already mapped → SSA block {:?}", k, a);
                 return Ok(*a);
             }
+            log::trace!("convert_block: beginning conversion of TAC block {:?}", k);
             let mut t = o.blocks.alloc(SBlock {
                 params: vec![],
                 stmts: vec![],
@@ -220,6 +254,12 @@ impl ToSSAConverter {
                 //         .map(|(a, b)| (a, (b, ValFlags::all()))),
                 // )
                 .collect::<BTreeMap<_, _>>();
+            log::trace!(
+                "convert_block: TAC block {:?} → SSA block {:?}; initial state vars: {:?}",
+                k,
+                t,
+                state.keys().collect::<Vec<_>>()
+            );
             self.apply_shim(o, &state, &shim, t);
             let mut cache = BTreeMap::new();
             for TStmt {
@@ -229,6 +269,7 @@ impl ToSSAConverter {
                 span: s,
             } in i.blocks[k].stmts.iter()
             {
+                log::trace!("convert_block: processing stmt lhs={:?} in SSA block {:?}", a, t);
                 let nothrow = b.nothrow();
                 let b = b.as_ref();
                 let b = 'a: {
@@ -465,10 +506,17 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             .into(),
         );
         cfg.blocks[entry2].stmts.push(undef);
+        log::trace!(
+            "TryFrom<TFunc>: entry2={:?}, decls={:?}, params={:?}",
+            entry2,
+            decls,
+            params.keys().collect::<Vec<_>>()
+        );
         let mut trans = ToSSAConverter {
             map: BTreeMap::new(),
             all: decls.clone(),
             undef,
+            params: params.clone(),
             // domtree,
         };
 
