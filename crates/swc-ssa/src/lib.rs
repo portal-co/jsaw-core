@@ -88,6 +88,7 @@ use swc_tac::{LId, inlinable};
 pub mod consts;
 // pub mod idw;
 pub mod conv;
+pub mod eval;
 pub mod impls;
 pub mod opt_stub;
 pub mod rew;
