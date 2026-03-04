@@ -134,6 +134,18 @@ pub enum Native<E> {
     InlineMe { n: Option<E> },
     /// Never executed; compilers can optimize this out
     Trim,
+    /// Hint to the compiler that `value` is truthy at the current program point.
+    ///
+    /// Emitted by `DreamcompModuleCore::clean` on the surviving branch of a
+    /// `CondJmp` whose other target was burnt (contained `trim()` or an
+    /// uncompilable identifier).  The value is the branch condition — possibly
+    /// negated when the *true* branch was the burnt one.
+    ///
+    /// Semantics: the wrapped value is evaluated (for side-effects) and the
+    /// compiler is informed the result is truthy.  No runtime assertion is
+    /// emitted; backends must lower this to a no-cost hint (e.g.
+    /// `__builtin_assume` in C/LLVM).
+    Assume { value: E },
 }
 impl Native<()> {
     pub fn all() -> impl Iterator<Item = Self> {
@@ -149,6 +161,7 @@ impl Native<()> {
             "inlineme",
             "inlineme_n",
             "trim",
+            "assume",
         ]
         .into_iter()
         .filter_map(Self::of)
@@ -214,6 +227,7 @@ impl Native<()> {
             "inlineme" => Self::InlineMe { n: None },
             "inlineme_n" => Self::InlineMe { n: Some(()) },
             "trim" => Self::Trim,
+            "assume" => Self::Assume { value: () },
             _ => return None,
         })
     }
@@ -264,6 +278,7 @@ impl<E> Native<E> {
                 None => "inlineme",
                 Some(_) => "inlineme_n",
             },
+            Native::Assume { value: _ } => "assume",
         }
     }
     pub fn as_ref(&self) -> Native<&E> {
@@ -293,6 +308,7 @@ impl<E> Native<E> {
             },
             Native::FastShl { lhs, rhs } => Native::FastShl { lhs, rhs },
             Native::InlineMe { n } => Native::InlineMe { n: n.as_ref() },
+            Native::Assume { value } => Native::Assume { value },
         }
     }
     pub fn as_mut(&mut self) -> Native<&mut E> {
@@ -322,6 +338,7 @@ impl<E> Native<E> {
             },
             Native::FastShl { lhs, rhs } => Native::FastShl { lhs, rhs },
             Native::InlineMe { n } => Native::InlineMe { n: n.as_mut() },
+            Native::Assume { value } => Native::Assume { value },
         }
     }
     pub fn map<E2, Er>(
@@ -377,6 +394,7 @@ impl<E> Native<E> {
                     Some(n) => Some(f(n)?),
                 },
             },
+            Native::Assume { value } => Native::Assume { value: f(value)? },
         })
     }
 }
