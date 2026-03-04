@@ -85,6 +85,7 @@ use swc_tac::{
     lam::{AtomResolver, DefaultAtomResolver},
 };
 use swc_tac::{LId, inlinable};
+pub mod clean;
 pub mod consts;
 // pub mod idw;
 pub mod conv;
