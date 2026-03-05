@@ -133,6 +133,12 @@ impl TFunc {
         value: &Function,
         mapper: Mapper<'_>,
     ) -> anyhow::Result<Self> {
+        log::debug!(
+            "converting Function directly to TFunc (live): {} params, is_async={}, is_generator={}",
+            value.params.len(),
+            value.is_async,
+            value.is_generator,
+        );
         let mut cfg = TCfg::default();
         cfg.regs = LAM::new(mapper.vars.clone());
         let mut conv = LiveConverter {

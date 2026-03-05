@@ -32,6 +32,7 @@ linearize = { workspace = true, features = ["derive"] }
 linearize-derive.workspace = true
 portal-solutions-swibb.workspace = true
 portal-solutions-proxy-signs.workspace = true
+log.workspace = true
 
 [features]
 rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-ll-common/rkyv-impl", "portal-jsc-swc-util/rkyv-impl", "portal-jsc-common/rkyv-impl"]

@@ -37,6 +37,7 @@ impl ToTACConverter<'_> {
     ) -> anyhow::Result<TBlockId> {
         loop {
             if let Some(a) = self.map.get(&b) {
+                log::trace!("cfg→tac: CFG block {:?} already mapped → TAC block {:?}", b, a);
                 return Ok(*a);
             }
             let t = o.blocks.alloc(TBlock {
@@ -47,6 +48,7 @@ impl ToTACConverter<'_> {
                     orig_span: i.blocks[b].end.orig_span,
                 },
             });
+            log::trace!("cfg→tac: converting CFG block {:?} → TAC block {:?}", b, t);
             self.map.insert(b, t);
             if let Catch::Jump { pat, k } = &i.blocks[b].end.catch {
                 match pat {
@@ -133,6 +135,12 @@ impl ToTACConverter<'_> {
 }
 impl TFunc {
     pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
+        log::debug!(
+            "converting CFG Func to TFunc: {} params, is_async={}, is_generator={}",
+            value.params.len(),
+            value.is_async,
+            value.is_generator,
+        );
         let mut cfg = TCfg::default();
         cfg.regs = LAM::new(mapper.vars.clone());
         let mut conv = ToTACConverter {

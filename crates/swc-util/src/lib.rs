@@ -145,7 +145,13 @@ impl ResolveNatives for Expr {
             }
         }
         match self {
-            Expr::Call(c) => expr(c, &**(c.callee.as_expr()?), import_map),
+            Expr::Call(c) => {
+                let result = expr(c, &**(c.callee.as_expr()?), import_map);
+                if result.is_some() {
+                    log::trace!("resolve_natives: resolved native function");
+                }
+                result
+            }
             _ => None,
         }
     }

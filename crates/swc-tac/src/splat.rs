@@ -35,6 +35,7 @@ use std::mem::replace;
 use swc_ll_common::ext::Verbatim;
 impl TFunc {
     pub fn splatted(&self, map: Mapper<'_>) -> TFunc {
+        log::debug!("inlining function calls (splatting) in TFunc");
         let mut s = Splatting::default();
         let mut new = TCfg::default();
         let ne = s.translate(&self.cfg, &mut new, self.entry, map);
@@ -198,9 +199,11 @@ impl Splatting {
         let consts = map.consts;
         loop {
             if let Some(b) = self.cache.get(&in_block) {
+                log::trace!("splat: TAC block {:?} already translated → {:?}", in_block, b);
                 return *b;
             }
             let mut out_block = output.blocks.alloc(Default::default());
+            log::trace!("splat: translating TAC block {:?} → new block {:?}", in_block, out_block);
             self.cache.insert(in_block, out_block);
             for d in input.decls.iter() {
                 if output.decls.contains(d) {

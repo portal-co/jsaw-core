@@ -89,6 +89,7 @@ impl VisitMut for Prepa<'_> {
         let vars = take(&mut self.vars);
         node.visit_mut_children_with(self);
         let vars = replace(&mut self.vars, vars);
+        log::debug!("prepa: hoisting {} var declarations into block", vars.len());
         node.insert(
             0,
             Stmt::Decl(Decl::Var(Box::new(VarDecl {
@@ -112,6 +113,7 @@ impl VisitMut for Prepa<'_> {
         let vars = take(&mut self.vars);
         node.visit_mut_children_with(self);
         let vars = replace(&mut self.vars, vars);
+        log::debug!("prepa: hoisting {} var declarations into module", vars.len());
         node.body.insert(
             0,
             ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
@@ -132,6 +134,7 @@ impl VisitMut for Prepa<'_> {
         );
     }
     fn visit_mut_class(&mut self, node: &mut Class) {
+        log::debug!("prepa: processing class body ({} members)", node.body.len());
         node.visit_mut_children_with(self);
         let span = node.span;
         #[derive(PartialEq, Eq, Hash)]

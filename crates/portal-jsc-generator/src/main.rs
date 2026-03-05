@@ -23,10 +23,13 @@ use itertools::Itertools;
 ///
 /// Takes the source root directory as an argument and generates intrinsic files.
 fn main() {
+    env_logger::init();
     let mut args = std::env::args();
     args.next();
     let root = args.next().expect("the source root");
+    log::info!("portal-jsc-generator: generating intrinsics for source root: {root}");
     emit_base_intrinsics(&root);
+    log::info!("portal-jsc-generator: generation complete");
 }
 /// Emits the base intrinsics TypeScript file.
 ///
@@ -38,8 +41,10 @@ fn main() {
 ///
 /// * `source_root` - The source root directory path
 fn emit_base_intrinsics(source_root: &str) {
+    let out_path = format!("{source_root}/packages/jsaw-intrinsics-base/index.ts");
+    log::info!("emit_base_intrinsics: writing to {out_path}");
     std::fs::write(
-        format!("{source_root}/packages/jsaw-intrinsics-base/index.ts"),
+        &out_path,
         format!(
             "
 {}
@@ -68,5 +73,6 @@ fn emit_base_intrinsics(source_root: &str) {
             .join("\n")
         ),
     )
-    .expect("to write the intrinsics")
+    .expect("to write the intrinsics");
+    log::info!("emit_base_intrinsics: successfully wrote {out_path}");
 }

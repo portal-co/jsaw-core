@@ -26,6 +26,7 @@ pub use swc_tac::{Item, ItemGetter};
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
+        log::trace!("ssa simplify_conditions: checking {} blocks", self.blocks.len());
         for (_k, kd) in self.blocks.iter_mut() {
             if let STerm::CondJmp {
                 cond,
@@ -37,6 +38,10 @@ impl SCfg {
                     span: _,
                 } = &self.values[*cond].value
             {
+                log::trace!(
+                    "ssa simplify_conditions: folding constant CondJmp (value={}) → Jmp",
+                    b.value
+                );
                 kd.postcedent.term = STerm::Jmp(if b.value {
                     if_true.clone()
                 } else {
@@ -46,6 +51,7 @@ impl SCfg {
         }
     }
     pub fn simplify_loads(&mut self) {
+        log::trace!("ssa simplify_loads: scanning {} blocks", self.blocks.len());
         for (_k, kd) in self.blocks.iter() {
             let mut m = BTreeMap::new();
             for s in kd.stmts.iter().cloned() {
@@ -72,6 +78,7 @@ impl SCfg {
         }
     }
     pub fn simplify_justs(&mut self) {
+        log::trace!("ssa simplify_justs: iterating over {} values", self.values.len());
         let mut redo = true;
         while take(&mut redo) {
             for ref_ in self.values.iter().map(|a| a.0).collect::<BTreeSet<_>>() {

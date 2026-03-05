@@ -23,9 +23,19 @@ impl Recfg {
     ) -> anyhow::Result<BlockId> {
         loop {
             if let Some(existing_block_id) = self.map.get(&block_id) {
+                log::trace!(
+                    "recfg: block {:?} already mapped → {:?}",
+                    block_id,
+                    existing_block_id
+                );
                 return Ok(*existing_block_id);
             }
             let new_block_id = output_cfg.blocks.alloc(Default::default());
+            log::trace!(
+                "recfg: reconstructing block {:?} → new block {:?}",
+                block_id,
+                new_block_id
+            );
             output_cfg.blocks[new_block_id].end.orig_span =
                 input_cfg.blocks[block_id].end.orig_span;
             self.map.insert(block_id, new_block_id);

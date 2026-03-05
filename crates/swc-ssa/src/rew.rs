@@ -27,6 +27,11 @@ use swc_ecma_ast::Id as Ident;
 use swc_tac::{Item, LId, TCatch, TCfg, TFunc, TStmt, ValFlags};
 impl SFunc {
     pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
+        log::debug!(
+            "converting SFunc to TFunc (SSA→TAC rewrite): prefix={:?}, {} SSA blocks",
+            prefix,
+            self.cfg.blocks.len(),
+        );
         let value = self;
         let mut cfg = TCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());
@@ -97,9 +102,11 @@ impl Rew {
             .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()));
         loop {
             if let Some(existing_block) = self.blocks.get(&block_entry) {
+                log::trace!("rew: block entry already translated → TAC block {:?}", existing_block);
                 return Ok(*existing_block);
             }
             let new_block_id = cfg.blocks.alloc(Default::default());
+            log::trace!("rew: translating SSA block entry → new TAC block {:?}", new_block_id);
             self.blocks.insert(block_entry.clone(), new_block_id);
             match &block_entry {
                 BlockEntry::Block(block_id) => {

@@ -393,6 +393,24 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
         label: Option<Ident>,
     ) -> anyhow::Result<TargetCfg::Block> {
         let statement = self;
+        log::trace!(
+            "to_cfg: processing statement kind={}",
+            match statement {
+                Stmt::Throw(_) => "Throw",
+                Stmt::Return(_) => "Return",
+                Stmt::Try(_) => "Try",
+                Stmt::Block(_) => "Block",
+                Stmt::If(_) => "If",
+                Stmt::Switch(_) => "Switch",
+                Stmt::Break(_) => "Break",
+                Stmt::Continue(_) => "Continue",
+                Stmt::Labeled(_) => "Labeled",
+                Stmt::DoWhile(_) => "DoWhile",
+                Stmt::While(_) => "While",
+                Stmt::For(_) => "For",
+                _ => "Other",
+            }
+        );
         if let Stmt::Throw(throw_stmt) = statement {
             cfg.throw(sidecar, current, &throw_stmt.arg, Some(throw_stmt.span()));
             return Ok(cfg.new_block(sidecar).map_err(|e|e.into())?);

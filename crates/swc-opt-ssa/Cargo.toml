@@ -28,6 +28,7 @@ swc_ecma_visit.workspace = true
 paste = "1.0.15"
 ssa-impls.workspace = true
 num-traits = "0.2.19"
+log.workspace = true
 
 [features]
 rkyv-impl = ["rkyv", "swc_atoms/rkyv-impl", "swc_common/rkyv-impl", "swc_ecma_ast/rkyv-impl", "swc-cfg/rkyv-impl", "swc-tac/rkyv-impl", "swc-ssa/rkyv-impl", "portal-jsc-swc-util/rkyv-impl"]

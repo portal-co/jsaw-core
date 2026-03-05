@@ -64,6 +64,11 @@ pub struct CleanConfig {
 /// `is_id_burnt` is called for each `SValue::LoadId(id)` encountered during
 /// the mark phase.  Return `true` to treat that block as burnt.
 pub fn clean_func(sfunc: &mut SFunc, is_id_burnt: &dyn Fn(&swc_ecma_ast::Id) -> bool, cfg: CleanConfig) {
+    log::debug!(
+        "clean_func: starting dead-branch elimination (inject_assumes={}, {} blocks)",
+        cfg.inject_assumes,
+        sfunc.cfg.blocks.len(),
+    );
     let mut go = true;
     while take(&mut go) {
         // ── Mark ──────────────────────────────────────────────────────────────
@@ -83,6 +88,10 @@ pub fn clean_func(sfunc: &mut SFunc, is_id_burnt: &dyn Fn(&swc_ecma_ast::Id) -> 
                     SValue::LoadId(id) if is_id_burnt(id)
                 );
                 if is_trim || is_burnt_id {
+                    log::trace!(
+                        "clean_func: marking block {:?} as burnt (trim={}, burnt_id={})",
+                        k, is_trim, is_burnt_id
+                    );
                     burns.insert(k);
                     go = true;
                     continue 'mark;
@@ -103,6 +112,10 @@ pub fn clean_func(sfunc: &mut SFunc, is_id_burnt: &dyn Fn(&swc_ecma_ast::Id) -> 
                         if burns.contains(&if_true.block) =>
                     {
                         // True-branch burnt → cond was *false* on the live path.
+                        log::trace!(
+                            "clean_func: simplifying CondJmp in block {:?}: true-branch burnt, keeping false-branch",
+                            k
+                        );
                         if cfg.inject_assumes {
                             assume_injections.push((cond, k, /* negate */ true));
                         }
@@ -114,6 +127,10 @@ pub fn clean_func(sfunc: &mut SFunc, is_id_burnt: &dyn Fn(&swc_ecma_ast::Id) -> 
                         if burns.contains(&if_false.block) =>
                     {
                         // False-branch burnt → cond was *true* on the live path.
+                        log::trace!(
+                            "clean_func: simplifying CondJmp in block {:?}: false-branch burnt, keeping true-branch",
+                            k
+                        );
                         if cfg.inject_assumes {
                             assume_injections.push((cond, k, /* negate */ false));
                         }

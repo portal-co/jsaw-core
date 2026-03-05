@@ -93,6 +93,12 @@ impl Default for Func {
 impl TryFrom<Function> for Func {
     type Error = anyhow::Error;
     fn try_from(value: Function) -> Result<Self, Self::Error> {
+        log::debug!(
+            "converting Function to CFG Func: {} params, is_async={}, is_generator={}",
+            value.params.len(),
+            value.is_async,
+            value.is_generator,
+        );
         let mut cfg = Cfg::default();
         let entry = cfg.blocks.alloc(Default::default());
         let exit = to_cfg::ToCfgConversionCtx::default().transform_all(
@@ -117,6 +123,11 @@ impl TryFrom<Function> for Func {
 }
 impl From<Func> for Function {
     fn from(val: Func) -> Self {
+        log::debug!(
+            "converting CFG Func to Function: {} blocks, {} params",
+            val.cfg.blocks.len(),
+            val.params.len(),
+        );
         let k = ssa_reloop::go(&val, val.entry);
         let stmts = Cfg::process_block(&val.cfg, &k, Span::dummy_with_cmt(), Default::default());
         Function {

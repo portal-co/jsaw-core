@@ -83,9 +83,11 @@ impl Convert {
     ) -> anyhow::Result<OptBlockId> {
         loop {
             if let Some(k) = self.all.get(&i).and_then(|v| v.get(&tys)) {
+                log::trace!("ssa→opt: SSA block {:?} already mapped", i);
                 return Ok(*k);
             }
             let k = out.blocks.alloc(Default::default());
+            log::trace!("ssa→opt: transforming SSA block {:?} → opt block {:?}", i, k);
             self.all.entry(i).or_default().insert(tys.clone(), k);
             let mut state = inp.blocks[i]
                 .params
@@ -714,6 +716,12 @@ impl OptFunc {
         value: &SFunc,
         semantic: &SemanticCfg,
     ) -> anyhow::Result<Self> {
+        log::debug!(
+            "converting SFunc to OptFunc: {} SSA blocks, is_async={}, is_generator={}",
+            value.cfg.blocks.len(),
+            value.is_async,
+            value.is_generator,
+        );
         //  ssa_impls::maxssa::maxssa(&mut value);
         let mut cfg = OptCfg::default();
         cfg.decls.extend(value.cfg.decls.iter().cloned());

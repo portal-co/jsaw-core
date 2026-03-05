@@ -16,6 +16,10 @@ impl Cfg {
             } = &mut block_data.end.term
                 && let Expr::Lit(Lit::Bool(boolean_literal)) = cond
             {
+                log::trace!(
+                    "cfg simplify: folding constant CondJmp (value={}) → Jmp",
+                    boolean_literal.value
+                );
                 block_data.end.term = Term::Jmp(if boolean_literal.value {
                     *if_true
                 } else {
