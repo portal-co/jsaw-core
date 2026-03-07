@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+thiserror.workspace = true
 arena-traits.workspace = true
 swc-ll-common.workspace = true
 rkyv = {workspace = true,optional = true}

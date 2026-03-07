@@ -63,7 +63,7 @@ pub struct Options<'a> {
     /// Semantic configuration controlling conversion behavior
     pub semantic: &'a SemanticCfg,
     /// Function to convert CFG Func to AST Function
-    pub conf: &'a (dyn Fn(Func) -> anyhow::Result<Function> + 'a),
+    pub conf: &'a (dyn Fn(Func) -> Result<Function, crate::Error> + 'a),
 }
 impl Options<'static> {
     pub fn bud<T>(func: impl FnOnce(&Options<'_>) -> T) -> T {
@@ -74,7 +74,7 @@ impl Options<'static> {
     }
 }
 impl TFunc {
-    pub fn to_func_with_options(&self, options: &Options<'_>) -> anyhow::Result<Func> {
+    pub fn to_func_with_options(&self, options: &Options<'_>) -> Result<Func, crate::Error> {
         let value = self;
         let mut cfg = Cfg::default();
         let entry = Rew {
@@ -139,26 +139,26 @@ impl TFunc {
     }
 }
 impl<'a> TryFrom<&'a TFunc> for Func {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         Options::bud(|opts| value.to_func_with_options(opts))
     }
 }
 impl TryFrom<TFunc> for Func {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
 }
 impl<'a> TryFrom<&'a TFunc> for Function {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: &'a TFunc) -> Result<Self, Self::Error> {
         let a: Func = value.try_into()?;
         Ok(a.into())
     }
 }
 impl TryFrom<TFunc> for Function {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
@@ -995,7 +995,7 @@ impl Rew<'_> {
         cfg: &mut Cfg,
         tcfg: &TCfg,
         block_id: TBlockId,
-    ) -> anyhow::Result<swc_cfg::BlockId> {
+    ) -> Result<swc_cfg::BlockId, crate::Error> {
         loop {
             if let Some(existing_block_id) = self.all.get(&block_id) {
                 return Ok(*existing_block_id);
@@ -1202,7 +1202,7 @@ impl Rew<'_> {
                     blocks: blocks
                         .iter()
                         .map(|a| {
-                            anyhow::Ok((
+                            Ok((
                                 Expr::Ident(ident(
                                     &a.0,
                                     tcfg.blocks[block_id]
@@ -1213,7 +1213,7 @@ impl Rew<'_> {
                                 self.trans(cfg, tcfg, a.1)?,
                             ))
                         })
-                        .collect::<anyhow::Result<_>>()?,
+                        .collect::<Result<_, crate::Error>>()?,
                     default: self.trans(cfg, tcfg, *default)?,
                 },
                 crate::TTerm::Default => Term::Default,

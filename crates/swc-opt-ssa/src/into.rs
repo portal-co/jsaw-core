@@ -8,7 +8,7 @@
 //! - Handles deoptimization paths
 
 use crate::{OptBlockId, OptCfg, OptFunc, OptType, OptValue, OptValueId, OptValueW};
-use anyhow::Context;
+
 use portal_jsc_swc_util::SemanticCfg;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -27,7 +27,7 @@ fn deopt(
     k: OptBlockId,
     mut v: OptValueId,
     mut ty: Option<OptType>,
-) -> anyhow::Result<OptValueId> {
+) -> Result<OptValueId, crate::Error> {
     while let Some(t) = ty {
         let w = out.values.alloc(OptValueW {
             value: OptValue::Deopt {
@@ -48,7 +48,7 @@ fn bi_id_deopt(
     mut ty1: Option<OptType>,
     mut v2: OptValueId,
     mut ty2: Option<OptType>,
-) -> anyhow::Result<(OptValueId, OptValueId, Option<OptType>)> {
+) -> Result<(OptValueId, OptValueId, Option<OptType>), crate::Error> {
     let mut s = false;
     while ty1 != ty2 {
         if let Some(t) = ty1 {
@@ -80,7 +80,7 @@ impl Convert {
         i: swc_ssa::SBlockId,
         tys: Vec<Option<OptType>>,
         semantic: &SemanticCfg,
-    ) -> anyhow::Result<OptBlockId> {
+    ) -> Result<OptBlockId, crate::Error> {
         loop {
             if let Some(k) = self.all.get(&i).and_then(|v| v.get(&tys)) {
                 log::trace!("ssa→opt: SSA block {:?} already mapped", i);
@@ -132,7 +132,7 @@ impl Convert {
                     } => todo!(),
                     SValue::Item { item, span } => match item {
                         swc_tac::Item::Just { id } => {
-                            let (a, b) = state.get(id).cloned().context("in getting the value")?;
+                            let (a, b) = state.get(id).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" })?;
                             (
                                 OptValue::Emit {
                                     val: SValue::Item {
@@ -146,9 +146,9 @@ impl Convert {
                         }
                         swc_tac::Item::Bin { left, right, op } => {
                             let (left, lty) =
-                                state.get(left).cloned().context("in getting the value")?;
+                                state.get(left).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" })?;
                             let (right, rty) =
-                                state.get(right).cloned().context("in getting the value")?;
+                                state.get(right).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" })?;
                             let cnstl = out
                                 .val(left, ())
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
@@ -312,7 +312,7 @@ impl Convert {
                         }
                         swc_tac::Item::Un { arg, op } => {
                             let (arg, tag) =
-                                state.get(arg).cloned().context("in getting the value")?;
+                                state.get(arg).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" })?;
                             let cnst = out
                                 .val(arg, ())
                                 .and_then(|a| a.const_in(semantic, out, false, ()));
@@ -422,21 +422,21 @@ impl Convert {
                                 value: v0,
                                 is_spread: s0,
                             } = &members[0];
-                            let (x, _ty) = state.get(v0).cloned().context("in getting the var")?;
+                            let (x, _ty) = state.get(v0).cloned().ok_or(crate::Error::MissingValue { context: "getting the var" })?;
                             let mut elem_tys = vec![];
                             let members = [SpreadOr {
                                 value: x,
                                 is_spread: *s0,
                             }]
                             .into_iter()
-                            .map(Ok::<_, anyhow::Error>)
+                            .map(Ok::<_, crate::Error>)
                             .chain(members[1..].iter().map(
                                 |SpreadOr {
                                      value: a,
                                      is_spread: b,
                                  }| {
                                     let (a, at) =
-                                        state.get(a).cloned().context("in getting the val")?;
+                                        state.get(a).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                                     // (a, x, at) = bi_id_deopt(out, k, a, at, x, ty.clone())?;
                                     // ty = at.clone();
                                     elem_tys.push(at.clone());
@@ -446,7 +446,7 @@ impl Convert {
                                     })
                                 },
                             ))
-                            .collect::<anyhow::Result<Vec<_>>>()?;
+                            .collect::<Result<Vec<_>, crate::Error>>()?;
                             let ty = Some(OptType::Object {
                                 nest: crate::ObjType::Array,
                                 extended: false,
@@ -465,9 +465,9 @@ impl Convert {
                         }
                         Item::Mem { obj, mem } => {
                             let (mut obj, mut oty) =
-                                state.get(obj).cloned().context("in getting the val")?;
+                                state.get(obj).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                             let (mem, mty) =
-                                state.get(mem).cloned().context("in getting the val")?;
+                                state.get(mem).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                             while let Some(OptType::Object {
                                 nest: _,
                                 extended: _extensible,
@@ -524,7 +524,7 @@ impl Convert {
                                 &mut (),
                                 &mut |_, x| {
                                     let (val, tag) =
-                                        state.get(&x).cloned().context("in getting the val")?;
+                                        state.get(&x).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                                     deopt(out, k, val, tag)
                                 },
                                 &mut |_, a| a.try_into(),
@@ -544,10 +544,10 @@ impl Convert {
                     SValue::Assign { target, val } => {
                         let target = target.clone().map(&mut |x| {
                             let (val, tag) =
-                                state.get(&x).cloned().context("in getting the val")?;
+                                state.get(&x).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                             deopt(out, k, val, tag)
                         })?;
-                        let (val, tag) = state.get(val).cloned().context("in getting the val")?;
+                        let (val, tag) = state.get(val).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                         let val = deopt(out, k, val, tag)?;
                         (
                             OptValue::Emit {
@@ -565,7 +565,7 @@ impl Convert {
                         None,
                     ),
                     SValue::StoreId { target, val } => {
-                        let (val, tag) = state.get(val).cloned().context("in getting the val")?;
+                        let (val, tag) = state.get(val).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                         let val = deopt(out, k, val, tag)?;
                         (
                             OptValue::Emit {
@@ -580,7 +580,7 @@ impl Convert {
                     }
                     SValue::EdgeBlocker { value: val, span } => {
                         let (mut val, mut tag) =
-                            state.get(val).cloned().context("in getting the val")?;
+                            state.get(val).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                         while let Some(OptType::Lit(_)) = &tag {
                             let w = out.values.alloc(OptValueW {
                                 value: OptValue::Deopt {
@@ -622,21 +622,21 @@ impl Convert {
                         a
                     })
                     .collect();
-                anyhow::Ok(STarget {
+                Ok::<_, crate::Error>(STarget {
                     args,
                     block: this.transform(inp, out, target.block, xs, semantic)?,
                 })
             };
             let term = match &inp.blocks[i].postcedent.term {
                 swc_ssa::STerm::Throw(v) => {
-                    let (v, ty) = state.get(v).cloned().context("in getting the val")?;
+                    let (v, ty) = state.get(v).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                     let v = deopt(out, k, v, ty)?;
                     STerm::Throw(v)
                 }
                 swc_ssa::STerm::Return(v) => STerm::Return(match v.as_ref() {
                     None => None,
                     Some(v) => {
-                        let (v, ty) = state.get(v).cloned().context("in getting the val")?;
+                        let (v, ty) = state.get(v).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                         let v = deopt(out, k, v, ty)?;
                         Some(v)
                     }
@@ -647,7 +647,7 @@ impl Convert {
                     if_true,
                     if_false,
                 } => {
-                    let (cond, ty) = state.get(cond).cloned().context("in getting the val")?;
+                    let (cond, ty) = state.get(cond).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                     let cond = if ty == Some(OptType::Bool) {
                         cond
                     } else {
@@ -667,18 +667,18 @@ impl Convert {
                     }
                 }
                 swc_ssa::STerm::Switch { x, blocks, default } => {
-                    let (mut x, mut ty) = state.get(x).cloned().context("in getting the val")?;
+                    let (mut x, mut ty) = state.get(x).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                     let default = tgt(self, out, default)?;
                     let mut blocks = blocks
                         .iter()
                         .map(|(a, b)| {
                             let (mut a, mut at) =
-                                state.get(a).cloned().context("in getting the val")?;
+                                state.get(a).cloned().ok_or(crate::Error::MissingValue { context: "getting the val" })?;
                             (a, x, at) = bi_id_deopt(out, k, a, at, x, ty.clone())?;
                             ty = at.clone();
                             Ok((a, tgt(self, out, b)?))
                         })
-                        .collect::<anyhow::Result<Vec<_>>>()?;
+                        .collect::<Result<Vec<_>, crate::Error>>()?;
                     for (m, _) in blocks.iter_mut() {
                         while out.values[*m].ty(out) != ty {
                             let n = out.values.alloc(OptValueW {
@@ -700,13 +700,13 @@ impl Convert {
     }
 }
 impl<'a> TryFrom<&'a SFunc> for OptFunc {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
         Self::try_from_ssa_with_semantic(value, &Default::default())
     }
 }
 impl TryFrom<SFunc> for OptFunc {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: SFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
@@ -715,7 +715,7 @@ impl OptFunc {
     pub fn try_from_ssa_with_semantic(
         value: &SFunc,
         semantic: &SemanticCfg,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, crate::Error> {
         log::debug!(
             "converting SFunc to OptFunc: {} SSA blocks, is_async={}, is_generator={}",
             value.cfg.blocks.len(),

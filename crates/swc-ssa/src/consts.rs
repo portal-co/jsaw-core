@@ -13,7 +13,7 @@ pub enum ConstVal {
 pub struct ConstantInstantiator {
     pub all: BTreeMap<crate::SBlockId, HashMap<Vec<Option<ConstVal>>, crate::SBlockId>>,
 }
-pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> anyhow::Result<SFunc> {
+pub fn instantiate_constants(input_func: &SFunc, semantic: &SemanticCfg) -> Result<SFunc, crate::Error> {
     let mut new_cfg = SCfg::default();
     let entry = ConstantInstantiator {
         all: BTreeMap::new(),
@@ -37,7 +37,7 @@ impl ConstantInstantiator {
         out: &mut SCfg,
         k: crate::SBlockId,
         semantic: &SemanticCfg,
-    ) -> anyhow::Result<crate::SBlockId> {
+    ) -> Result<crate::SBlockId, crate::Error> {
         let lits = inp.blocks[k].params.iter().map(|_| None).collect();
         self.go(inp, out, k, lits, semantic)
     }
@@ -49,7 +49,7 @@ impl ConstantInstantiator {
         lits: Vec<Option<ConstVal>>,
         semantic: &SemanticCfg,
         // lsk: &BTreeMap<crate::SBlockId, NonZeroUsize>,
-    ) -> anyhow::Result<crate::SBlockId> {
+    ) -> Result<crate::SBlockId, crate::Error> {
         let lits: Vec<Option<ConstVal>> = lits
             .into_iter()
             .map(|a| match a {
@@ -116,7 +116,7 @@ impl ConstantInstantiator {
                         Item::Just { id } => {
                             params.insert(
                                 s,
-                                params.get(&id).cloned().context("in getting a variable")?,
+                                params.get(&id).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?,
                             );
                             continue;
                         }
@@ -124,7 +124,7 @@ impl ConstantInstantiator {
                             item: item.map2(
                                 &mut (),
                                 &mut |_, a| {
-                                    params.get(&a).cloned().context("in getting a variable")
+                                    params.get(&a).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })
                                 },
                                 &mut |_, b| Ok(b),
                             )?,
@@ -133,17 +133,17 @@ impl ConstantInstantiator {
                     },
                     SValue::Assign { target, val } => SValue::Assign {
                         target: target.map(&mut |a| {
-                            params.get(&a).cloned().context("in getting a variable")
+                            params.get(&a).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })
                         })?,
-                        val: params.get(&val).cloned().context("in getting a variable")?,
+                        val: params.get(&val).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?,
                     },
                     SValue::LoadId(i) => SValue::LoadId(i),
                     SValue::StoreId { target, val } => SValue::StoreId {
                         target,
-                        val: params.get(&val).cloned().context("in getting a variable")?,
+                        val: params.get(&val).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?,
                     },
                     SValue::EdgeBlocker { value: val, span } => {
-                        match params.get(&val).cloned().context("in getting a variable")? {
+                        match params.get(&val).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })? {
                             value => match &out.values[value].value {
                                 SValue::Item {
                                     item: Item::Undef,
@@ -180,7 +180,7 @@ impl ConstantInstantiator {
                        out: &mut SCfg,
                        t: &STarget,
                        p: usize|
-             -> anyhow::Result<STarget> {
+             -> Result<STarget, crate::Error> {
                 let mut funcs = (0..p).map(|_| None).collect::<Vec<_>>();
                 let args = t
                     .args
@@ -210,7 +210,7 @@ impl ConstantInstantiator {
                     })
                     .cloned()
                     .collect();
-                anyhow::Ok(STarget {
+                Ok(STarget {
                     block: this.go(inp, out, t.block, funcs, semantic)?,
                     args,
                 })
@@ -224,12 +224,12 @@ impl ConstantInstantiator {
             out.blocks[n].postcedent.catch = catch;
             let term = match &inp.blocks[k].postcedent.term {
                 STerm::Throw(id) => {
-                    STerm::Throw(params.get(id).cloned().context("in getting a variable")?)
+                    STerm::Throw(params.get(id).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?)
                 }
                 TTerm::Tail { callee, args } => TTerm::Tail {
                     callee: callee
                         .as_ref()
-                        .map(&mut |id| params.get(id).cloned().context("in getting a variable"))?,
+                        .map(&mut |id| params.get(id).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" }))?,
                     args: args
                         .iter()
                         .map(
@@ -240,7 +240,7 @@ impl ConstantInstantiator {
                                 b => params
                                     .get(id)
                                     .cloned()
-                                    .context("in getting a variable")
+                                    .ok_or(crate::Error::MissingValue { context: "getting a variable" })
                                     .map(|c| SpreadOr {
                                         value: c,
                                         is_spread: b,
@@ -259,7 +259,7 @@ impl ConstantInstantiator {
                         out.blocks[n].stmts.push(val);
                         val
                     }),
-                    Some(val) => Some(params.get(val).cloned().context("in getting a variable")?),
+                    Some(val) => Some(params.get(val).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?),
                 }),
                 STerm::Jmp(starget) => STerm::Jmp(tgt(self, inp, out, starget, 0)?),
                 STerm::CondJmp {
@@ -267,7 +267,7 @@ impl ConstantInstantiator {
                     if_true,
                     if_false,
                 } => {
-                    let cond = params.get(cond).cloned().context("in getting the cond")?;
+                    let cond = params.get(cond).cloned().ok_or(crate::Error::MissingValue { context: "getting the cond" })?;
                     match &out.values[cond].value {
                         SValue::Item {
                             item: Item::Lit { lit },
@@ -294,16 +294,16 @@ impl ConstantInstantiator {
                     }
                 }
                 STerm::Switch { x, blocks, default } => STerm::Switch {
-                    x: params.get(x).cloned().context("in getting the value")?,
+                    x: params.get(x).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" })?,
                     blocks: blocks
                         .iter()
                         .map(|(val, t)| {
-                            anyhow::Ok((
-                                params.get(val).cloned().context("in getting a variable")?,
+                            Ok((
+                                params.get(val).cloned().ok_or(crate::Error::MissingValue { context: "getting a variable" })?,
                                 tgt(self, inp, out, t, 0)?,
                             ))
                         })
-                        .collect::<anyhow::Result<_>>()?,
+                        .collect::<Result<_, crate::Error>>()?,
                     default: tgt(self, inp, out, default, 0)?,
                 },
                 STerm::Default => STerm::Default,

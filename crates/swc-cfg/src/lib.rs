@@ -35,7 +35,6 @@
 //! - [`simplify`]: CFG simplification passes
 //! - [`to_cfg`]: Conversion from AST to CFG
 
-use anyhow::Context;
 use relooper::ShapedBlock;
 use std::{collections::HashMap, iter::once};
 use swc_atoms::Atom;
@@ -46,6 +45,8 @@ use swc_ecma_ast::{
     LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase, SwitchStmt,
     ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl,
 };
+pub mod error;
+pub use error::Error;
 pub mod recfg;
 pub mod simplify;
 /// A function represented as a control flow graph.
@@ -91,7 +92,7 @@ impl Default for Func {
     }
 }
 impl TryFrom<Function> for Func {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: Function) -> Result<Self, Self::Error> {
         log::debug!(
             "converting Function to CFG Func: {} params, is_async={}, is_generator={}",

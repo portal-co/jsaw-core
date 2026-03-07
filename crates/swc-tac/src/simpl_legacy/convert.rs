@@ -22,7 +22,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
         i: &TSimplCfg<D>,
         o: &mut TCfg,
         k: Id<TSimplBlock<D>>,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         loop {
             if let Some(k) = self.map.get(&k) {
                 return Ok(*k);
@@ -106,7 +106,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                                 });
                                 Ok((v, c))
                             })
-                            .collect::<anyhow::Result<_>>()?,
+                            .collect::<Result<_, crate::Error>>()?,
                         default: n,
                     }
                 }
@@ -122,7 +122,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
                     blocks: cases
                         .iter()
                         .map(|(scrutinee, k2)| {
-                            anyhow::Ok((
+                            Ok((
                                 self.convert_path(
                                     i,
                                     o,
@@ -345,7 +345,7 @@ impl<D: ConvTacDialect> SimplTacConverter<D> {
             right,
             span,
         }: &TSimplStmt<D>,
-    ) -> anyhow::Result<(TStmt, TBlockId)> {
+    ) -> Result<(TStmt, TBlockId), crate::Error> {
         macro_rules! lid {
             ($e:expr) => {
                 match $e {

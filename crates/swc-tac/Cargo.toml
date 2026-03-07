@@ -10,6 +10,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+thiserror.workspace = true
 arena-traits.workspace = true
 cfg-traits.workspace = true
 ssa-impls.workspace = true

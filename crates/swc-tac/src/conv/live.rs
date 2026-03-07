@@ -6,7 +6,7 @@ pub struct LiveConverter<'a> {
 }
 impl<'a> ToCfgCfg<LiveConverter<'a>> for TCfg {
     type Block = TBlockId;
-    type Error = anyhow::Error;
+    type Error = crate::Error;
 
     fn stmt(
         &mut self,
@@ -132,7 +132,7 @@ impl TFunc {
     pub fn try_from_direct_with_mapper(
         value: &Function,
         mapper: Mapper<'_>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, crate::Error> {
         log::debug!(
             "converting Function directly to TFunc (live): {} params, is_async={}, is_generator={}",
             value.params.len(),
@@ -199,7 +199,7 @@ impl TFunc {
                         }
                     })
                 })
-                .collect::<anyhow::Result<Vec<Ident>>>()?
+                .collect::<Result<Vec<Ident>, crate::Error>>()?
         };
         params.reverse();
         ts_params.reverse();

@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+thiserror.workspace = true
 cfg-traits.workspace = true
 swc-ll-common.workspace = true
 relooper.workspace = true

@@ -25,7 +25,7 @@ impl ToTACConverter<'_> {
         i: &Cfg,
         o: &mut TCfg,
         b: swc_cfg::BlockId,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         self.convert_block(i, o, b)
     }
     // Private helper for block/term conversion
@@ -34,7 +34,7 @@ impl ToTACConverter<'_> {
         i: &Cfg,
         o: &mut TCfg,
         b: swc_cfg::BlockId,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         loop {
             if let Some(a) = self.map.get(&b) {
                 log::trace!("cfg→tac: CFG block {:?} already mapped → TAC block {:?}", b, a);
@@ -59,7 +59,7 @@ impl ToTACConverter<'_> {
                             k,
                         };
                     }
-                    _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                    _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
                 }
             }
             let mut t = t;
@@ -77,7 +77,7 @@ impl ToTACConverter<'_> {
         o: &mut TCfg,
         b: swc_cfg::BlockId,
         mut t: TBlockId,
-    ) -> anyhow::Result<TTerm> {
+    ) -> Result<TTerm, crate::Error> {
         match &i.blocks[b].end.term {
             swc_cfg::Term::Return(expr) => match expr {
                 None => Ok(TTerm::Return(None)),
@@ -134,7 +134,7 @@ impl ToTACConverter<'_> {
     }
 }
 impl TFunc {
-    pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> anyhow::Result<Self> {
+    pub fn try_from_with_mapper(value: &Func, mapper: Mapper<'_>) -> Result<Self, crate::Error> {
         log::debug!(
             "converting CFG Func to TFunc: {} params, is_async={}, is_generator={}",
             value.params.len(),
@@ -198,7 +198,7 @@ impl TFunc {
                         }
                     })
                 })
-                .collect::<anyhow::Result<Vec<Ident>>>()?
+                .collect::<Result<Vec<Ident>, crate::Error>>()?
         };
         params.reverse();
         ts_params.reverse();

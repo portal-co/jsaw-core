@@ -26,7 +26,7 @@ use swc_common::{Mark, Span, SyntaxContext};
 use swc_ecma_ast::Id as Ident;
 use swc_tac::{Item, LId, TCatch, TCfg, TFunc, TStmt, ValFlags};
 impl SFunc {
-    pub fn try_into_with_prefix(&self, prefix: Atom) -> anyhow::Result<TFunc> {
+    pub fn try_into_with_prefix(&self, prefix: Atom) -> Result<TFunc, crate::Error> {
         log::debug!(
             "converting SFunc to TFunc (SSA→TAC rewrite): prefix={:?}, {} SSA blocks",
             prefix,
@@ -67,13 +67,13 @@ impl SFunc {
     }
 }
 impl<'a> TryFrom<&'a SFunc> for TFunc {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: &'a SFunc) -> Result<Self, Self::Error> {
         value.try_into_with_prefix(Default::default())
     }
 }
 impl TryFrom<SFunc> for TFunc {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     fn try_from(value: SFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
@@ -96,7 +96,7 @@ impl Rew {
         func: &SFunc,
         cfg: &mut TCfg,
         block_entry: BlockEntry,
-    ) -> anyhow::Result<swc_tac::TBlockId> {
+    ) -> Result<swc_tac::TBlockId, crate::Error> {
         let ctxt = *self
             .ctxt
             .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()));
@@ -142,7 +142,7 @@ impl Rew {
                                     let item_id = item.as_ref().map2(
                                         &mut (),
                                         &mut |_, value| {
-                                            anyhow::Ok(mangle_value(
+                                            Ok(mangle_value(
                                                 self.prefix.clone(),
                                                 ctxt,
                                                 func,
@@ -179,7 +179,7 @@ impl Rew {
                                     let mangled =
                                         mangle_value(self.prefix.clone(), ctxt, func, value);
                                     cfg.decls.insert(mangled.clone());
-                                    anyhow::Ok(mangled)
+                                    Ok::<_, crate::Error>(mangled)
                                 })?;
                                 cfg.blocks[new_block_id].stmts.push(TStmt {
                                     left: target_id,

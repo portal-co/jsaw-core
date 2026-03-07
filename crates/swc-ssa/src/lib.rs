@@ -66,7 +66,6 @@
 //! - [`rew`]: Rewriting passes
 //! - [`simplify`]: Simplification passes
 
-use anyhow::Context;
 use cfg_traits::Term;
 use portal_jsc_swc_util::SemanticCfg;
 use ssa_traits::HasChainableValues;
@@ -89,6 +88,8 @@ pub mod clean;
 pub mod consts;
 // pub mod idw;
 pub mod conv;
+pub mod error;
+pub use error::Error;
 pub mod eval;
 pub mod impls;
 pub mod opt_stub;
@@ -242,7 +243,7 @@ impl PartialEq for SFunc {
 impl Eq for SFunc {}
 
 impl TryFrom<TFunc> for SFunc {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: TFunc) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }

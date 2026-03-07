@@ -20,7 +20,7 @@ impl Recfg {
         input_cfg: &Cfg,
         output_cfg: &mut Cfg,
         block_id: BlockId,
-    ) -> anyhow::Result<BlockId> {
+    ) -> Result<BlockId, crate::Error> {
         loop {
             if let Some(existing_block_id) = self.map.get(&block_id) {
                 log::trace!(
@@ -82,7 +82,7 @@ impl Recfg {
                                 self.go(input_cfg, output_cfg, *case_block)?,
                             ))
                         })
-                        .collect::<anyhow::Result<HashMap<_, _>>>()?,
+                        .collect::<Result<HashMap<_, _>, crate::Error>>()?,
                     default: self.go(input_cfg, output_cfg, *default)?,
                 },
                 other_term => other_term.clone(),

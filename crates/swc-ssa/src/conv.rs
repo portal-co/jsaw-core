@@ -103,7 +103,7 @@ impl ToSSAConverter {
         t: crate::SBlockId,
         a: Ident,
         cache: &BTreeMap<Ident, SValueId>,
-    ) -> anyhow::Result<SValueId> {
+    ) -> Result<SValueId, crate::Error> {
         if let Some(k) = cache.get(&a) {
             log::trace!("load: cache hit for {:?} → {:?}", a, k);
             return Ok(*k);
@@ -115,7 +115,7 @@ impl ToSSAConverter {
             let b = 'a: {
                 let b = match d {
                     Item::Undef => break 'a self.undef,
-                    b => b.clone().map2::<_, _, anyhow::Error, ()>(
+                    b => b.clone().map2::<_, _, crate::Error, ()>(
                         &mut (),
                         &mut |_, a| self.load(state, i, o, t, a.clone(), cache),
                         &mut |_, b| b.try_into(),
@@ -169,7 +169,7 @@ impl ToSSAConverter {
         o: &mut SCfg,
         k: swc_tac::TBlockId,
         // app: &mut (dyn Iterator<Item = (Ident, SValueId)> + '_),
-    ) -> anyhow::Result<crate::SBlockId> {
+    ) -> Result<crate::SBlockId, crate::Error> {
         self.convert_block(i, o, k)
     }
     // Private helper for block/term conversion
@@ -179,7 +179,7 @@ impl ToSSAConverter {
         o: &mut SCfg,
         k: swc_tac::TBlockId,
         // app: &mut (dyn Iterator<Item = (Ident, SValueId)> + '_),
-    ) -> anyhow::Result<crate::SBlockId> {
+    ) -> Result<crate::SBlockId, crate::Error> {
         loop {
             if let Some(a) = self.map.get(&k) {
                 log::trace!("convert_block: TAC block {:?} already mapped → SSA block {:?}", k, a);
@@ -275,7 +275,7 @@ impl ToSSAConverter {
                 let b = 'a: {
                     let b = match b {
                         Item::Undef => break 'a self.undef,
-                        b => b.map2::<_, _, anyhow::Error, ()>(
+                        b => b.map2::<_, _, crate::Error, ()>(
                             &mut (),
                             &mut |_, a| self.load(&state, i, o, t, a.clone(), &cache),
                             &mut |_, b| b.try_into(),
@@ -327,7 +327,7 @@ impl ToSSAConverter {
                         }
                     },
                     a => {
-                        let c = a.map::<_, anyhow::Error>(&mut |a| {
+                        let c = a.map::<_, crate::Error>(&mut |a| {
                             self.load(&state, i, o, t, a, &cache)
                         })?;
                         let c = o.values.alloc(SValue::Assign { target: c, val: b }.into());
@@ -452,7 +452,7 @@ impl ToSSAConverter {
             //                     },
             //                 ))
             //             })
-            //             .collect::<anyhow::Result<Vec<_>>>()?;
+            //             .collect::<Result<Vec<_, crate::Error>>>()?;
             //         let default2 =
             //             self.trans(i, o, *default, &mut dtc(self, *default).into_iter())?;
             //         let default = STarget {
@@ -468,7 +468,7 @@ impl ToSSAConverter {
     }
 }
 impl<'a> TryFrom<&'a TFunc> for SFunc {
-    type Error = anyhow::Error;
+    type Error = crate::Error;
     /// Convert a TAC ([`TFunc`]) function into SSA form ([`SFunc`]).
     ///
     /// # Shim block

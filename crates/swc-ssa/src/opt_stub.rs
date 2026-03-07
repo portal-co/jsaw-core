@@ -38,7 +38,7 @@ impl OptStub {
         o: &mut SCfg,
         sematic: &SemanticCfg,
         k: SBlockId,
-    ) -> anyhow::Result<SBlockId> {
+    ) -> Result<SBlockId, crate::Error> {
         loop {
             if let Some(k) = self.map.get(&k) {
                 return Ok(*k);
@@ -72,7 +72,7 @@ impl OptStub {
                         v => {
                             let v = v.as_ref().map(
                                 self,
-                                &mut |_, i| b.get(i).cloned().context("in getting the value"),
+                                &mut |_, i| b.get(i).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" }),
                                 &mut |s, b| s.go(i, o, sematic, *b),
                                 &mut |_, _f| todo!(),
                             )?;
@@ -103,7 +103,7 @@ impl OptStub {
                 o.blocks[var].postcedent.term = i.blocks[k].postcedent.term.as_ref().map(
                     &mut (),
                     &mut |_, target| Ok(tgt!(target)),
-                    &mut |_, a| baseline.get(a).cloned().context("in getting the value"),
+                    &mut |_, a| baseline.get(a).cloned().ok_or(crate::Error::MissingValue { context: "getting the value" }),
                 )?;
             }
         }

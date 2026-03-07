@@ -38,7 +38,6 @@
 //! - [`rew`]: Rewriting and transformation passes
 //! - [`splat`]: Object and array spreading operations
 
-use anyhow::Context;
 use arena_traits::IndexAlloc;
 use bitflags::bitflags;
 use either::Either;
@@ -69,6 +68,8 @@ use crate::lam::{AtomResolver, DefaultAtomResolver};
 pub use swc_ll_common::*;
 pub mod consts;
 pub mod conv;
+pub mod error;
+pub use error::Error;
 pub mod lam;
 pub mod prepa;
 pub mod rew;
@@ -306,7 +307,7 @@ pub struct Mapper<'a> {
     pub privates: &'a BTreeMap<Atom, SyntaxContext>,
     pub consts: Option<&'a ConstCollector>,
     pub vars: Arc<dyn AtomResolver>,
-    pub to_cfg: &'a (dyn Fn(&Function) -> anyhow::Result<Func> + 'a),
+    pub to_cfg: &'a (dyn Fn(&Function) -> Result<Func, Error> + 'a),
 }
 pub fn mapped<T>(mapper_fn: impl FnOnce(Mapper<'_>) -> T) -> T {
     mapper_fn(Mapper {
@@ -315,7 +316,7 @@ pub fn mapped<T>(mapper_fn: impl FnOnce(Mapper<'_>) -> T) -> T {
         privates: &BTreeMap::new(),
         consts: None,
         vars: Arc::new(DefaultAtomResolver {}),
-        to_cfg: &|func| func.clone().try_into(),
+        to_cfg: &|func| func.clone().try_into().map_err(Into::into),
     })
 }
 impl<'a> Mapper<'a> {
@@ -331,25 +332,25 @@ impl<'a> Mapper<'a> {
     }
 }
 impl<'a> TryFrom<&'a Func> for TFunc {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: &'a Func) -> Result<Self, Self::Error> {
         mapped(|m| TFunc::try_from_with_mapper(value, m))
     }
 }
 impl TryFrom<Func> for TFunc {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: Func) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }
 }
 impl<'a> TryFrom<&'a Function> for TFunc {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: &'a Function) -> Result<Self, Self::Error> {
         mapped(|m| TFunc::try_from_direct_with_mapper(value, m))
     }
 }
 impl TryFrom<Function> for TFunc {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn try_from(value: Function) -> Result<Self, Self::Error> {
         TryFrom::try_from(&value)
     }

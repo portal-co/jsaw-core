@@ -35,11 +35,11 @@ impl ToTACConverterCore<'_> {
 
         mut t: TBlockId,
         call: &CallExpr,
-    ) -> anyhow::Result<(
+    ) -> Result<(
         TCallee<Ident>,
         Vec<SpreadOr<(Atom, SyntaxContext)>>,
         TBlockId,
-    )> {
+    ), crate::Error> {
         let callee = match &call.callee {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
@@ -70,7 +70,7 @@ impl ToTACConverterCore<'_> {
                     TCallee::Val(r#fn)
                 }
             },
-            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         };
         let args: Vec<SpreadOr<Ident>> = call
             .args
@@ -78,15 +78,15 @@ impl ToTACConverterCore<'_> {
             .map(|a| {
                 let arg;
                 (arg, t) = self.expr(o, t, &a.expr)?;
-                anyhow::Ok(SpreadOr {
+                Ok(SpreadOr {
                     value: arg,
                     is_spread: a.spread.is_some(),
                 })
             })
-            .collect::<anyhow::Result<_>>()?;
+            .collect::<Result<_, crate::Error>>()?;
         Ok((callee, args, t))
     }
-    pub fn stmt(&mut self, o: &mut TCfg, mut t: TBlockId, s: &Stmt) -> anyhow::Result<TBlockId> {
+    pub fn stmt(&mut self, o: &mut TCfg, mut t: TBlockId, s: &Stmt) -> Result<TBlockId, crate::Error> {
         match s {
             Stmt::Expr(e) => {
                 (_, t) = self.expr(o, t, &e.expr)?;
@@ -139,7 +139,7 @@ impl ToTACConverterCore<'_> {
                 swc_ecma_ast::Decl::TsEnum(_ts_enum_decl) => todo!(),
                 swc_ecma_ast::Decl::TsModule(_ts_module_decl) => todo!(),
             },
-            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         }
     }
     pub fn bind(
@@ -151,12 +151,12 @@ impl ToTACConverterCore<'_> {
         p: &Pat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         match p {
             Pat::Ident(i2) => self.bind_ident(o, t, i2, f, decl),
             Pat::Object(op) => self.bind_object(o, t, op, f, decl),
             Pat::Assign(ass) => self.bind_assign(o, t, ass, f, decl),
-            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         }
     }
     pub fn bind_assign(
@@ -168,7 +168,7 @@ impl ToTACConverterCore<'_> {
         assign_pat: &AssignPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         let g = o.regs.alloc(());
         o.decls.insert(g.clone());
         o.blocks[t].stmts.push(TStmt {
@@ -234,7 +234,7 @@ impl ToTACConverterCore<'_> {
         p: &ArrayPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         let ps = p.elems.iter().map(|a| a.as_ref()).collect::<Vec<_>>();
         self.bind_array_contents(o, t, ps, p, f, decl)
     }
@@ -248,7 +248,7 @@ impl ToTACConverterCore<'_> {
         p: &(dyn Spanned + '_),
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         let mut ix = 0;
         let r = loop {
             if let Some(a) = ps.get(ix).and_then(|a| *a) {
@@ -373,7 +373,7 @@ impl ToTACConverterCore<'_> {
         p: &ObjectPat,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         let mut a = BTreeSet::new();
         for prop in p.props.iter() {
             match prop {
@@ -508,7 +508,7 @@ impl ToTACConverterCore<'_> {
         i2: &BindingIdent,
         f: Ident,
         decl: bool,
-    ) -> anyhow::Result<TBlockId> {
+    ) -> Result<TBlockId, crate::Error> {
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id {
                 id: i2.id.clone().into(),
@@ -532,7 +532,7 @@ impl ToTACConverterCore<'_> {
 
         mut t: TBlockId,
         s: &MemberExpr,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         let obj;
         (obj, t) = self.expr(o, t, &s.obj)?;
         self.member_prop(o, t, &s.prop, obj)
@@ -545,7 +545,7 @@ impl ToTACConverterCore<'_> {
         mut t: TBlockId,
         s: &MemberProp,
         obj: Ident,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         let i = match s {
             MemberProp::PrivateName(p) => Item::PrivateMem {
                 obj,
@@ -584,7 +584,7 @@ impl ToTACConverterCore<'_> {
 
         mut t: TBlockId,
         s: &Class,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         let superclass = match &s.super_class {
             None => None,
             Some(a) => Some({
@@ -619,7 +619,7 @@ impl ToTACConverterCore<'_> {
                                 ))
                             }
                             swc_ecma_ast::PropName::Num(number) => {
-                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                                return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                             }
                             swc_ecma_ast::PropName::Computed(computed_prop_name) => {
                                 let w2;
@@ -627,7 +627,7 @@ impl ToTACConverterCore<'_> {
                                 ((w, PropKey::Computed(w2), v))
                             }
                             swc_ecma_ast::PropName::BigInt(big_int) => {
-                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                                return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                             }
                         },
                     },
@@ -748,7 +748,7 @@ impl ToTACConverterCore<'_> {
                         x,
                     ));
                 }
-                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
             }
         }
         let tmp = o.regs.alloc(());
@@ -774,7 +774,7 @@ impl ToTACConverterCore<'_> {
         tgt: &AssignTarget,
         op: &AssignOp,
         right: Ident,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         match tgt {
             swc_ecma_ast::AssignTarget::Simple(simple_assign_target) => match &simple_assign_target
             {
@@ -894,7 +894,7 @@ impl ToTACConverterCore<'_> {
                     // });
                     // o.decls.insert(right.clone());
                 }
-                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
             },
             swc_ecma_ast::AssignTarget::Pat(assign_target_pat) => match &assign_target_pat {
                 AssignTargetPat::Object(p) => {
@@ -903,7 +903,7 @@ impl ToTACConverterCore<'_> {
                 AssignTargetPat::Array(p) => {
                     t = self.bind_array(o, t, p, right.clone(), false)?;
                 }
-                _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+                _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
             },
         };
         Ok((right, t))
@@ -917,7 +917,7 @@ impl ToTACConverterCore<'_> {
         f: Frame<'_>,
         s: Ident,
         r: Ident,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         match f {
             Frame::Assign(assign_target, assign_op) => {
                 self.assign(o, t, assign_target, &assign_op, s)
@@ -1093,13 +1093,13 @@ impl ToTACConverterCore<'_> {
 
         mut t: TBlockId,
         s: &Expr,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         // if let Some(i2) = self.import_mapper[ImportMapperReq::Native].as_deref() {
         //     if let Some(n) = s.resolve_natives(i2) {
         //         let arg = n.map(&mut |e| {
         //             let x;
         //             (x, t) = self.expr(i, o, b, t, e)?;
-        //             anyhow::Ok(x)
+        //             Ok(x)
         //         })?;
         //         let tmp = o.regs.alloc(());
         //         o.blocks[t].stmts.push(TStmt {
@@ -1175,9 +1175,9 @@ impl ToTACConverterCore<'_> {
                     .map(|a| {
                         let arg;
                         (arg, t) = self.expr(o, t, &a.expr)?;
-                        anyhow::Ok(arg)
+                        Ok(arg)
                     })
-                    .collect::<anyhow::Result<_>>()?;
+                    .collect::<Result<_, crate::Error>>()?;
                 let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
@@ -1437,7 +1437,7 @@ impl ToTACConverterCore<'_> {
                     .iter()
                     .flat_map(|a| a.as_ref())
                     .map(|x| {
-                        anyhow::Ok({
+                        Ok({
                             let y;
                             (y, t) = self.expr(o, t, &x.expr)?;
                             SpreadOr {
@@ -1446,7 +1446,7 @@ impl ToTACConverterCore<'_> {
                             }
                         })
                     })
-                    .collect::<anyhow::Result<_>>()?;
+                    .collect::<Result<_, crate::Error>>()?;
                 let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
@@ -1483,7 +1483,7 @@ impl ToTACConverterCore<'_> {
                                             v,
                                         )),
                                         swc_ecma_ast::PropName::Num(number) => {
-                                            anyhow::bail!("todo: {}:{}", file!(), line!())
+                                            return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                                         }
                                         swc_ecma_ast::PropName::Computed(computed_prop_name) => {
                                             let w;
@@ -1491,15 +1491,15 @@ impl ToTACConverterCore<'_> {
                                             Some((PropKey::Computed(w), v))
                                         }
                                         swc_ecma_ast::PropName::BigInt(big_int) => {
-                                            anyhow::bail!("todo: {}:{}", file!(), line!())
+                                            return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                                         }
                                     },
                                 }
                             };
                         }
-                        anyhow::Ok(match a {
+                        Ok(match a {
                             swc_ecma_ast::PropOrSpread::Spread(_spread_element) => {
-                                anyhow::bail!("todo: {}:{}", file!(), line!())
+                                return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                             }
                             swc_ecma_ast::PropOrSpread::Prop(prop) => match prop.as_ref() {
                                 swc_ecma_ast::Prop::Shorthand(ident) => Some((
@@ -1517,7 +1517,7 @@ impl ToTACConverterCore<'_> {
                                     prop_name!(v => &key_value_prop.key)
                                 }
                                 swc_ecma_ast::Prop::Assign(_assign_prop) => {
-                                    anyhow::bail!("todo: {}:{}", file!(), line!())
+                                    return Err(crate::Error::Unsupported { file: file!(), line: line!() })
                                 }
                                 swc_ecma_ast::Prop::Getter(getter_prop) => {
                                     let v = PropVal::Getter({
@@ -1529,7 +1529,7 @@ impl ToTACConverterCore<'_> {
                                             &getter_prop
                                                 .body
                                                 .as_ref()
-                                                .context("in getting the body")?
+                                                .ok_or(crate::Error::Unsupported { file: file!(), line: line!() })?
                                                 .stmts
                                                 .clone(),
                                             c.entry,
@@ -1554,7 +1554,7 @@ impl ToTACConverterCore<'_> {
                                             &setter_prop
                                                 .body
                                                 .as_ref()
-                                                .context("in getting the body")?
+                                                .ok_or(crate::Error::Unsupported { file: file!(), line: line!() })?
                                                 .stmts
                                                 .clone(),
                                             c.entry,
@@ -1579,7 +1579,7 @@ impl ToTACConverterCore<'_> {
                         Ok(None) => None,
                         Err(e) => Some(Err(e)),
                     })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>, crate::Error>>()?;
                 let tmp = o.regs.alloc(());
                 o.blocks[t].stmts.push(TStmt {
                     left: LId::Id { id: tmp.clone() },
@@ -1630,7 +1630,7 @@ impl ToTACConverterCore<'_> {
                     (c, t) = self.expr(o, t, a)?;
                     r = Some(c)
                 }
-                Ok((r.context("in getting the last one")?, t))
+                Ok((r.ok_or(crate::Error::Unsupported { file: file!(), line: line!() })?, t))
             }
             Expr::MetaProp(m) => {
                 let tmp = o.regs.alloc(());
@@ -1643,7 +1643,7 @@ impl ToTACConverterCore<'_> {
                 o.decls.insert(tmp.clone());
                 Ok((tmp, t))
             }
-            _ => anyhow::bail!("todo: {}:{}", file!(), line!()),
+            _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         }
     }
 
@@ -1657,7 +1657,7 @@ impl ToTACConverterCore<'_> {
         cons: &MemberProp,
         alt: &MemberProp,
         span: Span,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         match (cons, alt) {
             (MemberProp::Computed(cons), MemberProp::Computed(alt)) => {
                 self.convert_cond_expr(o, t, test, &cons.expr, &alt.expr, span)
@@ -1714,7 +1714,7 @@ impl ToTACConverterCore<'_> {
         cons: &Expr,
         alt: &Expr,
         span: Span,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         let v = test;
         if let Some(Item::Lit { lit: Lit::Bool(b2) }) = o.def(LId::Id { id: v.clone() }) {
             let w;
@@ -1908,7 +1908,7 @@ impl ToTACConverterCore<'_> {
 
         t: TBlockId,
         prop: &MemberProp,
-    ) -> anyhow::Result<(Ident, TBlockId)> {
+    ) -> Result<(Ident, TBlockId), crate::Error> {
         match prop {
             MemberProp::Ident(ident_name) => {
                 let lit = Lit::Str(Str {
@@ -1928,7 +1928,7 @@ impl ToTACConverterCore<'_> {
             }
             MemberProp::PrivateName(_private_name) => {
                 // TODO: handle private names if needed
-                anyhow::bail!("PrivateName not supported in member_prop_expr")
+                return Err(crate::Error::Unsupported { file: file!(), line: line!() })
             }
             MemberProp::Computed(computed_prop_name) => {
                 self.expr(o, t, &computed_prop_name.expr)
