@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-common"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "bitflags",
  "either",
@@ -969,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-simpl-js"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "portal-jsc-swc-util",
  "rkyv",
@@ -983,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-cfg"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-ll-common"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-opt-ssa"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-ssa"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -1084,7 +1084,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-tac"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "anyhow",
  "arena-traits",
@@ -1115,7 +1115,7 @@ dependencies = [
 
 [[package]]
 name = "portal-jsc-swc-util"
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 dependencies = [
  "base64",
  "bitflags",

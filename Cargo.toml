@@ -16,7 +16,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.8.0-pre.10"
+version = "0.8.0-pre.11"
 edition = "2024"
 license = "MPL-2.0"
 description = "ECMAScript IR"
