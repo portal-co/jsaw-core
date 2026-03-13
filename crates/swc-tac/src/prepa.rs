@@ -405,7 +405,7 @@ impl VisitMut for Prepa<'_> {
                     node => node,
                 }
             }
-            portal_solutions_swibb::folding::CondFolding::default().visit_mut_expr(node);
+            portal_solutions_swibb::opt::folding::CondFolding::default().visit_mut_expr(node);
         }
     }
 }
