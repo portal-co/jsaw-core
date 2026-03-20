@@ -92,6 +92,7 @@ pub mod error;
 pub use error::Error;
 pub mod eval;
 pub mod impls;
+pub mod module;
 pub mod opt_stub;
 pub mod rew;
 pub mod simplify;

@@ -71,6 +71,7 @@ pub mod conv;
 pub mod error;
 pub use error::Error;
 pub mod lam;
+pub mod module;
 pub mod prepa;
 pub mod rew;
 pub mod splat;

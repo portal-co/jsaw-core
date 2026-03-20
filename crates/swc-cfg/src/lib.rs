@@ -47,6 +47,7 @@ use swc_ecma_ast::{
 };
 pub mod error;
 pub use error::Error;
+pub mod module;
 pub mod recfg;
 pub mod simplify;
 /// A function represented as a control flow graph.
