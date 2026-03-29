@@ -25,6 +25,7 @@ impl<I: Clone + Eq, F> Item<I, F> {
     ) -> Option<Lit> {
         return match self {
             Item::Just { id: _ } => None,
+            Item::Lit { lit } => Some(lit.clone()),
             Item::Bin {
                 left: l2,
                 right: r2,
