@@ -315,27 +315,34 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for If<'_,
         let span = if_stmt.span;
         let next = cfg.new_block(sidecar)?;
         let then = cfg.new_block(sidecar)?;
+        // Allocate else entry block (or use next as the fallthrough target).
+        let els = match if_stmt.alt.as_ref() {
+            None => next,
+            Some(_) => cfg.new_block(sidecar)?,
+        };
+        // Emit the conditional branch into `current` BEFORE processing either
+        // branch body.  This ensures `current`'s terminator is set exactly
+        // once and is never overwritten by a return/throw inside the body.
+        cfg.cond_jmp(sidecar, current, &if_stmt.test, then, els, Some(span))?;
+
+        // Process then body starting from `then` (not from `current`).
         let then_end = ctx.transform(
             cfg,
             sidecar,
             if_stmt.cons,
-            current,
+            then,
             match if_stmt.alt.as_ref() {
                 None => label,
                 Some(_) => None,
             },
         )?;
         cfg.jump(sidecar, then_end, next, None)?;
-        let els = match if_stmt.alt.as_ref() {
-            None => then,
-            Some(else_stmt) => {
-                let els = cfg.new_block(sidecar)?;
-                let els_end = ctx.transform(cfg, sidecar, &**else_stmt, current, None)?;
-                cfg.jump(sidecar, els_end, next, None)?;
-                els
-            }
-        };
-        cfg.cond_jmp(sidecar, current, &if_stmt.test, then, els, Some(span))?;
+
+        // Process else body starting from `els`.
+        if let Some(else_stmt) = if_stmt.alt.as_ref() {
+            let els_end = ctx.transform(cfg, sidecar, &**else_stmt, els, None)?;
+            cfg.jump(sidecar, els_end, next, None)?;
+        }
 
         Ok(next)
     }
