@@ -34,6 +34,12 @@ macro_rules! fetch {
                         Callee::Import(import) => TCallee::Import,
                         Callee::Expr(expr) => match &**expr {
                             Expr::Ident(i) if !i.optional && i.sym == "eval" => TCallee::Eval,
+                            Expr::SuperProp(sp) => match &sp.prop {
+                                swc_ecma_ast::SuperProp::Ident(ident_name) => {
+                                    TCallee::SuperMember { member: ident_name.sym.clone() }
+                                }
+                                swc_ecma_ast::SuperProp::Computed(_) => TCallee::Val(p(expr)),
+                            },
                             Expr::Member(m) => match &m.prop {
                                 MemberProp::Ident(ident_name) => TCallee::Member {
                                     func: p(&m.obj),

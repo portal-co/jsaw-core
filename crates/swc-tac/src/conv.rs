@@ -44,6 +44,19 @@ impl ToTACConverterCore<'_> {
             Callee::Import(_) => TCallee::Import,
             Callee::Super(_) => TCallee::Super,
             Callee::Expr(e) => match e.as_ref() {
+                // super.method(args) — static dispatch to parent class method.
+                Expr::SuperProp(sp) => {
+                    let member = match &sp.prop {
+                        swc_ecma_ast::SuperProp::Ident(ident_name) => ident_name.sym.clone(),
+                        swc_ecma_ast::SuperProp::Computed(_) => {
+                            return Err(crate::Error::Unsupported {
+                                file: file!(),
+                                line: line!(),
+                            })
+                        }
+                    };
+                    TCallee::SuperMember { member }
+                }
                 Expr::Ident(i) if i.sym == "eval" && !i.optional => TCallee::Eval,
                 Expr::Member(m) => {
                     let r#fn;
@@ -1623,6 +1636,8 @@ impl ToTACConverterCore<'_> {
                 o.decls.insert(tmp.clone());
                 Ok((tmp, t))
             }
+            // Parenthesised expressions are transparent — `(e)` == `e`.
+            Expr::Paren(p) => self.expr(o, t, &p.expr),
             Expr::Seq(s) => {
                 let mut r = None;
                 for a in s.exprs.iter() {

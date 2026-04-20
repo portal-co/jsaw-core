@@ -433,6 +433,10 @@ pub enum TCallee<I> {
     Import,
     /// Super call (e.g., `super()`)
     Super,
+    /// Super-method call (e.g., `super.method(args)`).
+    /// The member name is always a statically-known atom; computed super
+    /// member calls (`super[expr]()`) are not yet supported.
+    SuperMember { member: swc_atoms::Atom },
     /// Eval call (e.g., `eval(...)`)
     Eval,
     // Static(Ident),
@@ -448,6 +452,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::SuperMember { member } => TCallee::SuperMember { member: member.clone() },
             TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
@@ -462,6 +467,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::SuperMember { member } => TCallee::SuperMember { member: member.clone() },
             TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a.clone()),
         }
@@ -479,6 +485,7 @@ impl<I> TCallee<I> {
             },
             TCallee::Import => TCallee::Import,
             TCallee::Super => TCallee::Super,
+            TCallee::SuperMember { member } => TCallee::SuperMember { member },
             TCallee::Eval => TCallee::Eval,
             // TCallee::Static(a) => TCallee::Static(a),
         })
@@ -1104,7 +1111,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super | TCallee::SuperMember { .. } | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter().map(
@@ -1205,7 +1212,7 @@ impl<I, F> Item<I, F> {
                         vec![a]
                     }
                     swc_tac::TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                    TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                    TCallee::Import | TCallee::Super | TCallee::SuperMember { .. } | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                 }
                 .into_iter()
                 .chain(args.iter_mut().map(

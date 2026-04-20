@@ -372,6 +372,18 @@ impl<I, F> Render<I, F> for Item<I, F> {
                                     // phase: Default::default(),
                                 });
                             }
+                            TCallee::SuperMember { member } => {
+                                Box::new(Expr::SuperProp(swc_ecma_ast::SuperPropExpr {
+                                    span,
+                                    obj: swc_ecma_ast::Super { span },
+                                    prop: swc_ecma_ast::SuperProp::Ident(
+                                        swc_ecma_ast::IdentName {
+                                            span,
+                                            sym: member.clone(),
+                                        },
+                                    ),
+                                }))
+                            }
                             TCallee::Eval => Box::new(Expr::Ident(swc_ecma_ast::Ident::new(
                                 Atom::new("eval"),
                                 span,

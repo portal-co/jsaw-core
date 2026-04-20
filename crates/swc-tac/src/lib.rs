@@ -592,7 +592,7 @@ impl TCfg {
                             vec![val_ident]
                         }
                         TCallee::Member { func: r#fn, member } => vec![r#fn, member],
-                        TCallee::Import | TCallee::Super | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
+                        TCallee::Import | TCallee::Super | TCallee::SuperMember { .. } | TCallee::Eval => vec![], // swc_tac::TCallee::Static(_) => vec![],
                     }
                     .into_iter()
                     .cloned()
