@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, HashMap};
 use swc_atoms::Atom;
 use swc_cfg::Cfg;
 use swc_cfg::{Func, Term};
-use swc_common::{Span, Spanned, SyntaxContext};
+use swc_common::{Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::ExprStmt;
 use swc_ecma_ast::{
     ArrayLit, ArrayPat, CondExpr, KeyValuePatProp, MetaPropExpr, NewExpr, ObjectPat, ObjectPatProp,
@@ -44,7 +44,7 @@ use swc_ecma_ast::{Expr, SimpleAssignTarget};
 use swc_ecma_ast::{FnExpr, GetterProp};
 use swc_ecma_ast::{Id as Ident, SetterProp};
 use swc_ecma_ast::{IdentName, Stmt};
-use swc_ecma_ast::{MethodProp, ObjectLit};
+use swc_ecma_ast::{MethodProp, ObjectLit, ParenExpr};
 use swc_ecma_ast::{PrivateProp, UnaryExpr};
 use swc_ll_common::{PrivateKind, PropSym, TClass};
 
@@ -200,50 +200,41 @@ impl<I, F> Render<I, F> for Item<I, F> {
                 otherwise,
             } => {
                 let mut temps = Vec::default();
-                let res = 'a: {
-                    // let mut b = true;
-                    let _i = 0;
-                    let temp = || swc_ecma_ast::Ident::new_private(Atom::new("temp"), span);
-                    Box::new(Expr::Seq(SeqExpr {
+                let temp = || {
+                    let m = Mark::new();
+                    swc_ecma_ast::Ident::new(
+                        format!("_tmp_{}", m.as_u32()).into(),
                         span,
-                        exprs: match [cond, then, otherwise]
-                            .map(|a| match sr(cx, a) {
-                                s => s.map(|s| {
-                                    Box::new(Expr::Assign(AssignExpr {
-                                        span,
-                                        op: AssignOp::Assign,
-                                        left: AssignTarget::Simple(SimpleAssignTarget::Ident({
-                                            let t = temp();
-                                            temps.push(t.clone());
-                                            t.into()
-                                        })),
-                                        right: s,
-                                    }))
-                                }),
-                            })
-                            .into_iter()
-                            // .flatten()
-                            .chain([Ok(Box::new(Expr::Ident(temps.remove(0))))])
-                            .collect::<Result<Vec<_>, E>>()?
-                        {
-                            mut v => {
-                                if v.len() == 1 {
-                                    break 'a v.pop().unwrap();
-                                }
-                                v
-                            }
-                        },
-                    }))
+                        SyntaxContext::empty().apply_mark(m),
+                    )
                 };
-                match res {
-                    seq => Expr::Cond(CondExpr {
+                let mut exprs: Vec<Box<Expr>> = [cond, then, otherwise]
+                    .iter()
+                    .map(|a| {
+                        sr(cx, a).map(|s| {
+                            let t = temp();
+                            temps.push(t.clone());
+                            Box::new(Expr::Assign(AssignExpr {
+                                span,
+                                op: AssignOp::Assign,
+                                left: AssignTarget::Simple(SimpleAssignTarget::Ident(t.into())),
+                                right: s,
+                            }))
+                        })
+                    })
+                    .collect::<Result<_, E>>()?;
+                // The sequence evaluates all three; value = temps[0] (cond result).
+                exprs.push(Box::new(Expr::Ident(temps[0].clone())));
+                Expr::Cond(CondExpr {
+                    span,
+                    test: Box::new(Expr::Paren(ParenExpr {
                         span,
-                        test: seq,
-                        cons: temps.remove(0).into(),
-                        alt: temps.remove(0).into(),
-                    }),
-                }
-            }
+                        expr: Box::new(Expr::Seq(SeqExpr { span, exprs })),
+                    })),
+                    cons: temps[1].clone().into(),
+                    alt: temps[2].clone().into(),
+                })
+            },
             crate::Item::Just { id } => return si(cx, id).map(|a| a.into()),
             crate::Item::Bin { left, right, op } => Expr::Bin(BinExpr {
                 span,
@@ -1108,16 +1099,19 @@ impl Rew<'_> {
                             None => Box::new(Expr::Ident(ident(left, span))),
                             Some(right) => match n {
                                 0 | 1 => right,
-                                _ => Box::new(Expr::Assign(AssignExpr {
-                                    span: right.span(),
-                                    op: AssignOp::Assign,
-                                    left: AssignTarget::Simple(SimpleAssignTarget::Ident(
-                                        BindingIdent {
-                                            id: ident(left, span),
-                                            type_ann: None,
-                                        },
-                                    )),
-                                    right,
+                                _ => Box::new(Expr::Paren(ParenExpr {
+                                    span,
+                                    expr: Box::new(Expr::Assign(AssignExpr {
+                                        span: right.span(),
+                                        op: AssignOp::Assign,
+                                        left: AssignTarget::Simple(SimpleAssignTarget::Ident(
+                                            BindingIdent {
+                                                id: ident(left, span),
+                                                type_ann: None,
+                                            },
+                                        )),
+                                        right,
+                                    })),
                                 })),
                             },
                         },

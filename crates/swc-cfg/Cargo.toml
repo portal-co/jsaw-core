@@ -12,10 +12,9 @@ anyhow.workspace = true
 thiserror.workspace = true
 cfg-traits.workspace = true
 swc-ll-common.workspace = true
-relooper.workspace = true
 ssa-impls.workspace = true
 rkyv = {workspace = true,optional = true}
-ssa-reloop.workspace = true
+ssa-reloop2.workspace = true
 arena-traits.workspace = true
 log.workspace = true
 

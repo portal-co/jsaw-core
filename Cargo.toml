@@ -8,7 +8,8 @@ members = [
     "crates/swc-util",
     "crates/portal-jsc-generator",
     "crates/simpl-js",
-    "crates/swc-ll-common"
+    "crates/swc-ll-common",
+    "crates/swc-test-harness"
 ]
 
 # "js-runtime-lib","swc-emit-rust","swc-waffle"
@@ -44,6 +45,7 @@ ssa-traits = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.g
 cfg-traits = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
 ssa-impls =  {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
 ssa-reloop = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
+ssa-reloop2 = {version="^0.2.3",git="https://github.com/portal-co/codegen-utils.git",branch="master"}
 
 ssa-traits-03 = { version = "0.3.0-alpha.2", package = "ssa-traits" ,git="https://github.com/portal-co/codegen-utils.git",branch="dev/0.3"}
 cfg-traits-03 = { version = "0.3.0-alpha.2", package = "cfg-traits" ,git="https://github.com/portal-co/codegen-utils.git",branch="dev/0.3"}

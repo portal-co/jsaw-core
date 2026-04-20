@@ -35,7 +35,7 @@
 //! - [`simplify`]: CFG simplification passes
 //! - [`to_cfg`]: Conversion from AST to CFG
 
-use relooper::ShapedBlock;
+use ssa_reloop2::StructuredBlock;
 use std::{collections::HashMap, iter::once};
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
@@ -125,12 +125,13 @@ impl TryFrom<Function> for Func {
 }
 impl From<Func> for Function {
     fn from(val: Func) -> Self {
+        eprintln!("[swc-cfg] From<Func> for Function: {} blocks", val.cfg.blocks.len());
         log::debug!(
             "converting CFG Func to Function: {} blocks, {} params",
             val.cfg.blocks.len(),
             val.params.len(),
         );
-        let k = ssa_reloop::go(&val, val.entry);
+        let k = ssa_reloop2::go(&val);
         let stmts = Cfg::process_block(&val.cfg, &k, Span::dummy_with_cmt(), Default::default());
         Function {
             params: val.params,
@@ -222,12 +223,12 @@ impl Cfg {
     // }
     pub fn process_block(
         &self,
-        k: &ShapedBlock<BlockId>,
+        k: &StructuredBlock<BlockId>,
         span: Span,
         ctxt: SyntaxContext,
     ) -> Vec<Stmt> {
         match k {
-            ShapedBlock::Simple(simple_block) => {
+            StructuredBlock::Simple(simple_block) => {
                 let span = match self.blocks[simple_block.label].end.orig_span {
                     None => span,
                     Some(s) => s,
@@ -250,8 +251,8 @@ impl Cfg {
                     .chain(match simple_block.branches.get(&target_block) {
                         None => vec![],
                         Some(branch_mode) => match branch_mode {
-                            relooper::BranchMode::LoopBreak(loop_id)
-                            | relooper::BranchMode::LoopBreakIntoMulti(loop_id) => {
+                            ssa_reloop2::BranchMode::LoopBreak(loop_id)
+                            | ssa_reloop2::BranchMode::LoopBreakIntoMulti(loop_id) => {
                                 vec![Stmt::Break(BreakStmt {
                                     span,
                                     label: Some(Ident::new(
@@ -261,16 +262,16 @@ impl Cfg {
                                     )),
                                 })]
                             }
-                            relooper::BranchMode::LoopContinue(l)
-                            | relooper::BranchMode::LoopContinueIntoMulti(l) => {
+                            ssa_reloop2::BranchMode::LoopContinue(l)
+                            | ssa_reloop2::BranchMode::LoopContinueIntoMulti(l) => {
                                 vec![Stmt::Continue(ContinueStmt {
                                     span,
                                     label: Some(Ident::new(Atom::new(format!("${l}")), span, ctxt)),
                                 })]
                             }
-                            relooper::BranchMode::MergedBranch => vec![],
-                            relooper::BranchMode::MergedBranchIntoMulti => vec![],
-                            relooper::BranchMode::SetLabelAndBreak => {
+                            ssa_reloop2::BranchMode::MergedBranch => vec![],
+                            ssa_reloop2::BranchMode::MergedBranchIntoMulti => vec![],
+                            ssa_reloop2::BranchMode::SetLabelAndBreak => {
                                 vec![Stmt::Break(BreakStmt { span, label: None })]
                             }
                         },
@@ -371,7 +372,7 @@ impl Cfg {
                 }
                 body
             }
-            ShapedBlock::Loop(loop_block) => once(Stmt::Labeled(LabeledStmt {
+            StructuredBlock::Loop(loop_block) => once(Stmt::Labeled(LabeledStmt {
                 span,
                 label: Ident::new(Atom::new(format!("${}", loop_block.loop_id)), span, ctxt),
                 body: Box::new(Stmt::For(ForStmt {
@@ -394,7 +395,7 @@ impl Cfg {
                     .flat_map(|a| self.process_block(a, span, ctxt).into_iter()),
             )
             .collect(),
-            ShapedBlock::Multiple(multiple_block) => vec![Stmt::Switch(SwitchStmt {
+            StructuredBlock::Multiple(multiple_block) => vec![Stmt::Switch(SwitchStmt {
                 span,
                 discriminant: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
                 cases: multiple_block
@@ -428,7 +429,7 @@ impl Cfg {
                                     })),
                                     prop: swc_ecma_ast::MemberProp::Ident(IdentName {
                                         span,
-                                        sym: Atom::new("contains"),
+                                        sym: Atom::new("includes"),
                                     }),
                                 }
                                 .into(),

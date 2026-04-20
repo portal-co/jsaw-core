@@ -1,0 +1,25 @@
+[package]
+name = "portal-jsc-swc-test-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "swc-test-harness"
+path = "src/main.rs"
+
+[dependencies]
+swc-cfg = { workspace = true }
+swc-tac = { workspace = true }
+portal-jsc-swc-util = { workspace = true }
+swc_common = { workspace = true }
+swc_ecma_ast = { workspace = true }
+swc_ecma_parser = { workspace = true }
+swc_ecma_codegen = { workspace = true }
+swc_ecma_transforms_base = { workspace = true }
+swc_ecma_visit = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
