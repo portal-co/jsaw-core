@@ -40,10 +40,10 @@ use std::{collections::HashMap, iter::once};
 use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
-    ArrayLit, AssignExpr, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr, CatchClause,
-    ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident, IdentName, IfStmt,
-    LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase, SwitchStmt,
-    ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl,
+    ArrayLit, AssignExpr, BinExpr, BinaryOp, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr,
+    CatchClause, ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
+    IdentName, IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
+    SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl, VarDecl, VarDeclKind, VarDeclarator,
 };
 pub mod error;
 pub use error::Error;
@@ -125,14 +125,39 @@ impl TryFrom<Function> for Func {
 }
 impl From<Func> for Function {
     fn from(val: Func) -> Self {
-        eprintln!("[swc-cfg] From<Func> for Function: {} blocks", val.cfg.blocks.len());
         log::debug!(
             "converting CFG Func to Function: {} blocks, {} params",
             val.cfg.blocks.len(),
             val.params.len(),
         );
+        let span = Span::dummy_with_cmt();
+        let ctxt = Default::default();
         let k = ssa_reloop2::go(&val);
-        let stmts = Cfg::process_block(&val.cfg, &k, Span::dummy_with_cmt(), Default::default());
+        // `cff` ("control-flow flag"): every emitted block's own content is gated behind
+        // a check that this equals the block's own label (see `process_block`'s `Simple`
+        // case) — seed it to the entry block's label so that check passes on first entry.
+        let cff_decl = Stmt::Decl(Decl::Var(Box::new(VarDecl {
+            span,
+            ctxt,
+            kind: VarDeclKind::Var,
+            declare: false,
+            decls: vec![VarDeclarator {
+                span,
+                name: Pat::Ident(BindingIdent {
+                    id: Ident::new(Atom::new("cff"), span, ctxt),
+                    type_ann: None,
+                }),
+                init: Some(Box::new(Expr::Lit(Lit::Str(Str {
+                    span,
+                    value: Atom::new(val.entry.index().to_string()).into(),
+                    raw: None,
+                })))),
+                definite: false,
+            }],
+        })));
+        let stmts = once(cff_decl)
+            .chain(Cfg::process_block(&val.cfg, &k, span, ctxt))
+            .collect();
         Function {
             params: val.params,
             decorators: vec![],
@@ -280,7 +305,7 @@ impl Cfg {
                 };
                 let l = simple_block.label;
                 let body = self.blocks[l].stmts.to_vec();
-                let mut body = match &self.blocks[l].end.catch {
+                let mut inner = match &self.blocks[l].end.catch {
                     Catch::Throw => body,
                     Catch::Jump { pat, k } => {
                         let id = Ident::new_private(Atom::new("caught"), span);
@@ -316,20 +341,20 @@ impl Cfg {
                     }
                 };
                 match &self.blocks[l].end.term {
-                    Term::Return(expr) => body.push(Stmt::Return(ReturnStmt {
+                    Term::Return(expr) => inner.push(Stmt::Return(ReturnStmt {
                         span,
                         arg: expr.as_ref().cloned().map(Box::new),
                     })),
-                    Term::Throw(expr) => body.push(Stmt::Throw(ThrowStmt {
+                    Term::Throw(expr) => inner.push(Stmt::Throw(ThrowStmt {
                         span,
                         arg: Box::new(expr.clone()),
                     })),
-                    Term::Jmp(id) => body.extend(jmp(*id)),
+                    Term::Jmp(id) => inner.extend(jmp(*id)),
                     Term::CondJmp {
                         cond,
                         if_true,
                         if_false,
-                    } => body.push(Stmt::If(IfStmt {
+                    } => inner.push(Stmt::If(IfStmt {
                         span,
                         test: Box::new(cond.clone()),
                         cons: Box::new(Stmt::Block(BlockStmt {
@@ -344,7 +369,7 @@ impl Cfg {
                         }))),
                     })),
                     Term::Switch { x, blocks, default } => {
-                        body.push(Stmt::Switch(SwitchStmt {
+                        inner.push(Stmt::Switch(SwitchStmt {
                             span,
                             discriminant: Box::new(x.clone()),
                             cases: blocks
@@ -364,6 +389,38 @@ impl Cfg {
                     }
                     Term::Default => {}
                 };
+                // Gate this block's own content behind its own `cff` check.
+                // `ssa-reloop2`'s reconverge heuristic (`find_reconverge`'s "all blocks
+                // owned" fallback) can place an unrelated block into a shared `next` tail
+                // purely due to postorder-traversal coincidence, even when it's only
+                // reachable from one specific branch with no true reconvergence — e.g.
+                // two independent `return`-terminated leaves chained as if sequential.
+                // Wrapping every block's own emitted statements in a check against the
+                // very `cff` value this same function already assigns per-branch (see the
+                // `jmp` closure above and the `Multiple` case below) makes every block
+                // sound regardless of where it's placed structurally, at the cost of a
+                // redundant check in the common (correctly-placed) case. See
+                // `crates/jade-vm-jit/src/reloop.rs` in the `portal-solutions-jade` repo
+                // for the test case that found this and the same fix applied there.
+                let mut body = vec![Stmt::If(IfStmt {
+                    span,
+                    test: Box::new(Expr::Bin(BinExpr {
+                        span,
+                        op: BinaryOp::EqEqEq,
+                        left: Box::new(Expr::Ident(Ident::new(Atom::new("cff"), span, ctxt))),
+                        right: Box::new(Expr::Lit(Lit::Str(Str {
+                            span,
+                            value: Atom::new(l.index().to_string()).into(),
+                            raw: None,
+                        }))),
+                    })),
+                    cons: Box::new(Stmt::Block(BlockStmt {
+                        span,
+                        ctxt,
+                        stmts: inner,
+                    })),
+                    alt: None,
+                })];
                 for x in [simple_block.immediate.as_ref(), simple_block.next.as_ref()] {
                     body.extend(
                         x.into_iter()
