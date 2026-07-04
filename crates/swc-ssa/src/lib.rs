@@ -970,4 +970,40 @@ mod tests {
 
         module.visit_with(&mut ParamLoadIdChecker);
     });
+
+    /// `SCfg::inline_iifes` should eliminate a direct call to a single-block IIFE, leaving
+    /// its body's own operations spliced directly into the caller instead of a residual
+    /// `Item::Call { callee: TCallee::Val(_), .. }`.
+    portal_solutions_swibb::simple_module_test!(test_inline_iifes ["
+    export function foo(a, b){
+    return (function(x, y){ return x + y; })(a, b);
+    }
+    "] => |_sm, module| {
+        use swc_ecma_visit::Visit;
+        use crate::{SFunc, SValue};
+        use swc_tac::{Item, TCallee, TFunc};
+
+        struct IifeChecker;
+        impl Visit for IifeChecker {
+            fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
+                let tfunc = TFunc::try_from(node.clone()).unwrap();
+                let mut sfunc = SFunc::try_from(tfunc).unwrap();
+                sfunc.cfg.inline_iifes();
+
+                for (_id, block) in sfunc.cfg.blocks.iter() {
+                    for &sid in &block.stmts {
+                        if let SValue::Item {
+                            item: Item::Call { callee: TCallee::Val(_), .. },
+                            span: _,
+                        } = &sfunc.cfg.values[sid].value
+                        {
+                            panic!("expected the IIFE call to be inlined away, found one still present");
+                        }
+                    }
+                }
+            }
+        }
+
+        module.visit_with(&mut IifeChecker);
+    });
 }
