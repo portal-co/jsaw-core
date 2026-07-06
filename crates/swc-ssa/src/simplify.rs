@@ -23,6 +23,7 @@ use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
 use swc_tac::ItemGetterExt;
 pub use swc_tac::{Item, ItemGetter};
+use swc_tac::TCallee;
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -92,6 +93,145 @@ impl SCfg {
                 );
             }
         }
+    }
+    /// Inlines direct calls to immediately-invoked function expressions whose body is a
+    /// single, straight-line block: no internal control flow, no nested closures, no named
+    /// variable load/store, and (for a real `function`, not an arrow) no `this`/`arguments`
+    /// reference. This is exactly the shape produced by e.g. `jade-vm-frontend`'s
+    /// tenant-method `this`-rewrite (see the `jade` repo's
+    /// `docs/pluggable-tenant-interface-plan.md` addendum) — a
+    /// `(function(__this, ...params){ <straight-line ops>; return x; })(tenantRef, ...args)`
+    /// splice. Anything not matching this narrow shape is left as an ordinary call: inlining
+    /// here is purely an optimization, never required for correctness, so declining to inline
+    /// is always a safe fallback.
+    pub fn inline_iifes(&mut self) {
+        log::trace!("ssa inline_iifes: scanning {} blocks", self.blocks.len());
+        for block_id in self.blocks.iter().map(|(id, _)| id).collect::<Vec<_>>() {
+            let stmt_ids = self.blocks[block_id].stmts.clone();
+            for stmt_id in stmt_ids {
+                self.try_inline_iife(block_id, stmt_id);
+            }
+        }
+    }
+    /// Follows `Item::Just` alias chains to find an `Item::Func` literal, returning its
+    /// `SFunc` and whether it's an arrow function.
+    fn resolve_func_literal(&self, mut id: SValueId) -> Option<(SFunc, bool)> {
+        loop {
+            match &self.values[id].value {
+                SValue::Item {
+                    item: Item::Just { id: inner },
+                    span: _,
+                } => id = *inner,
+                SValue::Item {
+                    item: Item::Func { func, arrow },
+                    span: _,
+                } => return Some((func.clone(), *arrow)),
+                _ => return None,
+            }
+        }
+    }
+    fn try_inline_iife(&mut self, block_id: SBlockId, call_id: SValueId) {
+        let (callee_id, args, span) = match &self.values[call_id].value {
+            SValue::Item {
+                item:
+                    Item::Call {
+                        callee: TCallee::Val(callee_id),
+                        args,
+                    },
+                span,
+            } => (*callee_id, args.clone(), *span),
+            _ => return,
+        };
+        if args.iter().any(|a| a.is_spread) {
+            return;
+        }
+        let args: Vec<SValueId> = args.into_iter().map(|a| a.value).collect();
+        let Some((func, arrow)) = self.resolve_func_literal(callee_id) else {
+            return;
+        };
+        if func.is_generator || func.is_async {
+            return;
+        }
+        if func.cfg.blocks.len() != 1 {
+            return;
+        }
+        let entry_block = &func.cfg.blocks[func.entry];
+        if entry_block.params.len() != args.len() {
+            return;
+        }
+        if entry_block.postcedent.catch != SCatch::Throw {
+            return;
+        }
+        let ret_id = match &entry_block.postcedent.term {
+            TTerm::Return(ret) => *ret,
+            _ => return,
+        };
+        // Soundness scan: only plain computed values (no nested closures; no named-variable
+        // load/store; and, for a real `function` rather than an arrow, no `this`/`arguments`,
+        // since those would be rebound by splicing into the caller's own context).
+        for &sid in &entry_block.stmts {
+            match &func.cfg.values[sid].value {
+                SValue::Item { item, span: _ } => {
+                    if item.funcs().next().is_some() {
+                        return;
+                    }
+                    if !arrow && matches!(item, Item::This | Item::Arguments) {
+                        return;
+                    }
+                }
+                _ => return,
+            }
+        }
+        // Map the callee's own entry-block params to the call's actual argument values, then
+        // copy the rest of the body into fresh caller-arena values, renaming references as we
+        // go (definitions precede uses within a single SSA block, so the rename map is always
+        // populated by the time it's needed).
+        let mut rename: BTreeMap<SValueId, SValueId> = BTreeMap::new();
+        for (param, arg) in entry_block.params.iter().zip(args.iter()) {
+            rename.insert(param.0, *arg);
+        }
+        let mut spliced = Vec::with_capacity(entry_block.stmts.len());
+        for &sid in &entry_block.stmts {
+            let SValue::Item { item, span } = func.cfg.values[sid].value.clone() else {
+                unreachable!("checked above: every callee stmt is SValue::Item");
+            };
+            let item = item
+                .map2(
+                    &mut (),
+                    &mut |_cx: &mut (), id: SValueId| -> Result<SValueId, Infallible> {
+                        Ok(*rename.get(&id).expect(
+                            "IIFE inlining: callee body referenced a value outside its own \
+                             single block",
+                        ))
+                    },
+                    &mut |_cx: &mut (), func: SFunc| -> Result<SFunc, Infallible> { Ok(func) },
+                )
+                .unwrap();
+            let new_id = self.values.alloc(SValue::Item { item, span }.into());
+            rename.insert(sid, new_id);
+            spliced.push(new_id);
+        }
+        let new_ret = ret_id.map(|r| rename[&r]);
+        // Splice the callee's body into the caller block right before the call, and alias the
+        // call's own result to whatever the callee returned (`undefined` if it fell off the
+        // end without an explicit `return`).
+        let block = &mut self.blocks[block_id];
+        let pos = block
+            .stmts
+            .iter()
+            .position(|&s| s == call_id)
+            .expect("call_id must be a statement of block_id");
+        block.stmts.splice(pos..pos, spliced);
+        self.values[call_id].value = match new_ret {
+            Some(id) => SValue::Item {
+                item: Item::Just { id },
+                span,
+            },
+            None => SValue::Item {
+                item: Item::Undef,
+                span,
+            },
+        };
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Copy, PartialOrd, Ord)]
