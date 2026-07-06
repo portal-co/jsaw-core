@@ -23,7 +23,11 @@ use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
 use swc_tac::ItemGetterExt;
 pub use swc_tac::{Item, ItemGetter};
+<<<<<<< HEAD
 use swc_tac::{SpreadOr, TCallee};
+=======
+use swc_tac::TCallee;
+>>>>>>> origin/main
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -152,6 +156,7 @@ impl SCfg {
         if func.is_generator || func.is_async {
             return;
         }
+<<<<<<< HEAD
         if func.cfg.blocks[func.entry].params.len() != args.len() {
             return;
         }
@@ -272,6 +277,68 @@ impl SCfg {
             },
             None => None,
         };
+=======
+        if func.cfg.blocks.len() != 1 {
+            return;
+        }
+        let entry_block = &func.cfg.blocks[func.entry];
+        if entry_block.params.len() != args.len() {
+            return;
+        }
+        if entry_block.postcedent.catch != SCatch::Throw {
+            return;
+        }
+        let ret_id = match &entry_block.postcedent.term {
+            TTerm::Return(ret) => *ret,
+            _ => return,
+        };
+        // Soundness scan: only plain computed values (no nested closures; no named-variable
+        // load/store; and, for a real `function` rather than an arrow, no `this`/`arguments`,
+        // since those would be rebound by splicing into the caller's own context).
+        for &sid in &entry_block.stmts {
+            match &func.cfg.values[sid].value {
+                SValue::Item { item, span: _ } => {
+                    if item.funcs().next().is_some() {
+                        return;
+                    }
+                    if !arrow && matches!(item, Item::This | Item::Arguments) {
+                        return;
+                    }
+                }
+                _ => return,
+            }
+        }
+        // Map the callee's own entry-block params to the call's actual argument values, then
+        // copy the rest of the body into fresh caller-arena values, renaming references as we
+        // go (definitions precede uses within a single SSA block, so the rename map is always
+        // populated by the time it's needed).
+        let mut rename: BTreeMap<SValueId, SValueId> = BTreeMap::new();
+        for (param, arg) in entry_block.params.iter().zip(args.iter()) {
+            rename.insert(param.0, *arg);
+        }
+        let mut spliced = Vec::with_capacity(entry_block.stmts.len());
+        for &sid in &entry_block.stmts {
+            let SValue::Item { item, span } = func.cfg.values[sid].value.clone() else {
+                unreachable!("checked above: every callee stmt is SValue::Item");
+            };
+            let item = item
+                .map2(
+                    &mut (),
+                    &mut |_cx: &mut (), id: SValueId| -> Result<SValueId, Infallible> {
+                        Ok(*rename.get(&id).expect(
+                            "IIFE inlining: callee body referenced a value outside its own \
+                             single block",
+                        ))
+                    },
+                    &mut |_cx: &mut (), func: SFunc| -> Result<SFunc, Infallible> { Ok(func) },
+                )
+                .unwrap();
+            let new_id = self.values.alloc(SValue::Item { item, span }.into());
+            rename.insert(sid, new_id);
+            spliced.push(new_id);
+        }
+        let new_ret = ret_id.map(|r| rename[&r]);
+>>>>>>> origin/main
         // Splice the callee's body into the caller block right before the call, and alias the
         // call's own result to whatever the callee returned (`undefined` if it fell off the
         // end without an explicit `return`).
