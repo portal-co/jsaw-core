@@ -23,11 +23,7 @@ use crate::*;
 use portal_jsc_swc_util::SemanticCfg;
 use swc_tac::ItemGetterExt;
 pub use swc_tac::{Item, ItemGetter};
-<<<<<<< HEAD
-use swc_tac::{SpreadOr, TCallee};
-=======
 use swc_tac::TCallee;
->>>>>>> origin/main
 pub type _Ident = Ident;
 impl SCfg {
     pub fn simplify_conditions(&mut self) {
@@ -156,128 +152,6 @@ impl SCfg {
         if func.is_generator || func.is_async {
             return;
         }
-<<<<<<< HEAD
-        if func.cfg.blocks[func.entry].params.len() != args.len() {
-            return;
-        }
-        // Walk the callee as a straight-line *chain* of blocks joined only by unconditional
-        // `Jmp`s (the shape a trivial function body reliably round-trips to, even with no
-        // source-level branching at all — TAC/SSA conversion doesn't guarantee a single
-        // block for a single-`return` function). Any real branching (`CondJmp`/`Switch`),
-        // exception handling (`Throw`/an active `catch`), or a revisited block (a loop) is
-        // rejected: those aren't "straight-line" and are out of scope for this pass.
-        let mut rename: BTreeMap<SValueId, SValueId> = BTreeMap::new();
-        for (param, arg) in func.cfg.blocks[func.entry].params.iter().zip(args.iter()) {
-            rename.insert(param.0, *arg);
-        }
-        let mut spliced = Vec::new();
-        let mut current = func.entry;
-        let mut visited: BTreeSet<SBlockId> = BTreeSet::new();
-        let ret_id: Option<SValueId> = loop {
-            if !visited.insert(current) {
-                return;
-            }
-            let block = &func.cfg.blocks[current];
-            if block.postcedent.catch != SCatch::Throw {
-                return;
-            }
-            // Soundness scan: only plain computed values (no nested closures; no
-            // named-variable load/store; and, for a real `function` rather than an arrow,
-            // no `this`/`arguments`, since those would be rebound by splicing into the
-            // caller's own context).
-            for &sid in &block.stmts {
-                match &func.cfg.values[sid].value {
-                    SValue::Item { item, span: _ } => {
-                        if item.funcs().next().is_some() {
-                            return;
-                        }
-                        if !arrow && matches!(item, Item::This | Item::Arguments) {
-                            return;
-                        }
-                    }
-                    _ => return,
-                }
-            }
-            for &sid in &block.stmts {
-                let SValue::Item { item, span } = func.cfg.values[sid].value.clone() else {
-                    unreachable!("checked above: every callee stmt is SValue::Item");
-                };
-                let item = item
-                    .map2(
-                        &mut (),
-                        &mut |_cx: &mut (), id: SValueId| -> Result<SValueId, Infallible> {
-                            Ok(*rename.get(&id).expect(
-                                "IIFE inlining: callee body referenced a value outside the \
-                                 chain of blocks walked so far",
-                            ))
-                        },
-                        &mut |_cx: &mut (), func: SFunc| -> Result<SFunc, Infallible> { Ok(func) },
-                    )
-                    .unwrap();
-                let new_id = self.values.alloc(SValue::Item { item, span }.into());
-                rename.insert(sid, new_id);
-                spliced.push(new_id);
-            }
-            match &block.postcedent.term {
-                TTerm::Return(ret) => break *ret,
-                TTerm::Jmp(target) => {
-                    let Some(next_params) = func.cfg.blocks.get(target.block).map(|b| &b.params) else {
-                        return;
-                    };
-                    if next_params.len() != target.args.len() {
-                        return;
-                    }
-                    for (param, arg) in next_params.iter().zip(target.args.iter()) {
-                        let Some(renamed_arg) = rename.get(arg).copied() else {
-                            return;
-                        };
-                        rename.insert(param.0, renamed_arg);
-                    }
-                    current = target.block;
-                }
-                // `return f(...)` in source lowers to a tail call, not `Return(Some(call_id))`
-                // — synthesize the equivalent `Item::Call` directly in the caller (renaming
-                // through the same map as everything else) and treat its result as what the
-                // callee "returned".
-                TTerm::Tail { callee, args } => {
-                    if args.iter().any(|a| a.is_spread) {
-                        return;
-                    }
-                    let Ok(new_callee) = callee.clone().map(&mut |id| rename.get(&id).copied().ok_or(())) else {
-                        return;
-                    };
-                    let mut new_args = Vec::with_capacity(args.len());
-                    for a in args {
-                        let Some(v) = rename.get(&a.value).copied() else {
-                            return;
-                        };
-                        new_args.push(SpreadOr { value: v, is_spread: false });
-                    }
-                    let new_call_id = self.values.alloc(
-                        SValue::Item {
-                            item: Item::Call { callee: new_callee, args: new_args },
-                            span: None,
-                        }
-                        .into(),
-                    );
-                    spliced.push(new_call_id);
-                    // `new_call_id` is already a caller-space id (just allocated in `self`),
-                    // unlike `TTerm::Return`'s callee-space id below — self-map it so the
-                    // uniform `rename.get(&r)` lookup after the loop still resolves it.
-                    rename.insert(new_call_id, new_call_id);
-                    break Some(new_call_id);
-                }
-                _ => return,
-            }
-        };
-        let new_ret = match ret_id {
-            Some(r) => match rename.get(&r) {
-                Some(id) => Some(*id),
-                None => return,
-            },
-            None => None,
-        };
-=======
         if func.cfg.blocks.len() != 1 {
             return;
         }
@@ -338,7 +212,6 @@ impl SCfg {
             spliced.push(new_id);
         }
         let new_ret = ret_id.map(|r| rename[&r]);
->>>>>>> origin/main
         // Splice the callee's body into the caller block right before the call, and alias the
         // call's own result to whatever the callee returned (`undefined` if it fell off the
         // end without an explicit `return`).
