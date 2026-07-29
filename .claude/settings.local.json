@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo doc:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(perl -e 'alarm 10; exec @ARGV' -- ./target/debug/swc-test-harness tests/fixtures/arith.js)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(perl -e 'alarm 15; exec @ARGV' -- ./target/debug/swc-test-harness tests/fixtures/arith.js)",
+      "Bash(./target/debug/swc-test-harness tests/fixtures/loop.js)",
+      "Bash(node)",
+      "Bash(./target/debug/swc-test-harness tests/fixtures/cond.js)",
+      "Bash(cat)",
+      "Bash(./target/debug/swc-test-harness /tmp/select_debug.js)"
+    ]
+  }
+}
