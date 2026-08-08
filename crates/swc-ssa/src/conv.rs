@@ -517,6 +517,35 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             decls.remove(&e);
             d.insert(e);
         }
+        // Function parameters that are reassigned anywhere in the body (e.g.
+        // `n = n - 1` inside a loop) must be SSA-tracked exactly like a `let`
+        // local — i.e. included in `decls` so `ToSSAConverter::all`/`state`
+        // gives every block a fresh, per-entry binding for them. Without this,
+        // `load()` never finds such a parameter in `state` (parameters are
+        // otherwise absent from `decls`/`all` entirely) and always falls
+        // through to the `self.params` shortcut, which unconditionally
+        // resolves to the function's *entry-block* value — so a self-looping
+        // block reads the exact same stale value on every iteration, and a
+        // loop whose termination depends on that value never terminates.
+        // Non-reassigned parameters are deliberately left alone: routing them
+        // through `self.params` remains correct and cheaper for the common
+        // case, and they *do* still need `self.params` — that map is also the
+        // path that seeds a mutated parameter's real value in the first
+        // place, via the shim-block jump below (`match params.get(&a) {
+        // Some(v) => *v, None => undef }`), so a param newly added to `decls`
+        // here starts its SSA life at the correct value, not `undef`.
+        let param_set: BTreeSet<Ident> = value.params.iter().cloned().collect();
+        let mutated_params: BTreeSet<Ident> = value
+            .cfg
+            .blocks
+            .iter()
+            .flat_map(|(_, b)| b.stmts.iter())
+            .filter_map(|stmt| match &stmt.left {
+                LId::Id { id } if param_set.contains(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        decls.extend(mutated_params);
         let mut cfg = SCfg {
             blocks: Default::default(),
             values: Default::default(),
