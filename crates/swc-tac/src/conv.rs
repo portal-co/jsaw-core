@@ -1638,6 +1638,14 @@ impl ToTACConverterCore<'_> {
             }
             // Parenthesised expressions are transparent — `(e)` == `e`.
             Expr::Paren(p) => self.expr(o, t, &p.expr),
+            // TS type-assertion/satisfies/non-null expressions are
+            // erased at compile time and have no runtime effect —
+            // `x as T` / `x as const` / `x satisfies T` / `x!` all
+            // evaluate to exactly `x`.
+            Expr::TsAs(a) => self.expr(o, t, &a.expr),
+            Expr::TsConstAssertion(a) => self.expr(o, t, &a.expr),
+            Expr::TsSatisfies(a) => self.expr(o, t, &a.expr),
+            Expr::TsNonNull(a) => self.expr(o, t, &a.expr),
             Expr::Seq(s) => {
                 let mut r = None;
                 for a in s.exprs.iter() {
