@@ -658,6 +658,10 @@ pub enum Item<I, F> {
     Meta { prop: MetaPropKind }, // Intrinsic {
                                  //     value: Native<I>,
                                  // },
+    /// Template literal (e.g. `` `a${b}c` ``). `quasis` holds the raw
+    /// string segments and always has `exprs.len() + 1` entries — the
+    /// same layout as swc's own `Tpl` node.
+    Tpl { quasis: Vec<Atom>, exprs: Vec<I> },
 }
 impl<I, F> Item<I, F> {
     pub fn map<J, E>(self, f: &mut (dyn FnMut(I) -> Result<J, E> + '_)) -> Result<Item<J, F>, E> {
@@ -785,6 +789,10 @@ impl<I, F> Item<I, F> {
                 keys: keys.iter().map(|a| a.as_ref()).collect(),
             },
             Item::Meta { prop } => Item::Meta { prop: *prop },
+            Item::Tpl { quasis, exprs } => Item::Tpl {
+                quasis: quasis.clone(),
+                exprs: exprs.iter().collect(),
+            },
         }
     }
     pub fn as_mut(&mut self) -> Item<&mut I, &mut F> {
@@ -909,6 +917,10 @@ impl<I, F> Item<I, F> {
             }, // Item::Intrinsic { value } => Item::Intrinsic {
                //     value: value.as_mut(),
                // },
+            Item::Tpl { quasis, exprs } => Item::Tpl {
+                quasis: quasis.clone(),
+                exprs: exprs.iter_mut().collect(),
+            },
         }
     }
     pub fn map2<J, G, E, C: ?Sized>(
@@ -919,6 +931,13 @@ impl<I, F> Item<I, F> {
     ) -> Result<Item<J, G>, E> {
         Ok(match self {
             Item::Meta { prop } => Item::Meta { prop },
+            Item::Tpl { quasis, exprs } => Item::Tpl {
+                quasis,
+                exprs: exprs
+                    .into_iter()
+                    .map(|a| f(cx, a))
+                    .collect::<Result<Vec<J>, E>>()?,
+            },
             Item::Select {
                 cond,
                 then,
@@ -1146,6 +1165,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
                 Box::new(empty())
             }
+            Item::Tpl { quasis: _, exprs } => Box::new(exprs.iter()),
             Item::Asm { value } => Box::new(value.refs()),
             Item::Class(TClass {
                 superclass,
@@ -1247,6 +1267,7 @@ impl<I, F> Item<I, F> {
             swc_tac::Item::Undef | Item::This | Item::Arguments | Item::Meta { .. } => {
                 Box::new(empty())
             }
+            Item::Tpl { quasis: _, exprs } => Box::new(exprs.iter_mut()),
             Item::Asm { value } => Box::new(value.refs_mut()),
             Item::Class(TClass {
                 superclass,

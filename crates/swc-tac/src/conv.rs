@@ -1646,6 +1646,27 @@ impl ToTACConverterCore<'_> {
             Expr::TsConstAssertion(a) => self.expr(o, t, &a.expr),
             Expr::TsSatisfies(a) => self.expr(o, t, &a.expr),
             Expr::TsNonNull(a) => self.expr(o, t, &a.expr),
+            Expr::Tpl(tpl) => {
+                let quasis: Vec<Atom> = tpl.quasis.iter().map(|q| q.raw.clone()).collect();
+                let exprs = tpl
+                    .exprs
+                    .iter()
+                    .map(|e| {
+                        let y;
+                        (y, t) = self.expr(o, t, e)?;
+                        Ok(y)
+                    })
+                    .collect::<Result<_, crate::Error>>()?;
+                let tmp = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: tmp.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Tpl { quasis, exprs },
+                    span: tpl.span(),
+                });
+                o.decls.insert(tmp.clone());
+                Ok((tmp, t))
+            }
             Expr::Seq(s) => {
                 let mut r = None;
                 for a in s.exprs.iter() {
