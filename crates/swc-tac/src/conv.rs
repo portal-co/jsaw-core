@@ -1687,6 +1687,42 @@ impl ToTACConverterCore<'_> {
                 o.decls.insert(tmp.clone());
                 Ok((tmp, t))
             }
+            // `i++`/`++i`/`i--`/`--i` — desugar to "read current, add/sub a
+            // literal 1, write back", reusing `self.assign`'s existing
+            // Ident/Member lvalue handling. The expression's own value is
+            // the pre-update read for postfix, the post-update write for
+            // prefix.
+            Expr::Update(u) => {
+                let current;
+                (current, t) = self.expr(o, t, &u.arg)?;
+                let one = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: one.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Lit {
+                        lit: Lit::Num(Number { span: u.span(), value: 1.0, raw: None }),
+                    },
+                    span: u.span(),
+                });
+                o.decls.insert(one.clone());
+                let bin_op = match u.op {
+                    swc_ecma_ast::UpdateOp::PlusPlus => BinaryOp::Add,
+                    swc_ecma_ast::UpdateOp::MinusMinus => BinaryOp::Sub,
+                };
+                let updated = o.regs.alloc(());
+                o.blocks[t].stmts.push(TStmt {
+                    left: LId::Id { id: updated.clone() },
+                    flags: ValFlags::SSA_LIKE,
+                    right: Item::Bin { left: current.clone(), right: one, op: bin_op },
+                    span: u.span(),
+                });
+                o.decls.insert(updated.clone());
+                let target = AssignTarget::try_from(u.arg.clone())
+                    .map_err(|_| crate::Error::Unsupported { file: file!(), line: line!() })?;
+                let (_, t2) = self.assign(o, t, &target, &AssignOp::Assign, updated.clone())?;
+                t = t2;
+                Ok((if u.prefix { updated } else { current }, t))
+            }
             _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         }
     }
