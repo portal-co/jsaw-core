@@ -142,6 +142,28 @@ impl ToTACConverterCore<'_> {
                             let f;
                             (f, t) = self.expr(o, t, e)?;
                             t = self.bind(o, t, &var_decl.name, f, true)?;
+                        } else {
+                            // `let a;` / `var a;` with no initializer. The
+                            // binding must still be registered via `bind()`
+                            // (which inserts it into `o.decls`), exactly as
+                            // the with-initializer path does — otherwise `a`
+                            // is never SSA-tracked at all: it falls back to
+                            // by-name Store/Load, and any later reassignment
+                            // across an if/else (neither branch dominating
+                            // the other) resolves incorrectly at the join
+                            // point instead of going through a proper phi.
+                            // JS grammar requires an initializer for any
+                            // non-identifier binding pattern, so `var_decl.name`
+                            // is always `Pat::Ident` here.
+                            let tmp = o.regs.alloc(());
+                            o.blocks[t].stmts.push(TStmt {
+                                left: LId::Id { id: tmp.clone() },
+                                flags: ValFlags::SSA_LIKE,
+                                right: Item::Undef,
+                                span: var_decl.span(),
+                            });
+                            o.decls.insert(tmp.clone());
+                            t = self.bind(o, t, &var_decl.name, tmp, true)?;
                         }
                     }
                     Ok(t)
