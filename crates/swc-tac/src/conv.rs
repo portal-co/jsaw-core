@@ -285,6 +285,16 @@ impl ToTACConverterCore<'_> {
         f: Ident,
         decl: bool,
     ) -> Result<TBlockId, crate::Error> {
+        if ps.is_empty() {
+            // `const [] = expr;` -- no elements to bind and no rest pattern
+            // to find, so the loop below (which only ever advances `ix`
+            // *after* checking `ps.get(ix)`, then compares the
+            // already-advanced `ix` against `ps.len()`) would spin forever:
+            // `ps.get(ix)` is `None` for every `ix` once `ps` is empty, so
+            // the `ix == ps.len()` exit check (`1 == 0`, `2 == 0`, ...)
+            // never becomes true again after the first iteration.
+            return Ok(t);
+        }
         let mut ix = 0;
         let r = loop {
             if let Some(a) = ps.get(ix).and_then(|a| *a) {
