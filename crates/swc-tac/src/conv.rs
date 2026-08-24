@@ -191,6 +191,7 @@ impl ToTACConverterCore<'_> {
             Pat::Ident(i2) => self.bind_ident(o, t, i2, f, decl),
             Pat::Object(op) => self.bind_object(o, t, op, f, decl),
             Pat::Assign(ass) => self.bind_assign(o, t, ass, f, decl),
+            Pat::Array(ap) => self.bind_array(o, t, ap, f, decl),
             _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
         }
     }
