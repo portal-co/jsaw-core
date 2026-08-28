@@ -30,6 +30,26 @@ pub enum Primordial {
     /// `Reflect.set` method
     // TODO: Consider renaming to ReflectSet for consistency
     Reflect_set,
+    /// `Reflect.has` method
+    Reflect_has,
+    /// `Reflect.ownKeys` method
+    Reflect_ownKeys,
+    /// `Reflect.construct` method
+    Reflect_construct,
+    /// `Reflect.deleteProperty` method
+    Reflect_deleteProperty,
+    /// `Reflect.defineProperty` method
+    Reflect_defineProperty,
+    /// `Reflect.getOwnPropertyDescriptor` method
+    Reflect_getOwnPropertyDescriptor,
+    /// `Reflect.getPrototypeOf` method
+    Reflect_getPrototypeOf,
+    /// `Reflect.setPrototypeOf` method
+    Reflect_setPrototypeOf,
+    /// `Reflect.isExtensible` method
+    Reflect_isExtensible,
+    /// `Reflect.preventExtensions` method
+    Reflect_preventExtensions,
     /// The `Math` namespace object
     Math,
     /// `Math.fround` method (note: currently misspelled as "froumd")
@@ -38,6 +58,86 @@ pub enum Primordial {
     /// `Math.imul` method (32-bit integer multiplication)
     // TODO: Consider renaming to MathImul for consistency
     Math_imul,
+    /// `Math.PI` constant
+    Math_PI,
+    /// `Math.E` constant
+    Math_E,
+    /// `Math.LN2` constant
+    Math_LN2,
+    /// `Math.LN10` constant
+    Math_LN10,
+    /// `Math.LOG2E` constant
+    Math_LOG2E,
+    /// `Math.LOG10E` constant
+    Math_LOG10E,
+    /// `Math.SQRT2` constant
+    Math_SQRT2,
+    /// `Math.SQRT1_2` constant
+    Math_SQRT1_2,
+    /// `Math.abs` method
+    Math_abs,
+    /// `Math.floor` method
+    Math_floor,
+    /// `Math.ceil` method
+    Math_ceil,
+    /// `Math.round` method
+    Math_round,
+    /// `Math.trunc` method
+    Math_trunc,
+    /// `Math.sign` method
+    Math_sign,
+    /// `Math.sqrt` method
+    Math_sqrt,
+    /// `Math.cbrt` method
+    Math_cbrt,
+    /// `Math.pow` method
+    Math_pow,
+    /// `Math.min` method
+    Math_min,
+    /// `Math.max` method
+    Math_max,
+    /// `Math.log` method
+    Math_log,
+    /// `Math.log2` method
+    Math_log2,
+    /// `Math.log10` method
+    Math_log10,
+    /// `Math.exp` method
+    Math_exp,
+    /// `Math.hypot` method
+    Math_hypot,
+    /// The `Array` constructor
+    Array,
+    /// `Array.isArray` method
+    Array_isArray,
+    /// `Object.keys` method
+    Object_keys,
+    /// `Object.values` method
+    Object_values,
+    /// `Object.entries` method
+    Object_entries,
+    /// `Object.assign` method
+    Object_assign,
+    /// `Object.create` method
+    Object_create,
+    /// `Object.freeze` method
+    Object_freeze,
+    /// `Object.isFrozen` method
+    Object_isFrozen,
+    /// `Object.getPrototypeOf` method
+    Object_getPrototypeOf,
+    /// `Object.setPrototypeOf` method
+    Object_setPrototypeOf,
+    /// `Object.defineProperty` method
+    Object_defineProperty,
+    /// `Object.defineProperties` method
+    Object_defineProperties,
+    /// `Object.getOwnPropertyDescriptor` method
+    Object_getOwnPropertyDescriptor,
+    /// `Object.getOwnPropertyDescriptors` method
+    Object_getOwnPropertyDescriptors,
+    /// `Object.getOwnPropertyNames` method
+    Object_getOwnPropertyNames,
 }
 impl Primordial {
     /// Looks up a primordial by its global name.
@@ -54,6 +154,7 @@ impl Primordial {
             "Object" => Some(&Self::Object),
             "Reflect" => Some(&Self::Reflect),
             "Math" => Some(&Self::Math),
+            "Array" => Some(&Self::Array),
             _ => None,
         }
     }
@@ -78,8 +179,63 @@ impl Primordial {
             (Self::Reflect, "get") => Some(&Self::Reflect_get),
             (Self::Reflect, "set") => Some(&Self::Reflect_set),
             (Self::Reflect, "apply") => Some(&Self::Reflect_apply),
+            (Self::Reflect, "has") => Some(&Self::Reflect_has),
+            (Self::Reflect, "ownKeys") => Some(&Self::Reflect_ownKeys),
+            (Self::Reflect, "construct") => Some(&Self::Reflect_construct),
+            (Self::Reflect, "deleteProperty") => Some(&Self::Reflect_deleteProperty),
+            (Self::Reflect, "defineProperty") => Some(&Self::Reflect_defineProperty),
+            (Self::Reflect, "getOwnPropertyDescriptor") => {
+                Some(&Self::Reflect_getOwnPropertyDescriptor)
+            }
+            (Self::Reflect, "getPrototypeOf") => Some(&Self::Reflect_getPrototypeOf),
+            (Self::Reflect, "setPrototypeOf") => Some(&Self::Reflect_setPrototypeOf),
+            (Self::Reflect, "isExtensible") => Some(&Self::Reflect_isExtensible),
+            (Self::Reflect, "preventExtensions") => Some(&Self::Reflect_preventExtensions),
             (Self::Math, "fround") => Some(&Self::Math_fround),
             (Self::Math, "imul") => Some(&Self::Math_imul),
+            (Self::Math, "PI") => Some(&Self::Math_PI),
+            (Self::Math, "E") => Some(&Self::Math_E),
+            (Self::Math, "LN2") => Some(&Self::Math_LN2),
+            (Self::Math, "LN10") => Some(&Self::Math_LN10),
+            (Self::Math, "LOG2E") => Some(&Self::Math_LOG2E),
+            (Self::Math, "LOG10E") => Some(&Self::Math_LOG10E),
+            (Self::Math, "SQRT2") => Some(&Self::Math_SQRT2),
+            (Self::Math, "SQRT1_2") => Some(&Self::Math_SQRT1_2),
+            (Self::Math, "abs") => Some(&Self::Math_abs),
+            (Self::Math, "floor") => Some(&Self::Math_floor),
+            (Self::Math, "ceil") => Some(&Self::Math_ceil),
+            (Self::Math, "round") => Some(&Self::Math_round),
+            (Self::Math, "trunc") => Some(&Self::Math_trunc),
+            (Self::Math, "sign") => Some(&Self::Math_sign),
+            (Self::Math, "sqrt") => Some(&Self::Math_sqrt),
+            (Self::Math, "cbrt") => Some(&Self::Math_cbrt),
+            (Self::Math, "pow") => Some(&Self::Math_pow),
+            (Self::Math, "min") => Some(&Self::Math_min),
+            (Self::Math, "max") => Some(&Self::Math_max),
+            (Self::Math, "log") => Some(&Self::Math_log),
+            (Self::Math, "log2") => Some(&Self::Math_log2),
+            (Self::Math, "log10") => Some(&Self::Math_log10),
+            (Self::Math, "exp") => Some(&Self::Math_exp),
+            (Self::Math, "hypot") => Some(&Self::Math_hypot),
+            (Self::Array, "isArray") => Some(&Self::Array_isArray),
+            (Self::Object, "keys") => Some(&Self::Object_keys),
+            (Self::Object, "values") => Some(&Self::Object_values),
+            (Self::Object, "entries") => Some(&Self::Object_entries),
+            (Self::Object, "assign") => Some(&Self::Object_assign),
+            (Self::Object, "create") => Some(&Self::Object_create),
+            (Self::Object, "freeze") => Some(&Self::Object_freeze),
+            (Self::Object, "isFrozen") => Some(&Self::Object_isFrozen),
+            (Self::Object, "getPrototypeOf") => Some(&Self::Object_getPrototypeOf),
+            (Self::Object, "setPrototypeOf") => Some(&Self::Object_setPrototypeOf),
+            (Self::Object, "defineProperty") => Some(&Self::Object_defineProperty),
+            (Self::Object, "defineProperties") => Some(&Self::Object_defineProperties),
+            (Self::Object, "getOwnPropertyDescriptor") => {
+                Some(&Self::Object_getOwnPropertyDescriptor)
+            }
+            (Self::Object, "getOwnPropertyDescriptors") => {
+                Some(&Self::Object_getOwnPropertyDescriptors)
+            }
+            (Self::Object, "getOwnPropertyNames") => Some(&Self::Object_getOwnPropertyNames),
             _ => None,
         }
     }
