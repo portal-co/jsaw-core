@@ -428,6 +428,21 @@ impl TFunc {
 }
 impl TCfg {
     pub fn remark_with_domtree(&mut self, domtree: BTreeMap<Option<TBlockId>, TBlockId>) {
+        // Variables read or written by a nested closure can only be
+        // observed/mutated by that closure through the shared runtime
+        // context (closures never see this function's SSA registers), so
+        // they must stay context-backed here too. `Item::refs()` doesn't
+        // look inside `Item::Func` bodies, so the dominance-based escape
+        // check below can't see these on its own - collect them separately
+        // via each nested closure's `externs()`, which already recurses
+        // through further nesting.
+        let captured: BTreeSet<Ident> = self
+            .blocks
+            .iter()
+            .flat_map(|(_, block)| block.stmts.iter())
+            .flat_map(|stmt| stmt.right.funcs())
+            .flat_map(|func| func.cfg.externs())
+            .collect();
         let mut ssa_counts: BTreeMap<LId, usize> = BTreeMap::new();
         for (block_id, block) in self.blocks.iter() {
             'stmt_loop: for stmt in &block.stmts {
@@ -477,7 +492,11 @@ impl TCfg {
             } {
                 continue;
             }
-            if ssa_counts.remove(&stmt.left) == Some(1) {
+            let not_captured = match &stmt.left {
+                LId::Id { id } => !captured.contains(id),
+                _ => true,
+            };
+            if not_captured && ssa_counts.remove(&stmt.left) == Some(1) {
                 stmt.flags |= ValFlags::SSA_LIKE
             } else {
                 stmt.flags &= !ValFlags::SSA_LIKE;

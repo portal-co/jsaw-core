@@ -271,6 +271,29 @@ impl ToSSAConverter {
             {
                 log::trace!("convert_block: processing stmt lhs={:?} in SSA block {:?}", a, t);
                 let nothrow = b.nothrow();
+                // `cache` (below) memoizes "the last value stored to this
+                // variable" so a later `load()` of the same name within this
+                // block can skip straight to it. That's only sound while
+                // nothing in between could have run arbitrary JS: a call
+                // (directly, or indirectly through a getter/setter) may
+                // invoke a closure that stores to *any* variable through a
+                // context it shares with this function, so every cached
+                // value must be treated as stale from that point on.
+                if !matches!(
+                    b,
+                    Item::Just { .. }
+                        | Item::Bin { .. }
+                        | Item::Un { .. }
+                        | Item::Lit { .. }
+                        | Item::Func { .. }
+                        | Item::Undef
+                        | Item::This
+                        | Item::Arguments
+                        | Item::Meta { .. }
+                        | Item::Select { .. }
+                ) {
+                    cache.clear();
+                }
                 let b = b.as_ref();
                 let b = 'a: {
                     let b = match b {
@@ -516,6 +539,33 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
         for e in value.cfg.externs().collect::<BTreeSet<_>>() {
             decls.remove(&e);
             d.insert(e);
+        }
+        // A variable declared *here* but read or written by a nested
+        // closure can only be observed/mutated by that closure through the
+        // runtime context object shared with its creator — a closure never
+        // sees this function's SSA registers. So even though such a
+        // variable is genuinely a local (`value.cfg.decls` already
+        // contains it, and it isn't an extern of this function), it must
+        // be excluded from `decls`/`ToSSAConverter::all` below: staying in
+        // that set would seed it with a per-block SSA blockparam and fully
+        // register-promote every write to it (see `convert_block`), which
+        // silently disconnects it from the context a nested closure reads
+        // and writes through — the closure's mutation would never be
+        // observed, and this function's own writes would never reach the
+        // context for the closure to read either. Dropping it from `decls`
+        // routes both reads and writes through real `LoadId`/`StoreId`
+        // instead (`load()`'s fallback, and `convert_block`'s "unseen id"
+        // branch), matching how a genuine extern already behaves.
+        let captured_by_nested_closures: BTreeSet<Ident> = value
+            .cfg
+            .blocks
+            .iter()
+            .flat_map(|(_, block)| block.stmts.iter())
+            .flat_map(|stmt| stmt.right.funcs())
+            .flat_map(|func| func.cfg.externs())
+            .collect();
+        for e in captured_by_nested_closures {
+            decls.remove(&e);
         }
         // Function parameters that are reassigned anywhere in the body (e.g.
         // `n = n - 1` inside a loop) must be SSA-tracked exactly like a `let`

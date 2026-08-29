@@ -51,6 +51,34 @@ impl SCfg {
             }
         }
     }
+    /// A statement whose evaluation is guaranteed not to run arbitrary JS.
+    /// Anything not on this list — most notably a call, a member access
+    /// (which may invoke a getter), or a member/private assignment (which
+    /// may invoke a setter) — can execute a closure that stores to *any*
+    /// variable through a context it shares with the current function, so
+    /// [`SCfg::simplify_loads`] must not treat a variable's last-known
+    /// stored value as still valid across one.
+    fn is_definitely_side_effect_free(value: &SValue) -> bool {
+        matches!(
+            value,
+            SValue::Param { .. }
+                | SValue::LoadId(_)
+                | SValue::StoreId { .. }
+                | SValue::Item {
+                    item: Item::Just { .. }
+                        | Item::Bin { .. }
+                        | Item::Un { .. }
+                        | Item::Lit { .. }
+                        | Item::Func { .. }
+                        | Item::Undef
+                        | Item::This
+                        | Item::Arguments
+                        | Item::Meta { .. }
+                        | Item::Select { .. },
+                    ..
+                }
+        )
+    }
     pub fn simplify_loads(&mut self) {
         log::trace!("ssa simplify_loads: scanning {} blocks", self.blocks.len());
         for (_k, kd) in self.blocks.iter() {
@@ -74,6 +102,11 @@ impl SCfg {
                 } = x
                 {
                     m.insert(target.clone(), *val);
+                } else if !Self::is_definitely_side_effect_free(&x.value) {
+                    // A call (directly, or indirectly via a getter/setter)
+                    // may run a closure that stores to any variable through
+                    // the shared context — every cached value is suspect.
+                    m.clear();
                 }
             }
         }
