@@ -54,10 +54,15 @@ impl ToTACConverter<'_> {
                 match pat {
                     Pat::Ident(id) => {
                         let k = self.trans(i, o, *k)?;
-                        o.blocks[t].post.catch = TCatch::Jump {
-                            pat: id.id.clone().into(),
-                            k,
-                        };
+                        let pat: Ident = id.id.clone().into();
+                        // The exception binding must be tracked exactly like any other
+                        // local (`decls`), not just recorded decoratively on `TCatch::Jump`.
+                        // `ToSSAConverter::all` (swc-ssa) is seeded from `decls` and drives
+                        // both the shim block's forwarded-args list and the catch block's
+                        // own declared params — omitting `pat` here silently drops the
+                        // exception value when the shim jumps to the real handler block.
+                        o.decls.insert(pat.clone());
+                        o.blocks[t].post.catch = TCatch::Jump { pat, k };
                     }
                     _ => return Err(crate::Error::Unsupported { file: file!(), line: line!() }),
                 }

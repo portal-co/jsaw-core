@@ -277,8 +277,8 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for DoWhil
         label: Option<Ident>,
     ) -> Result<TargetCfg::Block, TargetCfg::Error> {
         let do_while_stmt = self;
-        let next = cfg.new_block(sidecar)?;
-        let cont = cfg.new_block(sidecar)?;
+        let next = ctx.new_block(cfg, sidecar)?;
+        let cont = ctx.new_block(cfg, sidecar)?;
         cfg.jump(sidecar, current, cont, Some(do_while_stmt.span))?;
         let mut new = ctx.clone();
         new.cur_loop = Some(Loop {
@@ -313,12 +313,12 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for If<'_,
     ) -> Result<TargetCfg::Block, TargetCfg::Error> {
         let if_stmt = self;
         let span = if_stmt.span;
-        let next = cfg.new_block(sidecar)?;
-        let then = cfg.new_block(sidecar)?;
+        let next = ctx.new_block(cfg, sidecar)?;
+        let then = ctx.new_block(cfg, sidecar)?;
         // Allocate else entry block (or use next as the fallthrough target).
         let els = match if_stmt.alt.as_ref() {
             None => next,
-            Some(_) => cfg.new_block(sidecar)?,
+            Some(_) => ctx.new_block(cfg, sidecar)?,
         };
         // Emit the conditional branch into `current` BEFORE processing either
         // branch body.  This ensures `current`'s terminator is set exactly
@@ -416,7 +416,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
         );
         if let Stmt::Throw(throw_stmt) = statement {
             cfg.throw(sidecar, current, &throw_stmt.arg, Some(throw_stmt.span()));
-            return Ok(cfg.new_block(sidecar)?);
+            return Ok(ctx.new_block(cfg, sidecar)?);
         }
         if let Stmt::Return(return_stmt) = statement {
             cfg.return_(
@@ -425,15 +425,15 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 return_stmt.arg.as_deref(),
                 Some(return_stmt.span()),
             );
-            return Ok(cfg.new_block(sidecar)?);
+            return Ok(ctx.new_block(cfg, sidecar)?);
         }
         if let Stmt::Try(try_stmt) = statement {
             let span = try_stmt.span();
-            let next = cfg.new_block(sidecar)?;
+            let next = ctx.new_block(cfg, sidecar)?;
             let catch = match &try_stmt.handler {
                 None => None,
                 Some(catch_clause) => Some({
-                    let catch_block_id = cfg.new_block(sidecar)?;
+                    let catch_block_id = ctx.new_block(cfg, sidecar)?;
                     let catch_end_id = ctx.transform_all(
                         cfg,
                         sidecar,
@@ -461,9 +461,18 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
             let mut new = ctx.clone();
             if let Some((catch_param, catch_block_id)) = catch {
                 new.catch = Catch::Jump {
-                    pat: catch_param,
+                    pat: catch_param.clone(),
                     k: catch_block_id,
                 };
+                // `current` (the try body's own entry point) is *inherited*
+                // from whatever came before this `try` statement, not
+                // freshly allocated here -- `ToCfgConversionCtx::new_block`
+                // only tags newly-allocated blocks, so this one specific
+                // block needs its own explicit `trap_catch` call, or the
+                // try body's very first statement (e.g. a bare `throw` with
+                // nothing before it) would still see the stale `Catch::Throw`
+                // it was given whenever it was originally allocated.
+                cfg.trap_catch(sidecar, current, &catch_param, catch_block_id)?;
             };
             let try_end_id =
                 new.transform_all(cfg, sidecar, &try_stmt.block.stmts, current, None)?;
@@ -496,7 +505,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
         }
         if let Stmt::Switch(switch_stmt) = statement {
             let span = switch_stmt.span();
-            let next = cfg.new_block(sidecar)?;
+            let next = ctx.new_block(cfg, sidecar)?;
             let mut target = ctx.clone();
             if target.cur_loop.is_none() {
                 target.cur_loop = Some(Loop {
@@ -505,7 +514,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 })
             };
             target.cur_loop.as_mut().unwrap().r#break = next;
-            let mut cur = cfg.new_block(sidecar)?;
+            let mut cur = target.new_block(cfg, sidecar)?;
             let mut default = next;
             let mut blocks = HashMap::new();
             for case in switch_stmt.cases.iter() {
@@ -544,7 +553,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 .r#break,
                 Some(break_stmt.span()),
             )?;
-            return Ok(cfg.new_block(sidecar)?);
+            return Ok(ctx.new_block(cfg, sidecar)?);
         }
         if let Stmt::Continue(continue_stmt) = statement {
             cfg.jump(
@@ -558,11 +567,11 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 .r#continue,
                 Some(continue_stmt.span()),
             )?;
-            return Ok(cfg.new_block(sidecar)?);
+            return Ok(ctx.new_block(cfg, sidecar)?);
         }
         if let Stmt::Labeled(labeled_stmt) = statement {
-            let next = cfg.new_block(sidecar)?;
-            let cont = cfg.new_block(sidecar)?;
+            let next = ctx.new_block(cfg, sidecar)?;
+            let cont = ctx.new_block(cfg, sidecar)?;
             cfg.jump(sidecar, current, cont, Some(labeled_stmt.span))?;
             let mut new = ctx.clone();
             new.labelled.insert(
@@ -658,6 +667,37 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
     }
 }
 impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfgConversionCtx<Sidecar, TargetCfg> {
+    /// Allocate a fresh block and immediately tag it with this context's own
+    /// ambient try/catch scope (`self.catch`), via `trap_catch`, if any.
+    ///
+    /// Every `Stmt::X::transform` impl in this file should call this
+    /// instead of `cfg.new_block(sidecar)` directly for any block that is
+    /// genuinely part of the statement being converted under `self`'s own
+    /// scope (which is already correct per call site — e.g. a loop's
+    /// pre-header block, created before `cur_loop` is extended, correctly
+    /// uses the *outer* `self`, not the loop-extended `new`, exactly as
+    /// today's code already threads `cur_loop`/`labelled`). Before this
+    /// method existed, `ToCfgCfg::trap_catch` was defined but never called
+    /// anywhere in this crate — every block's own `end.catch` silently
+    /// stayed at `Catch::Throw` (the default) regardless of whether it was
+    /// lexically inside a `try`, so `Stmt::Try`'s own `Catch::Jump` context
+    /// was set up but never actually reached any real block, and a `throw`
+    /// inside a `try` could never resolve to its own `catch` clause. This
+    /// is purely additive (a block's `catch` field goes from an always-
+    /// default `Catch::Throw` to a real `Catch::Jump` when applicable); no
+    /// existing behavior for any consumer that doesn't read `.catch` at all
+    /// changes.
+    pub fn new_block(
+        &self,
+        cfg: &mut TargetCfg,
+        sidecar: &mut Sidecar,
+    ) -> Result<TargetCfg::Block, TargetCfg::Error> {
+        let block = cfg.new_block(sidecar)?;
+        if let Catch::Jump { pat, k } = &self.catch {
+            cfg.trap_catch(sidecar, block, pat, *k)?;
+        }
+        Ok(block)
+    }
     pub fn transform_all(
         &self,
         cfg: &mut TargetCfg,
