@@ -1998,7 +1998,19 @@ impl ToTACConverterCore<'_> {
         let (a, then) = self.expr(o, then, cons)?;
         o.blocks[then].stmts.push(TStmt {
             left: LId::Id { id: tmp.clone() },
-            flags: ValFlags::SSA_LIKE,
+            // Not SSA_LIKE: `tmp` is written here AND in `els` below, so it
+            // has two definitions in mutually exclusive blocks, not one
+            // global definition. `TCfg::def`/`inlinable` (and thus
+            // `ToSSAConverter::load`) treat any SSA_LIKE write as a safe,
+            // control-flow-independent substitution for every use of that
+            // name in the whole function; with two such writes they'd
+            // consult whichever one is textually first regardless of which
+            // branch actually ran, silently discarding the `els` branch's
+            // value at every merge point. Plain (non-SSA_LIKE) matches how
+            // `self.assign()` flags an ordinary `let`-reassignment written
+            // from multiple branches, which correctly threads through
+            // `state`/block params instead.
+            flags: Default::default(),
             right: Item::Just { id: a },
             span,
         });
@@ -2006,7 +2018,7 @@ impl ToTACConverterCore<'_> {
         let (a, els) = self.expr(o, els, alt)?;
         o.blocks[els].stmts.push(TStmt {
             left: LId::Id { id: tmp.clone() },
-            flags: ValFlags::SSA_LIKE,
+            flags: Default::default(),
             right: Item::Just { id: a },
             span,
         });
