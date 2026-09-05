@@ -17,7 +17,8 @@ use swc_atoms::{Atom, Wtf8Atom};
 use swc_common::{Span, SyntaxContext};
 use swc_ecma_ast::{
     BindingIdent, ClassDecl, Decl, DefaultDecl, ExportSpecifier, Id, ImportDecl, ModuleDecl,
-    ModuleExportName, ModuleItem, ObjectPatProp, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator,
+    ModuleExportName, ModuleItem, ObjectLit, ObjectPatProp, Pat, Stmt, VarDecl, VarDeclKind,
+    VarDeclarator,
 };
 
 use crate::{to_cfg::ToCfgConversionCtx, Cfg, Error, Func, Term};
@@ -70,6 +71,8 @@ pub enum ExportSpec {
         names: Vec<(Atom, Atom)>,
         /// Source span.
         span: Span,
+        /// Verbatim `with { ... }` import-attributes clause, if present.
+        with: Option<Box<ObjectLit>>,
     },
 
     /// `export * from 'mod'` or `export * as ns from 'mod'`.
@@ -80,6 +83,8 @@ pub enum ExportSpec {
         ns: Option<Atom>,
         /// Source span.
         span: Span,
+        /// Verbatim `with { ... }` import-attributes clause, if present.
+        with: Option<Box<ObjectLit>>,
     },
 }
 
@@ -184,24 +189,43 @@ fn collect_pat_exports(pat: &Pat, span: Span, exports: &mut Vec<ExportSpec>) {
     }
 }
 
-// ── TryFrom<Module> ──────────────────────────────────────────────────────
+// ── CfgModuleBuilder ─────────────────────────────────────────────────────
 
-impl TryFrom<swc_ecma_ast::Module> for CfgModule {
-    type Error = Error;
+/// Incremental builder for [`CfgModule`].
+///
+/// [`CfgModule::try_from`] (via [`TryFrom<swc_ecma_ast::Module>`]) is a thin
+/// wrapper over this builder for callers that already have a complete
+/// [`swc_ecma_ast::Module`] in hand. Callers that only ever see one
+/// [`ModuleItem`] at a time (e.g. a host compiler streaming items as it
+/// parses them) can use [`CfgModuleBuilder::append`]/[`CfgModuleBuilder::finish`]
+/// directly instead of buffering a whole `Module` first.
+#[derive(Default)]
+pub struct CfgModuleBuilder {
+    imports: Vec<ImportDecl>,
+    funcs: HashMap<Atom, Func>,
+    exports: Vec<ExportSpec>,
+    body_stmts: Vec<Stmt>,
+}
 
-    fn try_from(module: swc_ecma_ast::Module) -> Result<Self, Self::Error> {
-        let mut imports: Vec<ImportDecl> = Vec::new();
-        let mut funcs: HashMap<Atom, Func> = HashMap::new();
-        let mut exports: Vec<ExportSpec> = Vec::new();
-        let mut body_stmts: Vec<Stmt> = Vec::new();
+impl CfgModuleBuilder {
+    /// Create an empty builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-        for item in module.body {
-            match item {
-                // ── plain statement ─────────────────────────────────────
-                ModuleItem::Stmt(s) => body_stmts.push(s),
+    /// Append one top-level [`ModuleItem`].
+    pub fn append(&mut self, item: ModuleItem) -> Result<(), Error> {
+        let imports = &mut self.imports;
+        let funcs = &mut self.funcs;
+        let exports = &mut self.exports;
+        let body_stmts = &mut self.body_stmts;
 
-                // ── module declaration ──────────────────────────────────
-                ModuleItem::ModuleDecl(decl) => match decl {
+        match item {
+            // ── plain statement ─────────────────────────────────────
+            ModuleItem::Stmt(s) => body_stmts.push(s),
+
+            // ── module declaration ──────────────────────────────────
+            ModuleItem::ModuleDecl(decl) => match decl {
                     // import …
                     ModuleDecl::Import(d) => imports.push(d),
 
@@ -232,7 +256,7 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                         Decl::Var(v) => {
                             let span = v.span;
                             for decl in &v.decls {
-                                collect_pat_exports(&decl.name, span, &mut exports);
+                                collect_pat_exports(&decl.name, span, exports);
                             }
                             body_stmts.push(Stmt::Decl(Decl::Var(v)));
                         }
@@ -311,6 +335,7 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                     // export { … } or export { … } from '…'
                     ModuleDecl::ExportNamed(e) => {
                         let span = e.span;
+                        let with = e.with.clone();
                         match e.src {
                             // local re-exports / named local exports
                             None => {
@@ -383,6 +408,7 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                                                 source: wtf8_to_atom(&src.value),
                                                 ns: Some(ns),
                                                 span,
+                                                with: with.clone(),
                                             });
                                         }
                                     }
@@ -392,6 +418,7 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                                         source,
                                         names,
                                         span,
+                                        with,
                                     });
                                 }
                             }
@@ -404,6 +431,7 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                             source: wtf8_to_atom(&e.src.value),
                             ns: None,
                             span: e.span,
+                            with: e.with.clone(),
                         });
                     }
 
@@ -418,15 +446,35 @@ impl TryFrom<swc_ecma_ast::Module> for CfgModule {
                     }
                 },
             }
-        }
+        Ok(())
+    }
 
-        let body = build_body(body_stmts)?;
+    /// Finish building, producing a complete [`CfgModule`].
+    ///
+    /// Converts the accumulated top-level executable statements into the
+    /// module `body` [`Func`].
+    pub fn finish(self) -> Result<CfgModule, Error> {
+        let body = build_body(self.body_stmts)?;
         Ok(CfgModule {
-            imports,
-            funcs,
-            exports,
+            imports: self.imports,
+            funcs: self.funcs,
+            exports: self.exports,
             body,
         })
+    }
+}
+
+// ── TryFrom<Module> ──────────────────────────────────────────────────────
+
+impl TryFrom<swc_ecma_ast::Module> for CfgModule {
+    type Error = Error;
+
+    fn try_from(module: swc_ecma_ast::Module) -> Result<Self, Self::Error> {
+        let mut builder = CfgModuleBuilder::new();
+        for item in module.body {
+            builder.append(item)?;
+        }
+        builder.finish()
     }
 }
 
@@ -437,8 +485,8 @@ mod tests {
     use super::*;
     use swc_common::{Span, SyntaxContext};
     use swc_ecma_ast::{
-        Ident, ImportDecl, ImportDefaultSpecifier, ImportSpecifier, Module, ModuleDecl, ModuleItem,
-        Str,
+        Expr, Ident, ImportDecl, ImportDefaultSpecifier, ImportSpecifier, Lit, Module, ModuleDecl,
+        ModuleItem, Str,
     };
 
     fn dummy_span() -> Span {
@@ -552,6 +600,99 @@ mod tests {
                     assert_eq!(names.len(), 1);
                     assert_eq!(names[0].0, Atom::new("x"));
                     assert_eq!(names[0].1, Atom::new("y"));
+                }
+                other => panic!("expected Reexport, got {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    fn test_builder_matches_try_from_for_whole_module() {
+        // A host that only ever sees one `ModuleItem` at a time (e.g. dreamcomp's
+        // `DreamcompModuleSession::append`) must get the same `CfgModule` as a
+        // caller that buffers a whole `Module` and uses `TryFrom`.
+        swc_common::GLOBALS.set(&Default::default(), || {
+            let items = vec![
+                ModuleItem::ModuleDecl(ModuleDecl::Import(make_import("./foo", "foo"))),
+                ModuleItem::Stmt(Stmt::Expr(swc_ecma_ast::ExprStmt {
+                    span: dummy_span(),
+                    expr: Box::new(Expr::Lit(Lit::Num(swc_ecma_ast::Number {
+                        span: dummy_span(),
+                        value: 1.0,
+                        raw: None,
+                    }))),
+                })),
+            ];
+
+            let module = Module {
+                span: dummy_span(),
+                body: items.clone(),
+                shebang: None,
+            };
+            let via_try_from = CfgModule::try_from(module).unwrap();
+
+            let mut builder = CfgModuleBuilder::new();
+            for item in items {
+                builder.append(item).unwrap();
+            }
+            let via_builder = builder.finish().unwrap();
+
+            assert_eq!(via_builder.imports.len(), via_try_from.imports.len());
+            assert_eq!(via_builder.exports.len(), via_try_from.exports.len());
+            assert_eq!(
+                via_builder.body.cfg.blocks.len(),
+                via_try_from.body.cfg.blocks.len()
+            );
+        });
+    }
+
+    #[test]
+    fn test_reexport_with_clause_is_preserved() {
+        use swc_ecma_ast::{ExportNamedSpecifier, ExportSpecifier, KeyValueProp, ModuleExportName, NamedExport, Prop, PropName, PropOrSpread};
+        swc_common::GLOBALS.set(&Default::default(), || {
+            let with = Box::new(ObjectLit {
+                span: dummy_span(),
+                props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                    key: PropName::Ident(swc_ecma_ast::IdentName::new(
+                        Atom::new("type"),
+                        dummy_span(),
+                    )),
+                    value: Box::new(Expr::Lit(Lit::Str(Str {
+                        span: dummy_span(),
+                        value: Atom::new("isolate").into(),
+                        raw: None,
+                    }))),
+                })))],
+            });
+            let module = Module {
+                span: dummy_span(),
+                body: vec![ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(NamedExport {
+                    span: dummy_span(),
+                    specifiers: vec![ExportSpecifier::Named(ExportNamedSpecifier {
+                        span: dummy_span(),
+                        orig: ModuleExportName::Ident(Ident::new(
+                            Atom::new("x"),
+                            dummy_span(),
+                            SyntaxContext::empty(),
+                        )),
+                        exported: None,
+                        is_type_only: false,
+                    })],
+                    src: Some(Box::new(Str {
+                        span: dummy_span(),
+                        value: Atom::new("./mod").into(),
+                        raw: None,
+                    })),
+                    type_only: false,
+                    with: Some(with.clone()),
+                }))],
+                shebang: None,
+            };
+            let cfg = CfgModule::try_from(module).unwrap();
+            assert_eq!(cfg.exports.len(), 1);
+            match &cfg.exports[0] {
+                ExportSpec::Reexport { with: got_with, .. } => {
+                    assert_eq!(got_with.as_deref(), Some(&*with));
                 }
                 other => panic!("expected Reexport, got {other:?}"),
             }
