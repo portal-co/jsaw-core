@@ -71,7 +71,13 @@ impl ToTACConverter<'_> {
             for s in i.blocks[b].stmts.iter() {
                 t = self.core.stmt(o, t, s)?;
             }
-            let term = self.convert_terminator(i, o, b, t)?;
+            // `convert_terminator` may split blocks while converting a
+            // terminator expression (e.g. `return c ? a : b;` creates the
+            // ternary's then/else/join blocks and returns the join). The
+            // term must land on the *final* block of that chain — writing
+            // it to the pre-split `t` would terminate the function at the
+            // entry block and orphan every block the split created.
+            let (term, t) = self.convert_terminator(i, o, b, t)?;
             o.blocks[t].post.term = term;
         }
     }
@@ -82,29 +88,35 @@ impl ToTACConverter<'_> {
         o: &mut TCfg,
         b: swc_cfg::BlockId,
         mut t: TBlockId,
-    ) -> Result<TTerm, crate::Error> {
+    ) -> Result<(TTerm, TBlockId), crate::Error> {
+        macro_rules! done {
+            ($term:expr) => {{
+                let term = $term;
+                Ok((term, t))
+            }};
+        }
         match &i.blocks[b].end.term {
             swc_cfg::Term::Return(expr) => match expr {
-                None => Ok(TTerm::Return(None)),
+                None => done!(TTerm::Return(None)),
                 Some(a) => match a {
                     Expr::Call(call) => {
                         let (callee, args, t2) = self.core.convert_call_expr(o, t, call)?;
                         t = t2;
-                        Ok(TTerm::Tail { callee, args })
+                        done!(TTerm::Tail { callee, args })
                     }
                     a => {
                         let c;
                         (c, t) = self.core.expr(o, t, a)?;
-                        Ok(TTerm::Return(Some(c)))
+                        done!(TTerm::Return(Some(c)))
                     }
                 },
             },
             swc_cfg::Term::Throw(expr) => {
                 let c;
                 (c, t) = self.core.expr(o, t, expr)?;
-                Ok(TTerm::Throw(c))
+                done!(TTerm::Throw(c))
             }
-            swc_cfg::Term::Jmp(id) => Ok(TTerm::Jmp(self.trans(i, o, *id)?)),
+            swc_cfg::Term::Jmp(id) => done!(TTerm::Jmp(self.trans(i, o, *id)?)),
             swc_cfg::Term::CondJmp {
                 cond,
                 if_true,
@@ -112,7 +124,7 @@ impl ToTACConverter<'_> {
             } => {
                 let c;
                 (c, t) = self.core.expr(o, t, cond)?;
-                Ok(TTerm::CondJmp {
+                done!(TTerm::CondJmp {
                     cond: c,
                     if_true: self.trans(i, o, *if_true)?,
                     if_false: self.trans(i, o, *if_false)?,
@@ -128,13 +140,13 @@ impl ToTACConverter<'_> {
                     (c, t) = self.core.expr(o, t, a)?;
                     m2.insert(c, b2);
                 }
-                Ok(TTerm::Switch {
+                Ok((TTerm::Switch {
                     x: y,
                     blocks: m2.into_iter().collect(),
                     default: self.trans(i, o, *default)?,
-                })
+                }, t))
             }
-            swc_cfg::Term::Default => Ok(TTerm::Default),
+            swc_cfg::Term::Default => Ok((TTerm::Default, t)),
         }
     }
 }
