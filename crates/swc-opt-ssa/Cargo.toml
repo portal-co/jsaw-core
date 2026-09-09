@@ -16,11 +16,11 @@ rkyv = {workspace = true,optional = true}
 cfg-traits.workspace = true
 
 ssa-traits.workspace = true
-swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-tac", package = "portal-jsc-swc-tac" }
-swc-ssa.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util", features = ["ty"] }
-# portal-jsc-simpl-js = { version = "0.8.0-pre.0", path = "../simpl-js", optional = true }
+swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-cfg" }
+swc-tac.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-tac" }
+swc-ssa.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", features = ["ty"] }
+# portal-jsc-simpl-js = { version = "0.8.0-pre.0", git = "https://github.com/portal-co/jsaw-core.git", optional = true }
 swc_atoms.workspace = true
 swc_common.workspace = true
 swc_ecma_ast.workspace = true

@@ -19,8 +19,8 @@ rkyv = {workspace = true,optional = true}
 relooper.workspace = true
 either = "1.13.0"
 swc-ll-common.workspace = true
-swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
-portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util" }
+swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-cfg" }
+portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git" }
 portal-jsc-simpl-js = {workspace=true, optional = true }
 swc_atoms.workspace = true
 swc_common.workspace = true
@@ -28,7 +28,7 @@ swc_ecma_ast.workspace = true
 swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
 bitflags.workspace = true
-portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", path = "../portal-jsc-common" }
+portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git" }
 linearize = { workspace = true, features = ["derive"] }
 linearize-derive.workspace = true
 portal-solutions-swibb.workspace = true

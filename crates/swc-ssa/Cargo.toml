@@ -15,10 +15,10 @@ swc-ll-common.workspace = true
 ssa-traits.workspace = true
 rkyv = {workspace = true,optional = true}
 ssa-impls.workspace = true
-swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-tac", package = "portal-jsc-swc-tac" }
-portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", path = "../swc-util" }
-# portal-jsc-simpl-js = { version = "0.8.0-pre.0", path = "../simpl-js", optional = true }
+swc-cfg.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-cfg" }
+swc-tac.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-tac" }
+portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git" }
+# portal-jsc-simpl-js = { version = "0.8.0-pre.0", git = "https://github.com/portal-co/jsaw-core.git", optional = true }
 swc_atoms.workspace = true
 swc_common.workspace = true
 swc_ecma_ast.workspace = true
@@ -26,7 +26,7 @@ swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
 num-traits = "0.2.19"
 log.workspace = true
-portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", path = "../portal-jsc-common" }
+portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git" }
 portal-solutions-swibb.workspace = true
 
 [features]

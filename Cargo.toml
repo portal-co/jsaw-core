@@ -25,17 +25,17 @@ repository = "https://github.com/portal-co/jsaw-core.git"
 
 
 [workspace.dependencies]
-swc-cfg = { version = "^0.8.0-pre.10", path = "crates/swc-cfg", package = "portal-jsc-swc-cfg" }
-swc-tac = { version = "^0.8.0-pre.10", path = "crates/swc-tac", package = "portal-jsc-swc-tac" }
-swc-ll-common = { version = "^0.8.0-pre.10", path = "crates/swc-ll-common", package = "portal-jsc-swc-ll-common" }
-swc-ssa = { version = "^0.8.0-pre.10", path = "crates/swc-ssa", package = "portal-jsc-swc-ssa" }
-portal-jsc-swc-util = { version = "^0.8.0-pre.10", path = "crates/swc-util", features = [
+swc-cfg = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-cfg" }
+swc-tac = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-tac" }
+swc-ll-common = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-ll-common" }
+swc-ssa = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", package = "portal-jsc-swc-ssa" }
+portal-jsc-swc-util = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", features = [
     "ty",
 ] }
-portal-jsc-simpl-js = { version = "^0.8.0-pre.10", path = "crates/simpl-js", features = [
+portal-jsc-simpl-js = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git", features = [
    
 ] }
-portal-jsc-common = { version = "^0.8.0-pre.10", path = "crates/portal-jsc-common" }
+portal-jsc-common = { version = "^0.8.0-pre.10", git = "https://github.com/portal-co/jsaw-core.git" }
 
 
 anyhow = "^1.0.87"
