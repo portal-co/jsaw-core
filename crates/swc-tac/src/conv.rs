@@ -339,39 +339,44 @@ impl ToTACConverterCore<'_> {
                 return Ok(t);
             }
         };
+        // The rest binding captures `elements[ix - 1, len - trailing)`, where
+        // `ix` was advanced past the rest pattern at the `break` and
+        // `trailing` counts the (invalid-JS, parser-rejected) patterns that
+        // would follow it. One `StaticSubArray` expresses the slice exactly;
+        // the earlier two-subarray dance started the window one element too
+        // late (`ix` instead of `ix - 1`), dropping the rest's first element.
+        let trailing = ps.len() - ix;
         let fi2 = o.regs.alloc(());
         o.decls.insert(fi2.clone());
         o.blocks[t].stmts.push(TStmt {
             left: LId::Id { id: fi2.clone() },
             flags: ValFlags::SSA_LIKE,
             right: Item::StaticSubArray {
-                begin: ix,
-                end: ps.len() - ix,
+                begin: ix - 1,
+                end: trailing,
                 wrapped: f.clone(),
             },
             span: p.span(),
         });
-        let fi3 = match fi2.clone() {
-            v => {
-                let fi2 = o.regs.alloc(());
-                o.decls.insert(fi2.clone());
-                o.blocks[t].stmts.push(TStmt {
-                    left: LId::Id { id: fi2.clone() },
-                    flags: ValFlags::SSA_LIKE,
-                    right: Item::StaticSubArray {
-                        begin: ps.len() - ix,
-                        end: 0,
-                        wrapped: v,
-                    },
-                    span: p.span(),
-                });
-                fi2
-            }
-        };
-        t = self.bind(o, t, &r.arg, fi3, decl)?;
+        t = self.bind(o, t, &r.arg, fi2, decl)?;
+        // Patterns after a rest element are a JS SyntaxError (swc rejects
+        // them), so this loop is dead for any input that parses. Keep it
+        // compiling by reading the would-be trailing elements from a window
+        // starting just past the rest index.
+        let fi_tail = o.regs.alloc(());
+        o.decls.insert(fi_tail.clone());
+        o.blocks[t].stmts.push(TStmt {
+            left: LId::Id { id: fi_tail.clone() },
+            flags: ValFlags::SSA_LIKE,
+            right: Item::StaticSubArray {
+                begin: ix,
+                end: 0,
+                wrapped: f.clone(),
+            },
+            span: p.span(),
+        });
         let ox = ix;
         while ix != ps.len() {
-            // j += 1;
             if let Some(a) = ps.get(ix).and_then(|a| *a) {
                 let fi = o.regs.alloc(());
                 o.decls.insert(fi.clone());
@@ -387,26 +392,23 @@ impl ToTACConverterCore<'_> {
                     },
                     span: a.span(),
                 });
-                let fi = match fi {
-                    v => {
-                        let fi = o.regs.alloc(());
-                        o.decls.insert(fi.clone());
-                        o.blocks[t].stmts.push(TStmt {
-                            left: LId::Id { id: fi.clone() },
-                            flags: ValFlags::SSA_LIKE,
-                            right: Item::Mem {
-                                obj: fi2.clone(),
-                                mem: v,
-                            },
-                            span: a.span(),
-                        });
-                        fi
-                    }
+                let fi = {
+                    let fi = o.regs.alloc(());
+                    o.decls.insert(fi.clone());
+                    o.blocks[t].stmts.push(TStmt {
+                        left: LId::Id { id: fi.clone() },
+                        flags: ValFlags::SSA_LIKE,
+                        right: Item::Mem {
+                            obj: fi_tail.clone(),
+                            mem: fi.clone(),
+                        },
+                        span: a.span(),
+                    });
+                    fi
                 };
                 t = self.bind(o, t, a, fi, decl)?;
             }
             ix += 1
-            // i += 1;
         }
         Ok(t)
     }

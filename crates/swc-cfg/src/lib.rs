@@ -41,7 +41,7 @@ use swc_atoms::Atom;
 use swc_common::{Span, Spanned, SyntaxContext};
 use swc_ecma_ast::{
     ArrayLit, AssignExpr, BinExpr, BinaryOp, BindingIdent, BlockStmt, Bool, BreakStmt, CallExpr,
-    CatchClause, ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Ident,
+    CatchClause, ContinueStmt, Decl, Expr, ExprOrSpread, ExprStmt, ForStmt, Function, Id, Ident,
     IdentName, IfStmt, LabeledStmt, Lit, MemberExpr, Param, Pat, ReturnStmt, Stmt, Str, SwitchCase,
     SwitchStmt, ThrowStmt, TryStmt, TsTypeAnn, TsTypeParamDecl, VarDecl, VarDeclKind, VarDeclarator,
 };

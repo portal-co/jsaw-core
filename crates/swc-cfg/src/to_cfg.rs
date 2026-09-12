@@ -180,7 +180,7 @@ pub struct Loop<T = BlockId> {
 pub struct ToCfgConversionCtx<Sidecar = (), TargetCfg: ToCfgCfg<Sidecar> = Cfg> {
     pub catch: Catch<TargetCfg::Block>,
     pub cur_loop: Option<Loop<TargetCfg::Block>>,
-    pub labelled: HashMap<Ident, Loop<TargetCfg::Block>>,
+    pub labelled: HashMap<Id, Loop<TargetCfg::Block>>,
 }
 impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> Default for ToCfgConversionCtx<Sidecar, TargetCfg> {
     fn default() -> Self {
@@ -287,7 +287,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for DoWhil
         });
         if let Some(l) = label {
             new.labelled
-                .insert(l, new.cur_loop.as_ref().cloned().unwrap());
+                .insert(l.to_id(), new.cur_loop.as_ref().cloned().unwrap());
         }
         let k = new.transform(cfg, sidecar, do_while_stmt.body, cont, None)?;
         cfg.cond_jmp(
@@ -546,7 +546,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 sidecar,
                 current,
                 match &break_stmt.label {
-                    Some(l) => ctx.labelled.get(l),
+                    Some(l) => ctx.labelled.get(&l.to_id()),
                     None => ctx.cur_loop.as_ref(),
                 }
                 .ok_or_else(|| crate::Error::NoLoopContext.into())?
@@ -560,7 +560,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 sidecar,
                 current,
                 match &continue_stmt.label {
-                    Some(l) => ctx.labelled.get(l),
+                    Some(l) => ctx.labelled.get(&l.to_id()),
                     None => ctx.cur_loop.as_ref(),
                 }
                 .ok_or_else(|| crate::Error::NoLoopContext.into())?
@@ -575,7 +575,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
             cfg.jump(sidecar, current, cont, Some(labeled_stmt.span))?;
             let mut new = ctx.clone();
             new.labelled.insert(
-                labeled_stmt.label.clone(),
+                labeled_stmt.label.to_id(),
                 Loop {
                     r#break: next,
                     r#continue: cont,
