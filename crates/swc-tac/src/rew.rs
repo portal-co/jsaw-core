@@ -1019,6 +1019,25 @@ impl Rew<'_> {
             cfg.blocks[new_block_id].end.catch = catch;
             let mut state: HashMap<Ident, Box<Expr>> = HashMap::new();
             let mut ids = vec![];
+            // Per-render lookups, computed once per block instead of per identifier:
+            // `TCfg::refs()` and `TCfg::def()` each scan every statement of every
+            // block, so calling them inside `_sr` (per rendered ident) made long
+            // straight-line blocks quadratic in statement count.
+            let mut ref_counts: HashMap<Ident, usize> = HashMap::new();
+            for r in tcfg.refs() {
+                *ref_counts.entry(r).or_default() += 1;
+            }
+            let mut ssa_defs: HashMap<Ident, &crate::Item<Ident, TFunc>> = HashMap::new();
+            for b in tcfg.blocks.iter() {
+                for stmt in &b.1.stmts {
+                    if let crate::LId::Id { id } = &stmt.left {
+                        if stmt.flags.contains(crate::ValFlags::SSA_LIKE) {
+                            // `TCfg::def` returns the *first* SSA_LIKE definition.
+                            ssa_defs.entry(id.clone()).or_insert(&stmt.right);
+                        }
+                    }
+                }
+            }
             macro_rules! flush {
                 () => {
                     let s: Vec<_> = ids
@@ -1054,18 +1073,19 @@ impl Rew<'_> {
             for statement_data in tcfg.blocks[block_id].stmts.iter() {
                 let span = statement_data.span;
                 let mut mark = false;
-                fn _sr(
+                fn _sr<'t>(
                     left: &Ident,
-                    tcfg: &TCfg,
+                    ref_counts: &HashMap<Ident, usize>,
+                    ssa_defs: &HashMap<Ident, &'t crate::Item<Ident, TFunc>>,
                     state: &mut HashMap<Ident, Box<Expr>>,
                     span: Span,
                 ) -> Box<Expr> {
-                    let n = tcfg.refs().filter(|a| a == left).count();
-                    match tcfg.def(crate::LId::Id { id: left.clone() }) {
+                    let n = ref_counts.get(left).copied().unwrap_or(0);
+                    match ssa_defs.get(left).copied() {
                         Some(Item::Asm { value })
                             if match value {
                                 Asm::OrZero(value) => {
-                                    tcfg.def(LId::Id { id: value.clone() }).is_some()
+                                    ssa_defs.contains_key(value)
                                 }
                                 _ => todo!(),
                             } =>
@@ -1074,7 +1094,7 @@ impl Rew<'_> {
                                 Asm::OrZero(a) => Box::new(Expr::Bin(BinExpr {
                                     span,
                                     op: BinaryOp::BitOr,
-                                    left: _sr(a, tcfg, state, span),
+                                    left: _sr(a, ref_counts, ssa_defs, state, span),
                                     right: Box::new(Expr::Lit(Lit::Num(Number {
                                         span,
                                         value: 0.0,
@@ -1086,13 +1106,12 @@ impl Rew<'_> {
                         }
                         Some(Item::Lit { lit }) => Box::new(Expr::Lit(lit.clone())),
                         Some(Item::Un { arg, op })
-                            if !matches!(op, UnaryOp::Delete)
-                                && tcfg.def(LId::Id { id: arg.clone() }).is_some() =>
+                            if !matches!(op, UnaryOp::Delete) && ssa_defs.contains_key(arg) =>
                         {
                             Box::new(Expr::Unary(UnaryExpr {
                                 span,
                                 op: *op,
-                                arg: _sr(arg, tcfg, state, span),
+                                arg: _sr(arg, ref_counts, ssa_defs, state, span),
                             }))
                         }
                         _ => match state.remove(left) {
@@ -1117,7 +1136,7 @@ impl Rew<'_> {
                         },
                     }
                 }
-                let mut sr = |left: &Ident| _sr(left, tcfg, &mut state, span);
+                let mut sr = |left: &Ident| _sr(left, &ref_counts, &ssa_defs, &mut state, span);
                 let left = statement_data.left.render(
                     &mut mark,
                     span,
