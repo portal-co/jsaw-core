@@ -222,6 +222,13 @@ impl CfgModuleBuilder {
 
         match item {
             // ── plain statement ─────────────────────────────────────
+            // Function declarations are hoisted at module scope just like
+            // `export function`, so incremental consumers can release each
+            // completed function before parsing the next top-level item.
+            ModuleItem::Stmt(Stmt::Decl(Decl::Fn(f))) => {
+                let name = f.ident.sym.clone();
+                funcs.insert(name, Func::try_from(*f.function)?);
+            }
             ModuleItem::Stmt(s) => body_stmts.push(s),
 
             // ── module declaration ──────────────────────────────────
@@ -447,6 +454,13 @@ impl CfgModuleBuilder {
                 },
             }
         Ok(())
+    }
+
+    /// Remove hoisted functions converted so far while retaining metadata and
+    /// pending top-level statements. Incremental consumers own the returned
+    /// functions and [`Self::finish`] will not include them.
+    pub fn take_functions(&mut self) -> HashMap<Atom, Func> {
+        std::mem::take(&mut self.funcs)
     }
 
     /// Finish building, producing a complete [`CfgModule`].

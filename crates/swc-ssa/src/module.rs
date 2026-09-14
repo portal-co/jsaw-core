@@ -8,10 +8,11 @@ use std::collections::HashMap;
 
 use portal_jsc_swc_util::ImportMapper;
 use swc_atoms::Atom;
-use swc_ecma_ast::ImportDecl;
-use swc_tac::{TFunc, module::CfgModuleImportMapper, module::TModule};
+use swc_common::SyntaxContext;
+use swc_ecma_ast::{ImportDecl, ModuleItem};
+use swc_tac::{Item, TFunc, module::CfgModuleImportMapper, module::TModule};
 
-use crate::{Error, SFunc};
+use crate::{Error, SFunc, SValue, SValueW};
 pub use swc_cfg::module::ExportSpec;
 
 // ── SModule ───────────────────────────────────────────────────────────────
@@ -39,6 +40,101 @@ impl SModule {
     /// imported binding, and to discover the module specifier and import kind.
     pub fn import_mapper(&self) -> impl ImportMapper + '_ {
         CfgModuleImportMapper::from_imports(&self.imports)
+    }
+}
+
+/// Incrementally translate an ES module to SSA.
+///
+/// A complete SWC [`Module`](swc_ecma_ast::Module) holds every parsed function
+/// AST at once. The traditional `Module -> CfgModule -> TModule -> SModule`
+/// path then temporarily retains the same function in three more IRs. This
+/// builder is the streaming seam: append parser items one at a time and each
+/// hoisted function is lowered to SSA immediately. Only the final SSA module
+/// and its still-unavoidable top-level body remain live.
+///
+/// `finish` preserves the ordinary module representation, including the
+/// top-level stores that install hoisted functions into the shared module
+/// context. Existing callers of the three whole-module `TryFrom` conversions
+/// remain supported.
+pub struct SModuleBuilder {
+    cfg: swc_cfg::module::CfgModuleBuilder,
+    funcs: HashMap<Atom, SFunc>,
+}
+
+impl Default for SModuleBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SModuleBuilder {
+    /// Create an empty incremental module translator.
+    pub fn new() -> Self {
+        Self {
+            cfg: swc_cfg::module::CfgModuleBuilder::new(),
+            funcs: HashMap::new(),
+        }
+    }
+
+    /// Translate one parsed top-level item.
+    ///
+    /// Functions declared by this item are drained from the CFG builder and
+    /// immediately lowered through TAC into SSA, releasing their AST and CFG
+    /// allocations before parsing the next item.
+    pub fn append(&mut self, item: ModuleItem) -> Result<(), Error> {
+        self.cfg.append(item).map_err(swc_tac::Error::from)?;
+        for (name, func) in self.cfg.take_functions() {
+            let tac = TFunc::try_from(func)?;
+            self.funcs.insert(name, SFunc::try_from(tac)?);
+        }
+        Ok(())
+    }
+
+    /// Finish the module after all items have been appended.
+    pub fn finish(mut self) -> Result<SModule, Error> {
+        // `take_functions` leaves the CFG builder with only the top-level
+        // body and module metadata. Lower that small residual body normally.
+        let cfg = self.cfg.finish().map_err(swc_tac::Error::from)?;
+        let mut body = SFunc::try_from(TFunc::try_from(cfg.body)?)?;
+
+        // TModule::try_from traditionally prepends `name = function(){...}`
+        // statements before converting the body to SSA. Recreate that final
+        // representation directly here, using the SSA functions we already
+        // translated item-by-item. These stores are intentionally non-SSA:
+        // they populate the shared module context used by module init and by
+        // nested closures.
+        let entry = body.entry;
+        let mut hoists = Vec::with_capacity(self.funcs.len() * 2);
+        for (name, function) in &self.funcs {
+            let value = body.cfg.values.alloc(SValueW {
+                value: SValue::Item {
+                    item: Item::Func {
+                        func: function.clone(),
+                        arrow: false,
+                    },
+                    span: None,
+                },
+            });
+            hoists.push(value);
+            let store = body.cfg.values.alloc(SValueW {
+                value: SValue::StoreId {
+                    target: (name.clone(), SyntaxContext::empty()),
+                    val: value,
+                },
+            });
+            hoists.push(store);
+        }
+        // The SSA entry shim contains only the initial `undefined` value and
+        // jumps to the translated top-level body. Put hoists after that value
+        // and before the jump so every normal path sees them first.
+        body.cfg.blocks[entry].stmts.extend(hoists);
+
+        Ok(SModule {
+            imports: cfg.imports,
+            funcs: std::mem::take(&mut self.funcs),
+            body,
+            exports: cfg.exports,
+        })
     }
 }
 
