@@ -90,6 +90,23 @@ impl SModuleBuilder {
         Ok(())
     }
 
+    /// Take every hoisted function translated since the last call.
+    ///
+    /// This is deliberately destructive, matching
+    /// [`CfgModuleBuilder::take_functions`](swc_cfg::module::CfgModuleBuilder::take_functions).
+    /// A streaming consumer can call it after each [`Self::append`] and compile
+    /// or serialize each returned [`SFunc`] before parsing the next item,
+    /// rather than retaining a module-wide SSA function map. Callers that need
+    /// a complete [`SModule`] simply do not call this method; [`Self::finish`]
+    /// then retains its existing whole-module behavior.
+    ///
+    /// A builder whose functions were taken cannot later produce an equivalent
+    /// complete `SModule`: the caller owns the function bodies and must also
+    /// own any module-init/linking representation it needs.
+    pub fn take_functions(&mut self) -> HashMap<Atom, SFunc> {
+        std::mem::take(&mut self.funcs)
+    }
+
     /// Finish the module after all items have been appended.
     pub fn finish(mut self) -> Result<SModule, Error> {
         // `take_functions` leaves the CFG builder with only the top-level
@@ -300,6 +317,36 @@ mod tests {
             }
         }
         assert!(found_return, "function must contain a Return");
+    });
+
+    portal_solutions_swibb::simple_module_test!(s_module_builder_takes_functions_incrementally [
+        "function private_helper(x) { return x + 1; }
+         export function public_helper(x) { return private_helper(x) + 1; }
+         const top_level_value = 3;
+        "
+    ] => |_sm, module| {
+        let mut builder = SModuleBuilder::new();
+        let mut names = std::collections::BTreeSet::new();
+        for item in module.body {
+            builder.append(item).expect("incremental lowering should succeed");
+            names.extend(builder.take_functions().into_keys());
+        }
+
+        assert_eq!(
+            names,
+            std::collections::BTreeSet::from([
+                swc_atoms::Atom::new("private_helper"),
+                swc_atoms::Atom::new("public_helper"),
+            ]),
+            "each completed module function should be available for immediate consumption"
+        );
+
+        // Taking functions is opt-in: the remaining body metadata can still
+        // be finalized for streaming consumers which own their own function
+        // compilation and linking representation.
+        let residual = builder.finish().expect("residual body should lower");
+        assert!(residual.funcs.is_empty());
+        assert!(residual.body.cfg.blocks.iter().next().is_some());
     });
 
     portal_solutions_swibb::simple_module_test!(test_smodule_body_compiles [
