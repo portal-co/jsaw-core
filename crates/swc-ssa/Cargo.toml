@@ -22,9 +22,12 @@ portal-jsc-swc-util.workspace = true # = { version = "^0.8.0-pre.6", git = "http
 swc_atoms.workspace = true
 swc_common.workspace = true
 swc_ecma_ast.workspace = true
+swc_ecma_codegen.workspace = true
+swc_ecma_parser.workspace = true
 swc_ecma_utils.workspace = true
 swc_ecma_visit.workspace = true
 num-traits = "0.2.19"
+sha3.workspace = true
 log.workspace = true
 portal-jsc-common.workspace = true # = { version = "^0.8.0-pre.6", git = "https://github.com/portal-co/jsaw-core.git" }
 portal-solutions-swibb.workspace = true

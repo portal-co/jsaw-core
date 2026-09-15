@@ -4,9 +4,13 @@
 //! Import/export metadata is preserved verbatim from the TAC layer; each
 //! [`TFunc`] body is lowered to an [`SFunc`] via the normal SSA conversion.
 
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt,
+};
 
 use portal_jsc_swc_util::ImportMapper;
+use sha3::{Digest, Sha3_256};
 use swc_atoms::Atom;
 use swc_common::SyntaxContext;
 use swc_ecma_ast::{ImportDecl, ModuleItem};
@@ -14,6 +18,117 @@ use swc_tac::{Item, TFunc, module::CfgModuleImportMapper, module::TModule};
 
 use crate::{Error, SFunc, SValue, SValueW};
 pub use swc_cfg::module::ExportSpec;
+
+/// Version marker included in every function fingerprint.
+///
+/// Bump this whenever the canonical semantic encoding changes. Cached
+/// inventory records from the prior encoder must then be treated as misses.
+pub const FUNCTION_FINGERPRINT_SCHEMA: &str = "jsaw.function.v1";
+
+/// A content digest rendered as lowercase hexadecimal for cache keys and
+/// revision manifests. It intentionally does not contain a source span.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionFingerprint([u8; 32]);
+
+impl FunctionFingerprint {
+    /// Return the domain-separated digest as 64 lowercase hexadecimal digits.
+    pub fn to_hex(self) -> String {
+        let mut output = String::with_capacity(64);
+        for byte in self.0 {
+            use fmt::Write as _;
+            write!(output, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        output
+    }
+}
+
+impl fmt::Display for FunctionFingerprint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.to_hex())
+    }
+}
+
+/// Compute a domain-separated fingerprint of normalized JavaScript source.
+///
+/// This intentionally strips comments and whitespace before hashing. It is a
+/// source-ingestion cache key, not a substitute for the later hygienic
+/// dependency/layout checks that decide whether a cached fragment is safe to
+/// reuse. Syntax errors are returned to the caller instead of being hashed as
+/// text, so malformed source cannot alias a valid module.
+pub fn source_fingerprint(
+    source: &str,
+) -> Result<FunctionFingerprint, swc_ecma_parser::error::Error> {
+    let mut errors = Vec::new();
+    let source_map = swc_common::sync::Lrc::new(swc_common::SourceMap::default());
+    let file = source_map.new_source_file(
+        swc_common::sync::Lrc::new(swc_common::FileName::Custom("<fingerprint>".to_owned())),
+        source.to_owned(),
+    );
+    let module = swc_ecma_parser::parse_file_as_module(
+        &file,
+        swc_ecma_parser::Syntax::Es(swc_ecma_parser::EsSyntax::default()),
+        swc_ecma_ast::EsVersion::Es2022,
+        None,
+        &mut errors,
+    )?;
+    if let Some(error) = errors.into_iter().next() {
+        return Err(error);
+    }
+    Ok(fingerprint_normalized_source(&swc_ecma_codegen::to_code(
+        &module,
+    )))
+}
+
+fn fingerprint_normalized_source(normalized: &str) -> FunctionFingerprint {
+    let mut hasher = Sha3_256::new();
+    hasher.update(FUNCTION_FINGERPRINT_SCHEMA.as_bytes());
+    hasher.update([0]);
+    hasher.update(normalized.as_bytes());
+    FunctionFingerprint(hasher.finalize().into())
+}
+
+fn function_fingerprint(function: &SFunc) -> Result<FunctionFingerprint, Error> {
+    let tac = TFunc::try_from(function)?;
+    let cfg = swc_cfg::Func::try_from(tac)?;
+    let source: swc_ecma_ast::Function = cfg.into();
+    let expression = swc_ecma_ast::Expr::Fn(swc_ecma_ast::FnExpr {
+        ident: None,
+        function: Box::new(source),
+    });
+    Ok(fingerprint_normalized_source(&swc_ecma_codegen::to_code(
+        &expression,
+    )))
+}
+
+/// Stable source-domain identity for a top-level function declaration.
+///
+/// `module_path` is textual because module paths are textual ESM domains.
+/// `ordinal` reserves a structural position for synthetic/anonymous forms.
+/// Named top-level declarations currently use zero because jsaw-core's
+/// `CfgModuleBuilder` stores the final hoisted binding by name; callers must
+/// retain the hygienic [`Ident`] separately for compiler bookkeeping.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionKey {
+    pub module_path: String,
+    pub declared_name: Option<Atom>,
+    pub ordinal: u32,
+}
+
+/// A fingerprinted, hygienic function inventory useful to streaming consumers.
+#[derive(Clone, Debug, Default)]
+pub struct FunctionInventory {
+    pub functions: Vec<FunctionSourceInfo>,
+}
+
+/// Metadata for a single completed top-level function.
+#[derive(Clone, Debug)]
+pub struct FunctionSourceInfo {
+    pub key: FunctionKey,
+    pub fingerprint: FunctionFingerprint,
+    /// Hygienic free references. Never derive cache/link identity from the
+    /// rendered atom alone: `SyntaxContext` is part of `Ident` equality.
+    pub direct_refs: BTreeSet<swc_ecma_ast::Id>,
+}
 
 // ── SModule ───────────────────────────────────────────────────────────────
 
@@ -59,6 +174,8 @@ impl SModule {
 pub struct SModuleBuilder {
     cfg: swc_cfg::module::CfgModuleBuilder,
     funcs: HashMap<Atom, SFunc>,
+    inventory: Vec<FunctionSourceInfo>,
+    module_path: String,
 }
 
 impl Default for SModuleBuilder {
@@ -70,9 +187,18 @@ impl Default for SModuleBuilder {
 impl SModuleBuilder {
     /// Create an empty incremental module translator.
     pub fn new() -> Self {
+        Self::for_module("")
+    }
+
+    /// Create an incremental translator whose inventory keys are scoped to
+    /// `module_path`. Module paths are a textual ESM domain, unlike lexical
+    /// bindings, which remain represented by hygienic SWC identifiers.
+    pub fn for_module(module_path: impl Into<String>) -> Self {
         Self {
             cfg: swc_cfg::module::CfgModuleBuilder::new(),
             funcs: HashMap::new(),
+            inventory: Vec::new(),
+            module_path: module_path.into(),
         }
     }
 
@@ -85,7 +211,17 @@ impl SModuleBuilder {
         self.cfg.append(item).map_err(swc_tac::Error::from)?;
         for (name, func) in self.cfg.take_functions() {
             let tac = TFunc::try_from(func)?;
-            self.funcs.insert(name, SFunc::try_from(tac)?);
+            let ssa = SFunc::try_from(tac)?;
+            self.inventory.push(FunctionSourceInfo {
+                key: FunctionKey {
+                    module_path: self.module_path.clone(),
+                    declared_name: Some(name.clone()),
+                    ordinal: 0,
+                },
+                fingerprint: function_fingerprint(&ssa)?,
+                direct_refs: ssa.cfg.externals(),
+            });
+            self.funcs.insert(name, ssa);
         }
         Ok(())
     }
@@ -105,6 +241,16 @@ impl SModuleBuilder {
     /// own any module-init/linking representation it needs.
     pub fn take_functions(&mut self) -> HashMap<Atom, SFunc> {
         std::mem::take(&mut self.funcs)
+    }
+
+    /// Take fingerprint/dependency records for functions translated since the
+    /// prior call. Inventory follows the same destructive consumption model as
+    /// [`Self::take_functions`], so a streaming compiler can cache a function
+    /// fragment and its validity contract together.
+    pub fn take_inventory(&mut self) -> FunctionInventory {
+        let mut functions = std::mem::take(&mut self.inventory);
+        functions.sort_by(|left, right| left.key.cmp(&right.key));
+        FunctionInventory { functions }
     }
 
     /// Finish the module after all items have been appended.
@@ -347,6 +493,42 @@ mod tests {
         let residual = builder.finish().expect("residual body should lower");
         assert!(residual.funcs.is_empty());
         assert!(residual.body.cfg.blocks.iter().next().is_some());
+    });
+
+    portal_solutions_swibb::simple_module_test!(source_fingerprint_ignores_formatting_but_not_semantics [
+        "export function f(x) { return x + 1; }"
+    ] => |_sm, _module| {
+        let formatted = source_fingerprint("export function f(x) { return x + 1; }")
+            .expect("valid source should fingerprint");
+        let comments_and_whitespace = source_fingerprint(
+            "// formatting must not create a cache miss\nexport function f( x ) { /* comment */ return x + 1; }",
+        )
+        .expect("valid source should fingerprint");
+        let changed = source_fingerprint("export function f(x) { return x + 2; }")
+            .expect("valid source should fingerprint");
+        assert_eq!(formatted, comments_and_whitespace);
+        assert_ne!(formatted, changed);
+    });
+
+    portal_solutions_swibb::simple_module_test!(s_module_builder_inventory_tracks_hygienic_refs [
+        "const imported = 1;
+         export function public_helper(value) { return value + imported; }"
+    ] => |_sm, module| {
+        let mut builder = SModuleBuilder::for_module("src/main.js");
+        for item in module.body {
+            builder.append(item).expect("incremental lowering should succeed");
+        }
+        let inventory = builder.take_inventory();
+        assert_eq!(inventory.functions.len(), 1);
+        let function = &inventory.functions[0];
+        assert_eq!(function.key.module_path, "src/main.js");
+        assert_eq!(function.key.declared_name, Some(swc_atoms::Atom::new("public_helper")));
+        assert_eq!(function.key.ordinal, 0);
+        assert!(
+            function.direct_refs.iter().any(|id| id.0 == swc_atoms::Atom::new("imported")),
+            "references retain hygienic Ident values rather than flattened strings"
+        );
+        assert_ne!(function.fingerprint.to_hex(), "");
     });
 
     portal_solutions_swibb::simple_module_test!(test_smodule_body_compiles [
