@@ -81,3 +81,21 @@ harness binary (src/main.rs)
   swc_ecma_codegen::Emitter::emit_script
         ↓ stdout
 ```
+
+## Optimization CLI
+
+The optimizer package contains command-line parsing, module roundtrip, and
+pass-selection tests:
+
+```bash
+cargo test -p portal-jsc-optimizer
+cargo build -p portal-jsc-optimizer
+cargo run -p portal-jsc-optimizer --bin jsaw-opt -- --list-passes
+```
+
+Its integration contract is an ECMAScript module, rather than the script-only
+roundtrip harness. Test module fixtures with a sibling dependency module and
+run the original and optimized entry modules under Node, comparing exported
+values, stdout, and failure behavior. Include imports/exports, aliases,
+closures, `this`/`arguments`, exceptions, async/generator behavior, and
+observable property access whenever adding or promoting an optimization pass.

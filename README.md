@@ -133,3 +133,34 @@ The `tests/` and `harness/` directories are currently empty. The `TESTING.md` fi
 ## License
 
 Mozilla Public License 2.0 (MPL-2.0). See `LICENSE.md`.
+
+## Optimization CLI
+
+`jsaw-opt` optimizes a single ECMAScript module through the TAC and SSA IRs and
+re-emits an ECMAScript module. It preserves imports and exports; it is neither a
+bundler nor a minifier.
+
+```bash
+# Build and list the stable pass registry (does not read an input file).
+cargo run -p portal-jsc-optimizer --bin jsaw-opt -- --list-passes
+
+# Optimize an ECMAScript module to stdout.
+cargo run -p portal-jsc-optimizer --bin jsaw-opt -- input.mjs --output - > output.mjs
+
+# Validate lowering, optimization, and emission without writing output.
+cargo run -p portal-jsc-optimizer --bin jsaw-opt -- input.mjs --check
+```
+
+Without `--pass` or `--passes`, the CLI selects only reviewed,
+standard-ECMAScript-preserving transformations. `--pass` is repeatable and
+comma-separated; supplying it replaces the default set. Use `--intensity`
+(`conservative`, `standard`, or `aggressive`) only to raise bounded pass
+budgets—it never enables extra passes or semantic assumptions. `--semantic-flag`
+records an explicit compiler assumption for opt-in work; default optimization
+uses no semantic flags.
+
+The current input mode is ECMAScript modules only. Source resolution is
+whole-module for correctness; after resolution, completed hoisted functions are
+lowered and optimized incrementally, so their pre-optimization IR does not
+accumulate with following functions. `--list-passes` is the authoritative list
+of pass names, layers, default status, and intensity support.

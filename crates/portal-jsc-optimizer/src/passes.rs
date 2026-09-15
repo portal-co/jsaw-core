@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use portal_jsc_common::semantic::SemanticFlags;
 use portal_jsc_swc_util::SemanticCfg;
 
@@ -328,8 +328,10 @@ mod tests {
             "ssa.simplify-justs=aggressive",
             "input.mjs",
         ]));
-        assert!(result
-            .err()
-            .is_some_and(|error| error.to_string().contains("conflicting intensity")));
+        assert!(
+            result
+                .err()
+                .is_some_and(|error| error.to_string().contains("conflicting intensity"))
+        );
     }
 }

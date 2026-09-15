@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use swc_atoms::Atom;
 use swc_cfg::module::ExportSpec;
-use swc_common::{sync::Lrc, FileName, Globals, Mark, SourceMap, SyntaxContext, GLOBALS};
+use swc_common::{FileName, GLOBALS, Globals, Mark, SourceMap, SyntaxContext, sync::Lrc};
 use swc_ecma_ast::{
     EsVersion, ExportAll, ExportNamedSpecifier, ExportSpecifier, FnDecl, Module, ModuleDecl,
     ModuleExportName, ModuleItem, NamedExport,
 };
-use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
-use swc_ecma_parser::{parse_file_as_module, EsSyntax, Syntax};
+use swc_ecma_codegen::{Config, Emitter, text_writer::JsWriter};
+use swc_ecma_parser::{EsSyntax, Syntax, parse_file_as_module};
 use swc_ecma_transforms_base::{hygiene::hygiene, resolver};
 use swc_ecma_visit::VisitMutWith;
 use swc_tac::{module::TModule, rew::Options};
