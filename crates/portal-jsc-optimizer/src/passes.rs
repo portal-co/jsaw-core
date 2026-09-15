@@ -127,6 +127,10 @@ impl OptimizationPlan {
         self.selected.contains(descriptor.name)
     }
 
+    pub fn contains(&self, name: &str) -> bool {
+        self.selected.contains(name)
+    }
+
     pub fn intensity_for(&self, descriptor: PassDescriptor) -> Option<Intensity> {
         (descriptor.intensity == IntensitySupport::Bounded)
             .then(|| self.intensities[descriptor.name])

@@ -19,6 +19,13 @@ portal-jsc-swc-util.workspace = true
 swc-cfg.workspace = true
 swc-ssa.workspace = true
 swc-tac.workspace = true
+swc_atoms.workspace = true
+swc_common.workspace = true
+swc_ecma_ast.workspace = true
+swc_ecma_codegen.workspace = true
+swc_ecma_parser.workspace = true
+swc_ecma_transforms_base.workspace = true
+swc_ecma_visit.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

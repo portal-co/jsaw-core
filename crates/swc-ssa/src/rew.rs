@@ -102,11 +102,17 @@ impl Rew {
             .get_or_init(|| SyntaxContext::empty().apply_mark(Mark::new()));
         loop {
             if let Some(existing_block) = self.blocks.get(&block_entry) {
-                log::trace!("rew: block entry already translated → TAC block {:?}", existing_block);
+                log::trace!(
+                    "rew: block entry already translated → TAC block {:?}",
+                    existing_block
+                );
                 return Ok(*existing_block);
             }
             let new_block_id = cfg.blocks.alloc(Default::default());
-            log::trace!("rew: translating SSA block entry → new TAC block {:?}", new_block_id);
+            log::trace!(
+                "rew: translating SSA block entry → new TAC block {:?}",
+                new_block_id
+            );
             self.blocks.insert(block_entry.clone(), new_block_id);
             match &block_entry {
                 BlockEntry::Block(block_id) => {
@@ -258,18 +264,20 @@ impl Rew {
                                 .map(|b| mangle_value(self.prefix.clone(), ctxt, func, *b)),
                         )
                         .enumerate()
-                        .map(|(arg_index, arg_value)| TStmt {
-                            left: LId::Id {
-                                id: mangle_param(
-                                    self.prefix.clone(),
-                                    ctxt,
-                                    starget.block,
-                                    arg_index,
-                                ),
-                            },
-                            flags: Default::default(),
-                            right: Item::Just { id: arg_value },
-                            span: Span::dummy_with_cmt(),
+                        .map(|(arg_index, arg_value)| {
+                            // A rewritten SSA block parameter is a mutable TAC
+                            // temporary receiving values on each incoming edge.
+                            // Register it in `decls` before emitting the
+                            // assignment so TAC→CFG declares it in JavaScript.
+                            let parameter =
+                                mangle_param(self.prefix.clone(), ctxt, starget.block, arg_index);
+                            cfg.decls.insert(parameter.clone());
+                            TStmt {
+                                left: LId::Id { id: parameter },
+                                flags: Default::default(),
+                                right: Item::Just { id: arg_value },
+                                span: Span::dummy_with_cmt(),
+                            }
                         });
                     cfg.blocks[new_block_id].stmts.extend(stmts);
                     let term = swc_tac::TTerm::Jmp(self.trans(
