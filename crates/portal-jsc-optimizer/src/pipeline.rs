@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::{bail, Context, Result};
 use swc_atoms::Atom;
-use swc_cfg::module::{CfgModule, ExportSpec};
+use swc_cfg::module::ExportSpec;
 use swc_common::{sync::Lrc, FileName, Globals, Mark, SourceMap, SyntaxContext, GLOBALS};
 use swc_ecma_ast::{
     EsVersion, ExportAll, ExportNamedSpecifier, ExportSpecifier, FnDecl, Module, ModuleDecl,
@@ -65,18 +65,40 @@ impl<'a> BufferedModulePipeline<'a> {
                 _ => None,
             })
             .collect();
-        let cfg = CfgModule::try_from(module).context("AST to CFG module conversion failed")?;
-        let mut tac = TModule::try_from(cfg).context("CFG to TAC module conversion failed")?;
-        optimize_tac_module(&mut tac, self.plan)?;
-        ModuleEmitter::new(tac, default_exports).emit()
+        // Resolution is deliberately whole-module, but every completed
+        // function below is lowered and optimized as soon as the incremental
+        // CFG builder releases it. CFG/TAC/SSA versions of a completed
+        // function therefore do not accumulate with following functions.
+        let mut cfg_builder = swc_cfg::module::CfgModuleBuilder::new();
+        let mut functions = HashMap::new();
+        for item in module.body {
+            cfg_builder
+                .append(item)
+                .context("AST to CFG module conversion failed")?;
+            for (name, cfg_function) in cfg_builder.take_functions() {
+                let mut function = swc_tac::TFunc::try_from(cfg_function)
+                    .with_context(|| format!("CFG to TAC conversion failed for `{name}`"))?;
+                optimize_function(&mut function, self.plan)?;
+                functions.insert(name, function);
+            }
+        }
+        let cfg = cfg_builder
+            .finish()
+            .context("finishing CFG module failed")?;
+        let mut body = swc_tac::TFunc::try_from(cfg.body)
+            .context("CFG to TAC module-body conversion failed")?;
+        optimize_function(&mut body, self.plan)?;
+        ModuleEmitter::new(
+            TModule {
+                imports: cfg.imports,
+                funcs: functions,
+                body,
+                exports: cfg.exports,
+            },
+            default_exports,
+        )
+        .emit()
     }
-}
-
-fn optimize_tac_module(module: &mut TModule, plan: &OptimizationPlan) -> Result<()> {
-    for function in module.funcs.values_mut() {
-        optimize_function(function, plan)?;
-    }
-    optimize_function(&mut module.body, plan)
 }
 
 fn optimize_function(function: &mut swc_tac::TFunc, plan: &OptimizationPlan) -> Result<()> {
