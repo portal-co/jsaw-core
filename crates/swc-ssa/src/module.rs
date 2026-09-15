@@ -74,12 +74,15 @@ pub fn source_fingerprint(
     if let Some(error) = errors.into_iter().next() {
         return Err(error);
     }
-    Ok(fingerprint_normalized_source(&swc_ecma_codegen::to_code(
-        &module,
-    )))
+    Ok(semantic_fingerprint(&swc_ecma_codegen::to_code(&module)))
 }
 
-fn fingerprint_normalized_source(normalized: &str) -> FunctionFingerprint {
+/// Fingerprint canonical semantic text under the function-fingerprint domain.
+///
+/// Compiler layers which already have a canonical rendering (for example an
+/// ABI-only function signature) use this instead of reparsing text merely to
+/// reach [`source_fingerprint`].
+pub fn semantic_fingerprint(normalized: &str) -> FunctionFingerprint {
     let mut hasher = Sha3_256::new();
     hasher.update(FUNCTION_FINGERPRINT_SCHEMA.as_bytes());
     hasher.update([0]);
@@ -95,7 +98,7 @@ fn function_fingerprint(function: &SFunc) -> Result<FunctionFingerprint, Error> 
         ident: None,
         function: Box::new(source),
     });
-    Ok(fingerprint_normalized_source(&swc_ecma_codegen::to_code(
+    Ok(semantic_fingerprint(&swc_ecma_codegen::to_code(
         &expression,
     )))
 }
