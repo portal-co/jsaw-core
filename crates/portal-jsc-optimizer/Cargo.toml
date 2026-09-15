@@ -1,0 +1,24 @@
+[package]
+name = "portal-jsc-optimizer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "jsaw-opt"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+portal-jsc-common.workspace = true
+portal-jsc-swc-util.workspace = true
+swc-cfg.workspace = true
+swc-ssa.workspace = true
+swc-tac.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
