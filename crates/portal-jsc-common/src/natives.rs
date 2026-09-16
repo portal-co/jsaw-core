@@ -259,6 +259,14 @@ impl Primordial {
 /// `Fast*` variants represent optimized versions of JavaScript operations that
 /// assume certain type constraints, allowing for more efficient code generation.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "rkyv-impl",
+    rkyv(compare(PartialEq, PartialOrd))
+)]
 #[non_exhaustive]
 pub enum Native<E> {
     /// Assert that a value is a string (runtime or compile-time)

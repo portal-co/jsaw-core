@@ -197,32 +197,41 @@ bitflags! {
     }
 }
 
+/// rkyv archived form of [`MemberFlags`]: the bitflags `u64` (a Portable
+/// newtype; `rkyv::Archived<u64>` can't be used directly because its
+/// `Deserialize` instance is coherence-reserved by rkyv itself).
+#[cfg(feature = "rkyv-impl")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, rkyv::Portable)]
+#[repr(transparent)]
+pub struct ArchivedMemberFlags(rkyv::Archived<u64>);
+
+// SAFETY: `repr(transparent)` over `Archived<u64>` (rend's u64_le), itself
+// `NoUndef` + `Portable`; every byte pattern is valid and initialized.
+#[cfg(feature = "rkyv-impl")]
+unsafe impl rkyv::traits::NoUndef for ArchivedMemberFlags {}
+
 #[cfg(feature = "rkyv-impl")]
 impl rkyv::Archive for MemberFlags {
-    type Archived = rkyv::Archived<u64>;
-    type Resolver = rkyv::Resolver<u64>;
+    type Archived = ArchivedMemberFlags;
+    type Resolver = ();
 
     #[inline]
-    unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
-        self.bits().resolve(pos, resolver, out);
+    fn resolve(&self, _resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        out.write(ArchivedMemberFlags(rkyv::Archived::<u64>::from(self.bits())));
     }
 }
 
 #[cfg(feature = "rkyv-impl")]
-impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for MemberFlags {
-    #[inline]
-    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        self.bits().serialize(serializer)
+impl<S: rkyv::rancor::Fallible + ?Sized> rkyv::Serialize<S> for MemberFlags {
+    fn serialize(&self, _serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        Ok(())
     }
 }
 
 #[cfg(feature = "rkyv-impl")]
-impl<D: rkyv::de::Fallible + ?Sized> rkyv::Deserialize<MemberFlags, D> for rkyv::Archived<u64> {
-    #[inline]
-    fn deserialize(&self, deserializer: &mut D) -> Result<MemberFlags, D::Error> {
-        Ok(MemberFlags::from_bits_truncate(
-            rkyv::Deserialize::<u64, D>::deserialize(self, deserializer)?,
-        ))
+impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<MemberFlags, D> for ArchivedMemberFlags {
+    fn deserialize(&self, _d: &mut D) -> Result<MemberFlags, D::Error> {
+        Ok(MemberFlags::from_bits_truncate(u64::from(self.0)))
     }
 }
 
