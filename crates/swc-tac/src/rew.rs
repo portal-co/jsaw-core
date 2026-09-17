@@ -27,7 +27,7 @@ use swc_common::{Mark, Span, Spanned, SyntaxContext};
 use swc_ecma_ast::ExprStmt;
 use swc_ecma_ast::{
     ArrayLit, ArrayPat, CondExpr, KeyValuePatProp, MetaPropExpr, NewExpr, ObjectPat, ObjectPatProp,
-    Param, PrivateMethod, PrivateName, RestPat, UnaryOp,
+    Param, PrivateMethod, PrivateName, RestPat, Tpl, TplElement, UnaryOp,
 };
 use swc_ecma_ast::{ArrowExpr, KeyValueProp};
 use swc_ecma_ast::{AssignExpr, Decl, SeqExpr, VarDecl, VarDeclarator};
@@ -883,6 +883,23 @@ impl<I, F> Render<I, F> for Item<I, F> {
                     type_args: None,
                 })
             }
+            crate::Item::Tpl { quasis, exprs } => Expr::Tpl(Tpl {
+                span,
+                exprs: exprs
+                    .iter()
+                    .map(|expr| sr(cx, expr))
+                    .collect::<Result<_, E>>()?,
+                quasis: quasis
+                    .iter()
+                    .enumerate()
+                    .map(|(index, raw)| TplElement {
+                        span,
+                        tail: index + 1 == quasis.len(),
+                        cooked: Some(raw.clone().into()),
+                        raw: raw.clone(),
+                    })
+                    .collect(),
+            }),
             _ => todo!(), // Item::Intrinsic { value } => {
                           //     let mut v = Vec::default();
                           //     let x = value
