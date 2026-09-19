@@ -97,11 +97,8 @@ fn ssa_conv_join_shapes() {
         "export function f(a){ let x=a; try { x = x+1; } catch(e){ x = 0; } return x; }",
     ];
     for (idx, src) in cases.iter().enumerate() {
-        let result = std::panic::catch_unwind(|| convert_source(src));
-        match result {
-            Ok(t) => eprintln!("join_shape[{idx}] ok in {t:?}"),
-            Err(_) => eprintln!("join_shape[{idx}] PANICKED: {src}"),
-        }
+        let t = convert_source(src);
+        eprintln!("join_shape[{idx}] ok in {t:?}");
     }
 }
 
@@ -132,72 +129,3 @@ fn ssa_conv_scale_inner() {
     }
 }
 
-#[test]
-fn dbg_uninit_if_else() {
-    let src = "export function f(cond) { let a; if (cond) { a = 10; } else { a = 20; } return a; }";
-    portal_solutions_swibb::test::with_test_globals(|| {
-        let cm = portal_solutions_swibb::test::swc_common::sync::Lrc::new(
-            portal_solutions_swibb::test::swc_common::SourceMap::default(),
-        );
-        let module = portal_solutions_swibb::test::test_load(&cm, "dbg", src);
-        use swc_ecma_visit::VisitWith;
-        struct V;
-        impl swc_ecma_visit::Visit for V {
-            fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
-                let tfunc = TFunc::try_from(node.clone()).unwrap();
-                let all: std::collections::BTreeSet<_> = tfunc.cfg.decls.clone();
-                let liv = portal_jsc_swc_ssa::live::compute(&tfunc.cfg, &all);
-                for (bid,blk) in tfunc.cfg.blocks.iter() {
-                    eprintln!("  blk {:?} term={:?} catch={:?}", bid, blk.post.term, blk.post.catch);
-                }
-                for (b, s) in &liv.live_in {
-                    eprintln!("live_in[{:?}] = {:?}", b, s.iter().map(|i| i.0.to_string()).collect::<Vec<_>>());
-                }
-                for (b, s) in &liv.live_out {
-                    eprintln!("live_out[{:?}] = {:?}", b, s.iter().map(|i| i.0.to_string()).collect::<Vec<_>>());
-                }
-                let sfunc = SFunc::try_from(tfunc).unwrap();
-                for (id, val) in sfunc.cfg.values.iter() {
-                    match &val.value {
-                        portal_jsc_swc_ssa::SValue::LoadId(i) => eprintln!("LOADID {:?}", i.0),
-                        portal_jsc_swc_ssa::SValue::StoreId{target:i,..} => eprintln!("STOREID {:?}", i.0),
-                        _=>{}
-                    }
-                }
-            }
-        }
-        module.visit_with(&mut V);
-    });
-}
-
-#[test]
-fn dbg_value_counts() {
-    let child = std::thread::Builder::new()
-        .stack_size(512 * 1024 * 1024)
-        .spawn(|| {
-            for blocks in [128usize, 256, 512] {
-                let src = labeled_loop_source(blocks);
-                portal_solutions_swibb::test::with_test_globals(|| {
-                    let cm = portal_solutions_swibb::test::swc_common::sync::Lrc::new(
-                        portal_solutions_swibb::test::swc_common::SourceMap::default(),
-                    );
-                    let module = portal_solutions_swibb::test::test_load(&cm, "c", &src);
-                    use swc_ecma_visit::VisitWith;
-                    struct V(usize);
-                    impl swc_ecma_visit::Visit for V {
-                        fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
-                            let tfunc = TFunc::try_from(node.clone()).unwrap();
-                            let tac_blocks = tfunc.cfg.blocks.len();
-                            let sfunc = SFunc::try_from(tfunc).unwrap();
-                            let ssa_blocks = sfunc.cfg.blocks.len();
-                            let ssa_values = sfunc.cfg.values.len();
-                            let params: usize = sfunc.cfg.blocks.iter().map(|(_,b)| b.params.len()).sum();
-                            eprintln!("blocks={} tac_blocks={} ssa_blocks={} ssa_values={} total_params={}", self.0, tac_blocks, ssa_blocks, ssa_values, params);
-                        }
-                    }
-                    module.visit_with(&mut V(blocks));
-                });
-            }
-        }).unwrap();
-    child.join().unwrap();
-}
