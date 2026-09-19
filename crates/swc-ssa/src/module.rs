@@ -179,6 +179,10 @@ pub struct SModuleBuilder {
     funcs: HashMap<Atom, SFunc>,
     inventory: Vec<FunctionSourceInfo>,
     module_path: String,
+    /// Reconstructing canonical source from SSA is intentionally opt-in: it
+    /// is needed by hot-reload/cache clients, but makes ordinary streaming
+    /// compilation retain a costly extra pass over every completed function.
+    inventory_enabled: bool,
 }
 
 impl Default for SModuleBuilder {
@@ -190,18 +194,28 @@ impl Default for SModuleBuilder {
 impl SModuleBuilder {
     /// Create an empty incremental module translator.
     pub fn new() -> Self {
-        Self::for_module("")
+        // Ordinary module lowering does not consume HCR inventory, so do not
+        // pay for the SSA → TAC → AST canonical-fingerprint round-trip.
+        Self::for_module_inner(String::new(), false)
     }
 
-    /// Create an incremental translator whose inventory keys are scoped to
-    /// `module_path`. Module paths are a textual ESM domain, unlike lexical
-    /// bindings, which remain represented by hygienic SWC identifiers.
+    /// Create an incremental translator with HCR/cache inventory keys scoped
+    /// to `module_path`. This opt-in path computes canonical function
+    /// fingerprints; use [`Self::new`] for ordinary large-module lowering.
+    /// Module paths are textual ESM domains, unlike lexical bindings, which
+    /// remain represented by hygienic SWC identifiers.
     pub fn for_module(module_path: impl Into<String>) -> Self {
+        Self::for_module_inner(module_path.into(), true)
+    }
+
+
+    fn for_module_inner(module_path: String, inventory_enabled: bool) -> Self {
         Self {
             cfg: swc_cfg::module::CfgModuleBuilder::new(),
             funcs: HashMap::new(),
             inventory: Vec::new(),
-            module_path: module_path.into(),
+            module_path,
+            inventory_enabled,
         }
     }
 
@@ -215,15 +229,17 @@ impl SModuleBuilder {
         for (name, func) in self.cfg.take_functions() {
             let tac = TFunc::try_from(func)?;
             let ssa = SFunc::try_from(tac)?;
-            self.inventory.push(FunctionSourceInfo {
-                key: FunctionKey {
-                    module_path: self.module_path.clone(),
-                    declared_name: Some(name.clone()),
-                    ordinal: 0,
-                },
-                fingerprint: function_fingerprint(&ssa)?,
-                direct_refs: ssa.cfg.externals(),
-            });
+            if self.inventory_enabled {
+                self.inventory.push(FunctionSourceInfo {
+                    key: FunctionKey {
+                        module_path: self.module_path.clone(),
+                        declared_name: Some(name.clone()),
+                        ordinal: 0,
+                    },
+                    fingerprint: function_fingerprint(&ssa)?,
+                    direct_refs: ssa.cfg.refs(),
+                });
+            }
             self.funcs.insert(name, ssa);
         }
         Ok(())
