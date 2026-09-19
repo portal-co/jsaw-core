@@ -56,9 +56,58 @@ pub struct ToSSAConverter {
     /// would not be found in `state` and `load()` would emit a `LoadId` —
     /// a raw by-name load — instead of the proper block-param `SValueId`.
     pub params: BTreeMap<Ident, SValueId>,
+    /// Identifier → its single SSA_LIKE definition item, pre-indexed once.
+    ///
+    /// `load()` consults this in place of `TCfg::def`, which re-scans every
+    /// statement of every block on each call. For the generated stack-machine
+    /// functions jsaw feeds here (thousands of statements), that linear scan
+    /// per load made conversion quadratic in statement count. Semantics match
+    /// `def()`: the first SSA_LIKE statement assigning the identifier wins.
+    pub def_index: BTreeMap<Ident, swc_tac::Item<Ident, TFunc>>,
+    /// Per-block liveness over `all`. Only variables live at a block's entry
+    /// are threaded through incoming edges as block-params / jump args; this
+    /// is what keeps the generated labelled-loop functions from threading the
+    /// full declaration set through every block and catch shim.
+    pub liveness: crate::live::Liveness,
+    /// The TAC function-entry block. Its SSA params are always the full
+    /// `decls` set (the entry shim jumps to it with that many args), so it is
+    /// exempt from liveness-bounded params.
+    pub function_entry: swc_tac::TBlockId,
     // /// Dominance tree for control flow analysis
     // pub domtree: BTreeMap<Option<swc_tac::TBlockId>, swc_tac::TBlockId>,
 }
+/// An O(log n) [`ItemGetter`] view over a pre-indexed definition map.
+///
+/// `swc_tac`'s own `ItemGetter for TCfg` resolves through `TCfg::def`, a
+/// whole-body statement scan. Inside the TAC→SSA converter that scan runs
+/// once per `load()`, which is quadratic on the generated stack-machine
+/// functions jsaw emits. This view answers the same queries from a
+/// `BTreeMap` built once up front. `get_mut_item`/`get_ident` are not used
+/// by `inlinable`; they fail closed rather than guess.
+struct IndexedDefs<'m>(&'m BTreeMap<Ident, Item<Ident, TFunc>>);
+
+impl<Ctx> swc_tac::ItemGetter<Ident, TFunc, Ctx> for IndexedDefs<'_> {
+    fn get_item<'b>(&'b self, i: Ident, _ctx: Ctx) -> Option<&'b Item<Ident, TFunc>>
+    where
+        Ctx: 'b,
+    {
+        self.0.get(&i)
+    }
+    fn get_mut_item<'b>(&'b mut self, _i: Ident, _ctx: Ctx) -> Option<&'b mut Item<Ident, TFunc>>
+    where
+        Ctx: 'b,
+    {
+        // Read-only view: the converter never mutates through it.
+        None
+    }
+    fn get_ident<'b>(&'b self, i: Ident, _ctx: Ctx) -> Option<Ident>
+    where
+        Ctx: 'b,
+    {
+        Some(i)
+    }
+}
+
 impl ToSSAConverter {
     fn safe_to_carry(&self, _target: swc_tac::TBlockId, _src: swc_tac::TBlockId) -> bool {
         // dominates::<TFunc>(&self.domtree, Some(src), Some(target))
@@ -108,8 +157,12 @@ impl ToSSAConverter {
             log::trace!("load: cache hit for {:?} → {:?}", a, k);
             return Ok(*k);
         }
-        if let Some(d) = i.def(LId::Id { id: a.clone() })
-            && inlinable(d, i)
+        // Resolve through the pre-indexed definition map (O(log n)) instead of
+        // `TCfg::def`'s whole-body scan. `inlinable` only needs `get_item`,
+        // which the indexed view answers in O(log n) as well.
+        let indexed = IndexedDefs(&self.def_index);
+        if let Some(d) = self.def_index.get(&a)
+            && inlinable(d, &indexed)
         {
             log::trace!("load: inlining definition of {:?}", a);
             let b = 'a: {
@@ -194,6 +247,26 @@ impl ToSSAConverter {
             self.map.insert(k, t);
             // let app: BTreeMap<_, _> = app.collect();
             let _ok = k;
+            // `state` (the mutable working set of SSA-tracked variables)
+            // keeps the FULL declaration set, exactly as before the liveness
+            // change: a store to any declared variable must stay register-
+            // promoted (`*slot = value`) rather than degrade to a by-name
+            // `StoreId`, because downstream lowering (and the join-point
+            // regression tests) depend on declared locals never becoming
+            // `LoadId`/`StoreId`. Only *edge threading* and *block params*
+            // are liveness-bounded (see `params` below); the in-block `state`
+            // map is cheap because it is just a map, not a per-edge payload.
+            let live_here = self.all.clone();
+            // The function-entry block is special: the entry *shim* (entry2)
+            // always jumps to it passing the full `decls` set, so its params
+            // must be the full set too, not just what liveness proves live.
+            // Every other block's params are its `live_in`.
+            let is_function_entry = k == self.function_entry;
+            let live_in_here = if is_function_entry {
+                self.all.clone()
+            } else {
+                self.liveness.at_entry(k).clone()
+            };
             let shim: Option<(crate::SBlockId, Vec<Ident>)> = match &i.blocks[k].post.catch {
                 swc_tac::TCatch::Throw => None,
                 swc_tac::TCatch::Jump { pat, k: b } => {
@@ -203,20 +276,13 @@ impl ToSSAConverter {
                         postcedent: SPostcedent::default(),
                     });
                     let b = *b;
-                    // let d = self.domtree.get(&Some(*k)).cloned() == Some(Some(ok));
-                    let _d = self.safe_to_carry(b, k);
+                    // Only variables live at the catch target need to cross
+                    // the exceptional edge (plus the bound exception `pat`).
+                    let live_catch = self.liveness.at_entry(b);
                     let state2 = once(pat.clone())
                         .chain(
-                            self.all
+                            live_catch
                                 .iter()
-                                // .filter(|a| {
-                                //     !d || i.blocks.iter().all(|k| {
-                                //         k.1.stmts.iter().all(|i| {
-                                //             !i.will_store(a)
-                                //                 || !i.flags.contains(ValFlags::SSA_LIKE)
-                                //         })
-                                //     })
-                                // })
                                 .filter(|a| *a != pat)
                                 .cloned(),
                         )
@@ -226,8 +292,7 @@ impl ToSSAConverter {
                         .cloned()
                         .map(|a2| (a2, o.add_blockparam(a)))
                         .collect::<BTreeMap<_, _>>();
-                    let p = self
-                        .all
+                    let p = live_catch
                         .iter()
                         .filter_map(|x| v.get(x))
                         .cloned()
@@ -243,16 +308,24 @@ impl ToSSAConverter {
                     Some((a, state2))
                 }
             };
-            let mut state = self
-                .all
+            let mut state = live_here
                 .iter()
-                // .filter(|a| !app.contains_key(&**a))
-                .map(|a| (a.clone(), (o.add_blockparam(t), ValFlags::all())))
-                // .chain(
-                //     app.iter()
-                //         .map(|(a, b)| (a.clone(), b.clone()))
-                //         .map(|(a, b)| (a, (b, ValFlags::all()))),
-                // )
+                .map(|a| {
+                    let value = if live_in_here.contains(a) {
+                        // Live on entry: a real block-param that incoming
+                        // edges bind. This is the ONLY source of block params,
+                        // keeping the param count == live_in invariant.
+                        o.add_blockparam(t)
+                    } else {
+                        // Not live on entry: still SSA-tracked in-block, but
+                        // seeded with `undef` (not a block param, so it does
+                        // not affect the edge arg-count invariant). Matches
+                        // the original behavior where such a variable simply
+                        // started as a block param no caller relied on.
+                        self.undef
+                    };
+                    (a.clone(), (value, ValFlags::all()))
+                })
                 .collect::<BTreeMap<_, _>>();
             log::trace!(
                 "convert_block: TAC block {:?} → SSA block {:?}; initial state vars: {:?}",
@@ -358,21 +431,26 @@ impl ToSSAConverter {
                     }
                 }
             }
-            let params = |this: &Self, _k2: swc_tac::TBlockId| {
-                // let d = this.safe_to_carry(k2, k);
-                this.all
+            // Jump args must match the target's block-param count exactly.
+            // The target's params are its `live_in` set (created once when the
+            // block is converted), in the same BTreeSet order used here. An
+            // edge may legitimately lack a value for a param that is live at
+            // the target only via a different path; such a param is bound to
+            // `undef` on this edge (the variable is dead along it).
+            let params = |this: &Self, k2: swc_tac::TBlockId| {
+                // The function-entry block takes the full `decls` set (it is
+                // the entry shim's jump target); other blocks take `live_in`.
+                let needed: &BTreeSet<Ident> = if k2 == this.function_entry {
+                    &this.all
+                } else {
+                    this.liveness.at_entry(k2)
+                };
+                needed
                     .iter()
-                    // .filter(|a| {
-                    //     !d || i.blocks.iter().all(|k| {
-                    //         k.1.stmts.iter().all(|i| {
-                    //             i.left != LId::Id { id: (**a).clone() }
-                    //                 || !i.flags.contains(ValFlags::SSA_LIKE)
-                    //         })
-                    //     })
-                    // })
-                    .filter_map(|a| state.get(a))
-                    .map(|a| &a.0)
-                    .cloned()
+                    .map(|a| match state.get(a) {
+                        Some((v, _)) => *v,
+                        None => this.undef,
+                    })
                     .collect::<Vec<_>>()
             };
             // let dtc = |this: &Self, k2: swc_tac::TBlockId| {
@@ -627,15 +705,74 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
             decls,
             params.keys().collect::<Vec<_>>()
         );
+        // Pre-index single-assignment definitions so `load()` is O(log n)
+        // instead of a whole-body statement scan per reference. Mirrors
+        // `TCfg::def`: only `SSA_LIKE` stores to a plain identifier define a
+        // value eligible for inlining.
+        let mut def_index: BTreeMap<Ident, Item<Ident, TFunc>> = BTreeMap::new();
+        for (_block_id, block) in value.cfg.blocks.iter() {
+            for stmt in block.stmts.iter() {
+                if !stmt.flags.contains(ValFlags::SSA_LIKE) {
+                    continue;
+                }
+                if let LId::Id { id } = &stmt.left {
+                    // `TCfg::def` returns the first match; keep the first.
+                    def_index.entry(id.clone()).or_insert_with(|| stmt.right.clone());
+                }
+            }
+        }
+        let liveness = crate::live::compute(&value.cfg, &decls);
         let mut trans = ToSSAConverter {
             map: BTreeMap::new(),
             all: decls.clone(),
             undef,
             params: params.clone(),
+            def_index,
+            liveness,
+            function_entry: value.entry,
             // domtree,
         };
 
         let entry = trans.trans(&value.cfg, &mut cfg, value.entry)?;
+        // Internal consistency gate: every jump's argument count must equal
+        // its target block's param count. Liveness-bounded threading makes an
+        // inconsistency here a converter bug (fail fast) rather than a latent
+        // miscompile surfaced far downstream in jsaw's WasmGC lowering.
+        #[cfg(debug_assertions)]
+        {
+            let mut bad = None;
+            for (bid, block) in cfg.blocks.iter() {
+                let check = |cfg: &SCfg, t: &STarget, bad: &mut Option<String>| {
+                    let want = cfg.blocks[t.block].params.len();
+                    if t.args.len() != want {
+                        *bad = Some(format!(
+                            "block {:?} jumps to {:?} with {} args but target has {} params",
+                            bid,
+                            t.block,
+                            t.args.len(),
+                            want
+                        ));
+                    }
+                };
+                match &block.postcedent.term {
+                    STerm::Jmp(t) => check(&cfg, t, &mut bad),
+                    STerm::CondJmp { if_true, if_false, .. } => {
+                        check(&cfg, if_true, &mut bad);
+                        check(&cfg, if_false, &mut bad);
+                    }
+                    STerm::Switch { blocks, default, .. } => {
+                        for (_, t) in blocks {
+                            check(&cfg, t, &mut bad);
+                        }
+                        check(&cfg, default, &mut bad);
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(msg) = bad {
+                panic!("swc-ssa converter produced inconsistent SSA: {msg}");
+            }
+        }
         // , &mut empty())?;
         let target = STarget {
             block: entry,
@@ -648,6 +785,12 @@ impl<'a> TryFrom<&'a TFunc> for SFunc {
                 })
                 .collect(),
         };
+        // The entry block must accept exactly `decls.len()` args from the shim.
+        debug_assert_eq!(
+            cfg.blocks[entry].params.len(),
+            target.args.len(),
+            "entry shim jump must match the entry block's full-decl params"
+        );
         cfg.blocks[entry2].postcedent.term = STerm::Jmp(target);
         cfg.generics = value.cfg.generics.clone();
         cfg.ts_retty = value.cfg.ts_retty.clone();
