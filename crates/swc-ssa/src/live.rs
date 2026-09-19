@@ -139,8 +139,19 @@ pub fn compute(cfg: &TCfg, all: &BTreeSet<Ident>) -> Liveness {
         def_set.insert(bid, defs);
     }
 
-    // Backward fixed-point: live_out = ∪ live_in[succ]; live_in = use ∪
-    // (live_out - def). Iterate to convergence.
+    // Backward fixed-point via a predecessor worklist:
+    //   live_out[b] = ∪ live_in[s] for s in succ(b)
+    //   live_in[b]  = use[b] ∪ (live_out[b] - def[b])
+    // A block is only reprocessed when one of its successors' live_in grew,
+    // which for reducible stack-machine CFGs converges in far fewer passes
+    // than the naive whole-graph re-scan this replaces.
+    let mut preds: BTreeMap<TBlockId, Vec<TBlockId>> = BTreeMap::new();
+    for (b, ss) in &succs {
+        for s in ss {
+            preds.entry(*s).or_default().push(*b);
+        }
+    }
+
     let mut live_in: BTreeMap<TBlockId, BTreeSet<Ident>> = cfg
         .blocks
         .iter()
@@ -148,35 +159,46 @@ pub fn compute(cfg: &TCfg, all: &BTreeSet<Ident>) -> Liveness {
         .collect();
     let mut live_out: BTreeMap<TBlockId, BTreeSet<Ident>> = live_in.clone();
 
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (bid, _) in cfg.blocks.iter() {
-            let mut out: BTreeSet<Ident> = BTreeSet::new();
-            if let Some(ss) = succs.get(&bid) {
-                for s in ss {
-                    if let Some(si) = live_in.get(s) {
-                        out.extend(si.iter().cloned());
-                    }
+    let mut worklist: std::collections::VecDeque<TBlockId> =
+        cfg.blocks.iter().map(|(b, _)| b).collect();
+    let mut in_worklist: BTreeSet<TBlockId> = worklist.iter().cloned().collect();
+
+    while let Some(bid) = worklist.pop_front() {
+        in_worklist.remove(&bid);
+        let mut out: BTreeSet<Ident> = BTreeSet::new();
+        if let Some(ss) = succs.get(&bid) {
+            for s in ss {
+                if let Some(si) = live_in.get(s) {
+                    out.extend(si.iter().cloned());
                 }
             }
-            let mut new_in = use_set.get(&bid).cloned().unwrap_or_default();
-            if let Some(defs) = def_set.get(&bid) {
-                for v in out.iter() {
-                    if !defs.contains(v) {
-                        new_in.insert(v.clone());
+        }
+        let mut new_in = use_set.get(&bid).cloned().unwrap_or_default();
+        if let Some(defs) = def_set.get(&bid) {
+            for v in out.iter() {
+                if !defs.contains(v) {
+                    new_in.insert(v.clone());
+                }
+            }
+        } else {
+            new_in.extend(out.iter().cloned());
+        }
+        let in_changed = new_in != *live_in.get(&bid).unwrap_or(&BTreeSet::new());
+        let out_changed = out != *live_out.get(&bid).unwrap_or(&BTreeSet::new());
+        if in_changed {
+            live_in.insert(bid, new_in);
+        }
+        if out_changed {
+            live_out.insert(bid, out);
+        }
+        // If this block's live_in grew, its predecessors need reprocessing.
+        if in_changed {
+            if let Some(ps) = preds.get(&bid) {
+                for p in ps {
+                    if in_worklist.insert(*p) {
+                        worklist.push_back(*p);
                     }
                 }
-            } else {
-                new_in.extend(out.iter().cloned());
-            }
-            if new_in != *live_in.get(&bid).unwrap_or(&BTreeSet::new()) {
-                live_in.insert(bid, new_in);
-                changed = true;
-            }
-            if out != *live_out.get(&bid).unwrap_or(&BTreeSet::new()) {
-                live_out.insert(bid, out);
-                changed = true;
             }
         }
     }

@@ -107,6 +107,17 @@ fn ssa_conv_join_shapes() {
 
 #[test]
 fn ssa_conv_scale() {
+    // The labeled-loop shape recurses depth ~ block count through the
+    // catch-shim `trans` path; run on a large stack so the benchmark measures
+    // time/memory, not the (separately tracked) recursion-depth limit.
+    let child = std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(ssa_conv_scale_inner)
+        .unwrap();
+    child.join().unwrap();
+}
+
+fn ssa_conv_scale_inner() {
     eprintln!("== straight-line ==");
     for blocks in [64usize, 128, 256, 512, 1024, 2048] {
         let src = stack_machine_source(blocks);
@@ -157,4 +168,36 @@ fn dbg_uninit_if_else() {
         }
         module.visit_with(&mut V);
     });
+}
+
+#[test]
+fn dbg_value_counts() {
+    let child = std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(|| {
+            for blocks in [128usize, 256, 512] {
+                let src = labeled_loop_source(blocks);
+                portal_solutions_swibb::test::with_test_globals(|| {
+                    let cm = portal_solutions_swibb::test::swc_common::sync::Lrc::new(
+                        portal_solutions_swibb::test::swc_common::SourceMap::default(),
+                    );
+                    let module = portal_solutions_swibb::test::test_load(&cm, "c", &src);
+                    use swc_ecma_visit::VisitWith;
+                    struct V(usize);
+                    impl swc_ecma_visit::Visit for V {
+                        fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
+                            let tfunc = TFunc::try_from(node.clone()).unwrap();
+                            let tac_blocks = tfunc.cfg.blocks.len();
+                            let sfunc = SFunc::try_from(tfunc).unwrap();
+                            let ssa_blocks = sfunc.cfg.blocks.len();
+                            let ssa_values = sfunc.cfg.values.len();
+                            let params: usize = sfunc.cfg.blocks.iter().map(|(_,b)| b.params.len()).sum();
+                            eprintln!("blocks={} tac_blocks={} ssa_blocks={} ssa_values={} total_params={}", self.0, tac_blocks, ssa_blocks, ssa_values, params);
+                        }
+                    }
+                    module.visit_with(&mut V(blocks));
+                });
+            }
+        }).unwrap();
+    child.join().unwrap();
 }
