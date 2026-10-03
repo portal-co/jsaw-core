@@ -344,6 +344,14 @@ impl ToSSAConverter {
             {
                 log::trace!("convert_block: processing stmt lhs={:?} in SSA block {:?}", a, t);
                 let nothrow = b.nothrow();
+                // Calls and other potentially-throwing statements transfer
+                // through this block's catch edge before their normal result
+                // updates `state`. Refresh the exceptional live values at
+                // the statement boundary, after any earlier assignments in
+                // this block but before the operation can throw.
+                if !nothrow && shim.is_some() {
+                    self.apply_shim(o, &state, &shim, t);
+                }
                 // `cache` (below) memoizes "the last value stored to this
                 // variable" so a later `load()` of the same name within this
                 // block can skip straight to it. That's only sound while
@@ -430,6 +438,14 @@ impl ToSSAConverter {
                         o.blocks[t].stmts.push(c);
                     }
                 }
+            }
+            // A direct throw transfers control through the exceptional edge
+            // after all statements in this block have updated `state`. The
+            // catch shim installed at block entry is intentionally refreshed
+            // here so its live-variable arguments carry those latest values
+            // (rather than the block-entry versions).
+            if matches!(&i.blocks[k].post.term, swc_tac::TTerm::Throw(_)) {
+                self.apply_shim(o, &state, &shim, t);
             }
             // Jump args must match the target's block-param count exactly.
             // The target's params are its `live_in` set (created once when the

@@ -972,6 +972,47 @@ mod tests {
         module.visit_with(&mut ParamLoadIdChecker);
     });
 
+    /// A direct throw after assigning a live local must forward the updated
+    /// value along its exceptional edge, not the value from the block entry.
+    portal_solutions_swibb::simple_module_test!(test_throw_edge_forwards_current_live_values ["
+    export function foo() {
+        let marker = { value: 41 };
+        try { throw marker; }
+        catch (error) { return error === marker ? 42 : 0; }
+    }
+    "] => |_sm, module| {
+        use crate::{SFunc, SCatch, STerm};
+        use swc_ecma_visit::Visit;
+        use swc_tac::TFunc;
+
+        struct ThrowEdgeChecker;
+        impl Visit for ThrowEdgeChecker {
+            fn visit_function(&mut self, node: &swc_ecma_ast::Function) {
+                let sfunc = SFunc::try_from(TFunc::try_from(node.clone()).unwrap()).unwrap();
+                let (thrown, target) = sfunc
+                    .cfg
+                    .blocks
+                    .iter()
+                    .find_map(|(_, block)| match (
+                        &block.postcedent.term,
+                        &block.postcedent.catch,
+                    ) {
+                        (STerm::Throw(value), SCatch::Just { target }) => {
+                            Some((*value, target))
+                        }
+                        _ => None,
+                    })
+                    .expect("throw must have a lexical catch edge");
+                assert!(
+                    target.args.contains(&thrown),
+                    "catch edge must forward the latest assigned value used by throw"
+                );
+            }
+        }
+
+        module.visit_with(&mut ThrowEdgeChecker);
+    });
+
     /// `SCfg::inline_iifes` should eliminate a direct call to a single-block IIFE, leaving
     /// its body's own operations spliced directly into the caller instead of a residual
     /// `Item::Call { callee: TCallee::Val(_), .. }`.
