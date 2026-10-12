@@ -415,7 +415,18 @@ impl ToSSAConverter {
                             }
                         }
                         None => {
-                            if flags.contains(ValFlags::SSA_LIKE) {
+                            // Only SSA-tracked names (`all`/`decls`) may be
+                            // register-promoted into `state`. A name outside
+                            // that set — an extern, or a local captured by a
+                            // nested closure (removed from `decls` in
+                            // `try_from`) — is observable through the shared
+                            // module context: its store must be a real
+                            // context `StoreId` even when marked SSA_LIKE,
+                            // or nested closures' context loads read null.
+                            // (Found via the DreamComp corpus bridge:
+                            // hoisted module functions were swallowed here,
+                            // so non-tail calls to them trapped.)
+                            if flags.contains(ValFlags::SSA_LIKE) && self.all.contains(&id) {
                                 state.insert(id.clone(), (b, *flags));
                             } else {
                                 cache.insert(id.clone(), b);

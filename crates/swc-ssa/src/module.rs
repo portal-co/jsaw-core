@@ -358,6 +358,38 @@ mod tests {
     use swc_cfg::module::CfgModule;
     use swc_tac::module::TModule;
 
+    /// Regression test: a hoisted module-level function declaration must be
+    /// installed into the shared module context. The TAC prepends
+    /// `name = function(){...}` (SSA_LIKE) to the module body's entry; the
+    /// SSA converter used to swallow that store into the function-local SSA
+    /// environment because of the SSA_LIKE flag, leaving the context store
+    /// missing — nested closures' context loads then read null (non-tail
+    /// calls to hoisted functions trapped downstream; found via the DreamComp
+    /// corpus bridge).
+    portal_solutions_swibb::simple_module_test!(test_hoisted_function_gets_context_store [
+        "function helper(x) { return x + 1; }\n\
+         export function main(a, b) { return helper(a) + helper(b); }"
+    ] => |_sm, module| {
+        let cfg_module = CfgModule::try_from(module).expect("CfgModule");
+        let tmodule = TModule::try_from(cfg_module).expect("TModule");
+        let smodule = SModule::try_from(tmodule).expect("SModule");
+
+        let stores: Vec<String> = smodule
+            .body
+            .cfg
+            .values
+            .iter()
+            .filter_map(|(_, v)| match &v.value {
+                SValue::StoreId { target, .. } => Some(target.0.to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            stores.iter().any(|name| name == "helper"),
+            "hoisted `helper` must be stored into the module context, stores={stores:?}"
+        );
+    });
+
     /// Pipeline test: `Module → CfgModule → TModule → SModule`.
     ///
     /// Verifies that import/export metadata is preserved through all three
