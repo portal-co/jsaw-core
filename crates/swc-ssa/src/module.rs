@@ -287,7 +287,14 @@ impl SModuleBuilder {
         // nested closures.
         let entry = body.entry;
         let mut hoists = Vec::with_capacity(self.funcs.len() * 2);
-        for (name, function) in &self.funcs {
+        // Iterate in name order, not `HashMap` iteration order: std's
+        // `RandomState` seeds from process-global state, which otherwise
+        // shuffles hoist order — and with it downstream value-ids and
+        // function discovery order — per process. The store order of
+        // distinct names is semantically unobservable here.
+        let mut hoisted: Vec<(&Atom, &SFunc)> = self.funcs.iter().collect();
+        hoisted.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        for (name, function) in hoisted {
             let value = body.cfg.values.alloc(SValueW {
                 value: SValue::Item {
                     item: Item::Func {

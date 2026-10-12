@@ -120,12 +120,17 @@ impl TryFrom<CfgModule> for TModule {
         // Hoist function declarations into the entry block of `body`, mirroring
         // the treatment of `Decl::Fn` in `ToTACConverterCore::stmt`.
         //
-        // We prepend (in declaration order) so that all hoisted functions are
-        // visible to subsequent top-level code, matching JavaScript hoisting
-        // semantics.
+        // All hoisted functions must be visible to subsequent top-level code,
+        // matching JavaScript hoisting semantics. The store order of distinct
+        // names is unobservable (no getters run between these stores), so we
+        // iterate in name order instead of `HashMap` iteration order: std's
+        // `RandomState` seeds from process-global state, which otherwise
+        // shuffles downstream lowering/discovery order per process.
         use swc_common::SyntaxContext;
-        let hoist_stmts: Vec<crate::TStmt> = funcs
-            .iter()
+        let mut hoisted: Vec<(&swc_atoms::Atom, &TFunc)> = funcs.iter().collect();
+        hoisted.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        let hoist_stmts: Vec<crate::TStmt> = hoisted
+            .into_iter()
             .map(|(name, tfunc)| crate::TStmt {
                 left: crate::LId::Id {
                     id: (name.clone(), SyntaxContext::empty()),
