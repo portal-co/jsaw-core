@@ -82,7 +82,7 @@ impl Recfg {
                                 self.go(input_cfg, output_cfg, *case_block)?,
                             ))
                         })
-                        .collect::<Result<HashMap<_, _>, crate::Error>>()?,
+                        .collect::<Result<Vec<_>, crate::Error>>()?,
                     default: self.go(input_cfg, output_cfg, *default)?,
                 },
                 other_term => other_term.clone(),

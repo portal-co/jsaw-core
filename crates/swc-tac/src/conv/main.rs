@@ -133,16 +133,16 @@ impl ToTACConverter<'_> {
             swc_cfg::Term::Switch { x, blocks, default } => {
                 let y;
                 (y, t) = self.core.expr(o, t, x)?;
-                let mut m2 = HashMap::new();
+                let mut m2 = Vec::new();
                 for (a, b2) in blocks.iter() {
                     let b2 = self.trans(i, o, *b2)?;
                     let c;
                     (c, t) = self.core.expr(o, t, a)?;
-                    m2.insert(c, b2);
+                    m2.push((c, b2));
                 }
                 Ok((TTerm::Switch {
                     x: y,
-                    blocks: m2.into_iter().collect(),
+                    blocks: m2,
                     default: self.trans(i, o, *default)?,
                 }, t))
             }

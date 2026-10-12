@@ -162,7 +162,7 @@ impl<T> ToCfgCfg<T> for Cfg {
         self.blocks[current].end.orig_span = span;
         self.blocks[current].end.term = Term::Switch {
             x: discriminant.clone(),
-            blocks: blocks.into_iter().map(|(e, b)| (e.clone(), b)).collect(),
+            blocks: blocks.into_iter().map(|(e, b)| (e.clone(), b)).collect::<Vec<_>>(),
             default,
         };
         Ok(())
@@ -516,7 +516,11 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
             target.cur_loop.as_mut().unwrap().r#break = next;
             let mut cur = target.new_block(cfg, sidecar)?;
             let mut default = next;
-            let mut blocks = HashMap::new();
+            // Case table in source order; duplicates resolve like the old
+            // `HashMap::insert` behavior (the later case wins), but
+            // deterministically — no process-global hash seeding anywhere
+            // near control-flow structure.
+            let mut blocks: Vec<(&Expr, TargetCfg::Block)> = Vec::new();
             for case in switch_stmt.cases.iter() {
                 match case.test.as_ref() {
                     None => {
@@ -524,7 +528,11 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                         cur = target.transform_all(cfg, sidecar, &case.cons, cur, None)?;
                     }
                     Some(test) => {
-                        blocks.insert(&**test, cur);
+                        if let Some(entry) = blocks.iter_mut().find(|(e, _)| *e == &**test) {
+                            entry.1 = cur;
+                        } else {
+                            blocks.push((&**test, cur));
+                        }
                         cur = target.transform_all(cfg, sidecar, &case.cons, cur, None)?;
                     }
                 }
@@ -534,7 +542,7 @@ impl<Sidecar, TargetCfg: ToCfgCfg<Sidecar>> ToCfg<Sidecar, TargetCfg> for Stmt {
                 sidecar,
                 current,
                 &switch_stmt.discriminant,
-                blocks.into_iter().collect(),
+                blocks,
                 default,
                 Some(span),
             )?;

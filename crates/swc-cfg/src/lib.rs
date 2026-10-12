@@ -566,7 +566,7 @@ impl cfg_traits::Term<Func> for End {
                     x: _,
                     blocks,
                     default,
-                } => blocks.values().chain(once(default)).collect(),
+                } => blocks.iter().map(|(_, b)| b).chain(once(default)).collect(),
                 Term::Default => vec![],
             }),
         )
@@ -594,7 +594,11 @@ impl cfg_traits::Term<Func> for End {
                     x: _,
                     blocks,
                     default,
-                } => blocks.values_mut().chain(once(default)).collect(),
+                } => blocks
+                    .iter_mut()
+                    .map(|(_, b)| b)
+                    .chain(once(default))
+                    .collect(),
                 Term::Default => vec![],
             }),
         )
@@ -722,8 +726,12 @@ pub enum Term {
     Switch {
         /// The expression being switched on
         x: Expr,
-        /// Map from case values to target blocks
-        blocks: HashMap<Expr, BlockId>,
+        /// Case values to target blocks, in source order. A `Vec`, not a
+        /// map: `HashMap` iteration order is seeded from process-global
+        /// randomness, which made switch case order — and every
+        /// successor-order-derived structure — nondeterministic across
+        /// processes.
+        blocks: Vec<(Expr, BlockId)>,
         /// Default block if no case matches
         default: BlockId,
     },
