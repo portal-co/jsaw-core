@@ -11,8 +11,12 @@
 //! This crate is `no_std` compatible for use in embedded or constrained environments.
 
 #![no_std]
+
+extern crate alloc;
+
 use core::{iter::once, mem::take, ops::Deref};
 pub use portal_pc_asm_common as asm;
+pub mod assumptions;
 pub mod natives;
 pub mod semantic;
 pub mod syntax;

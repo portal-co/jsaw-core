@@ -9,6 +9,7 @@ repository.workspace = true
 either = { version = "^1.15.0", default-features = false }
 portal-pc-asm-common = "^0.1.0"
 bitflags.workspace = true
+sha3 = { version = "0.10", default-features = false }
 rkyv = {workspace = true,optional = true}
 
 [features]
