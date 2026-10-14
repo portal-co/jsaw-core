@@ -850,45 +850,30 @@ impl ToTACConverterCore<'_> {
                     let mem;
                     let mut priv_ = None;
                     let mut private = false;
-                    let e;
                     (obj, t) = self.expr(o, t, &m.obj)?;
                     'a: {
-                        (mem, t) = self.expr(
-                            o,
-                            t,
-                            match &m.prop {
-                                swc_ecma_ast::MemberProp::Ident(ident_name) => {
-                                    e = Expr::Ident(swc_ecma_ast::Ident::new(
-                                        ident_name.sym.clone(),
-                                        ident_name.span,
-                                        Default::default(),
-                                    ));
-                                    &e
-                                }
-                                swc_ecma_ast::MemberProp::PrivateName(private_name) => {
-                                    private = true;
-                                    priv_ = Some(Private {
-                                        sym: private_name.name.clone(),
-                                        ctxt: self
-                                            .mapper
-                                            .privates
-                                            .get(&private_name.name)
-                                            .cloned()
-                                            .unwrap_or_default(),
-                                        span: private_name.span,
-                                    });
-                                    mem = match priv_.clone().unwrap() {
-                                        Private {
-                                            sym: a, ctxt: b, ..
-                                        } => (a, b),
-                                    };
-                                    break 'a;
-                                }
-                                swc_ecma_ast::MemberProp::Computed(computed_prop_name) => {
-                                    &computed_prop_name.expr
-                                }
-                            },
-                        )?;
+                        (mem, t) = match &m.prop {
+                            swc_ecma_ast::MemberProp::PrivateName(private_name) => {
+                                private = true;
+                                priv_ = Some(Private {
+                                    sym: private_name.name.clone(),
+                                    ctxt: self
+                                        .mapper
+                                        .privates
+                                        .get(&private_name.name)
+                                        .cloned()
+                                        .unwrap_or_default(),
+                                    span: private_name.span,
+                                });
+                                mem = match priv_.clone().unwrap() {
+                                    Private {
+                                        sym: a, ctxt: b, ..
+                                    } => (a, b),
+                                };
+                                break 'a;
+                            }
+                            prop => self.member_prop_expr(o, t, prop)?,
+                        };
                     }
                     let item = match (*op).to_update() {
                         None => Item::Just { id: right.clone() },
@@ -2066,3 +2051,101 @@ impl ToTACConverterCore<'_> {
 }
 pub mod live;
 pub mod main;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use swc_atoms::Atom;
+    use swc_common::{Span, SyntaxContext};
+    use swc_ecma_ast::{
+        AssignExpr, AssignOp, AssignTarget, BindingIdent, BlockStmt, Expr, ExprStmt, Function,
+        Ident, MemberExpr, MemberProp, Param, Pat, SimpleAssignTarget, Stmt,
+    };
+
+    fn ident(name: &str) -> Ident {
+        Ident::new(
+            Atom::new(name),
+            Span::dummy_with_cmt(),
+            SyntaxContext::empty(),
+        )
+    }
+
+    /// Regression: `o.x = x` (where `x` is also an in-scope name) must store
+    /// under the literal key "x", not under the variable's runtime value.
+    /// The assign path previously evaluated the key identifier as a variable
+    /// reference while the read path literalized it, so the store and the
+    /// load disagreed.
+    #[test]
+    fn member_assign_ident_key_literalizes() {
+        swc_common::GLOBALS.set(&Default::default(), || {
+            let o = ident("o");
+            let x = ident("x");
+            let function = Function {
+                params: vec![Param {
+                    span: Span::dummy_with_cmt(),
+                    decorators: vec![],
+                    pat: Pat::Ident(BindingIdent {
+                        id: x.clone(),
+                        type_ann: None,
+                    }),
+                }],
+                decorators: vec![],
+                span: Span::dummy_with_cmt(),
+                body: Some(BlockStmt {
+                    span: Span::dummy_with_cmt(),
+                    stmts: vec![
+                        // o.x = x;
+                        Stmt::Expr(ExprStmt {
+                            span: Span::dummy_with_cmt(),
+                            expr: Box::new(Expr::Assign(AssignExpr {
+                                span: Span::dummy_with_cmt(),
+                                op: AssignOp::Assign,
+                                left: AssignTarget::Simple(SimpleAssignTarget::Member(
+                                    MemberExpr {
+                                        span: Span::dummy_with_cmt(),
+                                        obj: Box::new(Expr::Ident(o)),
+                                        prop: MemberProp::Ident(x.clone().into()),
+                                    },
+                                )),
+                                right: Box::new(Expr::Ident(x)),
+                            })),
+                        }),
+                    ],
+                    ctxt: SyntaxContext::empty(),
+                }),
+                is_generator: false,
+                is_async: false,
+                type_params: None,
+                return_type: None,
+                ctxt: SyntaxContext::empty(),
+            };
+            let tfunc = TFunc::try_from(&function).expect("TFunc conversion failed");
+            // Find the member-assign statement and check its key stmt is a
+            // literal string "x", not an Item::Just / Item::LoadId of the
+            // variable.
+            let mut found_literal_key = false;
+            for (_, block) in tfunc.cfg.blocks.iter() {
+                for stmt in &block.stmts {
+                    if let Item::Lit {
+                        lit: swc_ecma_ast::Lit::Str(s),
+                    } = &stmt.right
+                    {
+                        if &*s.value == "x" {
+                            found_literal_key = true;
+                        }
+                    }
+                }
+            }
+            assert!(
+                found_literal_key,
+                "member-assign key must lower to a literal string; stmts: {:?}",
+                tfunc
+                    .cfg
+                    .blocks
+                    .iter()
+                    .flat_map(|(_, b)| b.stmts.iter().map(|s| format!("{:?}", s.right)))
+                    .collect::<Vec<_>>()
+            );
+        });
+    }
+}
